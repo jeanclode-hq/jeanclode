@@ -68,12 +68,12 @@ async function handleRemove(relatedRepoId: string) {
         <TruncatedText
           :text="repo.displayName"
           class="text-sm"
-          :class="repo.enabled ? 'text-neutral-700 dark:text-neutral-300' : 'text-neutral-400 dark:text-neutral-500'"
+          :class="repo.enabled ? 'text-neutral-700 dark:text-neutral-300' : 'text-neutral-500'"
         />
         <TruncatedText
           v-if="repo.subgroupPath"
           :text="repo.subgroupPath"
-          class="text-xs text-neutral-400 dark:text-neutral-500"
+          class="text-xs text-neutral-500"
         />
       </component>
       <UIcon
@@ -89,7 +89,7 @@ async function handleRemove(relatedRepoId: string) {
       />
       <span
         v-if="!repo.enabled"
-        class="text-[11px] text-neutral-400 dark:text-neutral-500 shrink-0"
+        class="text-[11px] text-neutral-500 shrink-0"
       >
         Disabled
       </span>
@@ -107,7 +107,7 @@ async function handleRemove(relatedRepoId: string) {
       <span
         v-for="r in related"
         :key="r.id"
-        class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 pl-2 pr-1 py-0.5 shrink-0"
+        class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-700 pl-2 pr-1 py-0.5 shrink-0"
       >
         <UIcon
           name="i-lucide-book"
@@ -116,7 +116,7 @@ async function handleRemove(relatedRepoId: string) {
         <span class="inline-flex items-center text-xs font-medium text-neutral-700 dark:text-neutral-300">
           <span
             v-if="r.root_org_id !== repo.root_org_id"
-            class="text-neutral-400 dark:text-neutral-500 shrink-0"
+            class="text-neutral-500 shrink-0"
           >{{ orgName(r.root_org_id) }}&nbsp;/&nbsp;</span>
           <TruncatedText
             :text="shortRepoName(r.name)"
@@ -125,7 +125,7 @@ async function handleRemove(relatedRepoId: string) {
         </span>
         <button
           type="button"
-          class="cursor-pointer p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
+          class="cursor-pointer p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-600"
           title="Remove from group"
           @click="handleRemove(r.id)"
         >

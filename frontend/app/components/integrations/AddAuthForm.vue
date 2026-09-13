@@ -178,7 +178,7 @@ async function remove() {
 </script>
 
 <template>
-  <div class="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-4 bg-neutral-50 dark:bg-neutral-900/50">
+  <div class="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-4 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none">
     <div class="flex items-center justify-between gap-2">
       <UFormField class="w-56">
         <template #label>

@@ -239,7 +239,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
     <!-- Loading -->
     <div
       v-if="isLoading && !overview"
-      class="rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 flex items-center justify-center"
+      class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none p-8 flex items-center justify-center"
     >
       <UIcon
         name="i-lucide-loader-2"
@@ -260,11 +260,11 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
       <div
         v-for="market in marketplaces"
         :key="market.id"
-        class="rounded-xl border border-neutral-200 dark:border-neutral-700 mb-3 overflow-hidden"
+        class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none mb-3 overflow-hidden"
       >
         <button
           type="button"
-          class="w-full cursor-pointer flex items-center justify-between gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+          class="w-full cursor-pointer flex items-center justify-between gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
           @click="toggleMarketplace(market.id)"
         >
           <div class="min-w-0 text-left">
@@ -278,11 +278,11 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
               </h5>
               <span
                 v-if="market.plugins?.length"
-                class="text-[10px] text-neutral-400"
+                class="text-[10px] text-neutral-500"
               >{{ market.plugins.length }} {{ market.plugins.length === 1 ? 'plugin' : 'plugins' }}</span>
               <span
                 v-if="installedCount(market)"
-                class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200 font-medium"
               >{{ installedCount(market) }} installed</span>
               <span
                 v-if="market.last_sync_status === 'error'"
@@ -330,19 +330,19 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
         <div v-if="expandedId === market.id">
           <div
             v-if="market.plugins === null"
-            class="px-4 py-3 text-xs text-red-600 dark:text-red-400 border-t border-neutral-100 dark:border-neutral-700"
+            class="px-4 py-3 text-xs text-red-600 dark:text-red-400 border-t border-neutral-200 dark:border-neutral-700"
           >
             {{ market.last_sync_error ?? t('plugins.fetchFailed') }}
           </div>
           <div
             v-else-if="market.plugins.length === 0"
-            class="px-4 py-3 text-xs text-neutral-500 italic border-t border-neutral-100 dark:border-neutral-700"
+            class="px-4 py-3 text-xs text-neutral-500 italic border-t border-neutral-200 dark:border-neutral-700"
           >
             {{ t('plugins.emptyManifest') }}
           </div>
           <ul
             v-else
-            class="divide-y divide-neutral-100 dark:divide-neutral-700 border-t border-neutral-100 dark:border-neutral-700"
+            class="divide-y divide-neutral-200 dark:divide-neutral-700 border-t border-neutral-200 dark:border-neutral-700"
           >
             <li
               v-for="plugin in market.plugins"

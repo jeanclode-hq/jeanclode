@@ -64,7 +64,7 @@ function timeAgo(dateStr: string) {
         @click="handleInstall"
       />
       <div v-else>
-        <p class="text-xs text-neutral-400 mb-3">
+        <p class="text-xs text-neutral-500 mb-3">
           Link your GitHub account first to install the app.
         </p>
         <UButton
@@ -87,7 +87,7 @@ function timeAgo(dateStr: string) {
       <p class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
         Connecting GitHub organization...
       </p>
-      <p class="text-xs text-neutral-400 mt-1">
+      <p class="text-xs text-neutral-500 mt-1">
         This may take a few seconds while we sync.
       </p>
     </div>
@@ -112,12 +112,12 @@ function timeAgo(dateStr: string) {
         />
       </div>
 
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 divide-y divide-neutral-100 dark:divide-neutral-800 overflow-hidden animate-fade-up">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none divide-y divide-neutral-200 dark:divide-neutral-700 overflow-hidden animate-fade-up">
         <button
           v-for="org in orgs"
           :key="org.id"
           type="button"
-          class="cursor-pointer w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors group"
+          class="cursor-pointer w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors group"
           @click="emit('select', org.id)"
         >
           <UAvatar
@@ -129,7 +129,7 @@ function timeAgo(dateStr: string) {
             <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">
               {{ org.name }}
             </p>
-            <p class="text-xs text-neutral-400 mt-0.5 truncate">
+            <p class="text-xs text-neutral-500 mt-0.5 truncate">
               {{ org.repo_count }} {{ org.repo_count === 1 ? 'repo' : 'repos' }}
               <span class="hidden sm:inline">&middot; Added {{ timeAgo(org.created_at) }}</span>
             </p>
@@ -143,7 +143,7 @@ function timeAgo(dateStr: string) {
             />
             <UIcon
               name="i-lucide-chevron-right"
-              class="size-4 text-neutral-300 dark:text-neutral-600 group-hover:text-neutral-500 dark:group-hover:text-neutral-400 transition-colors"
+              class="size-4 text-neutral-400 dark:text-neutral-600 group-hover:text-neutral-500 dark:group-hover:text-neutral-400 transition-colors"
             />
           </div>
         </button>

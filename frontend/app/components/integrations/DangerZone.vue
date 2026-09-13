@@ -17,7 +17,7 @@ const showConfirm = ref(false)
     <h4 class="text-sm font-semibold text-red-600 dark:text-red-400 mb-3">
       Danger Zone
     </h4>
-    <div class="rounded-xl border border-red-200 dark:border-red-900/50 p-4">
+    <div class="rounded-xl border border-red-200 dark:border-red-900/50 bg-white dark:bg-neutral-800 p-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <p class="text-sm text-neutral-900 dark:text-neutral-100">

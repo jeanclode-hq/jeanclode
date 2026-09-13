@@ -351,7 +351,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </button>
 
     <!-- Org header -->
-    <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 p-5">
+    <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none p-5">
       <div class="flex items-start gap-4">
         <UAvatar
           :src="org.avatar_url ?? undefined"
@@ -408,14 +408,14 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
           </UTooltip>
           <span
             v-if="repoTotal > 0"
-            class="text-xs text-neutral-400"
+            class="text-xs text-neutral-500"
           >{{ repoTotal }} total</span>
         </div>
       </div>
 
       <div
         v-if="isInitialRepoLoad"
-        class="rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 flex items-center justify-center"
+        class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none p-8 flex items-center justify-center"
       >
         <UIcon
           name="i-lucide-loader-2"
@@ -425,7 +425,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
 
       <div
         v-else
-        class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden"
+        class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden"
       >
         <div class="border-b border-neutral-200 dark:border-neutral-700 p-2">
           <UInput
@@ -440,7 +440,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
 
         <div
           ref="repoScrollRoot"
-          class="divide-y divide-neutral-100 dark:divide-neutral-800 max-h-[28rem] overflow-y-auto"
+          class="divide-y divide-neutral-200 dark:divide-neutral-700 max-h-[28rem] overflow-y-auto"
         >
           <GitOrgRepoRow
             v-for="repo in displayedRepos"
@@ -453,7 +453,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
 
           <div
             v-if="displayedRepos.length === 0 && !isFetchingRepos"
-            class="px-4 py-8 text-center text-xs text-neutral-400"
+            class="px-4 py-8 text-center text-xs text-neutral-500"
           >
             {{ repoSearch.trim() ? 'No repositories match your filter.' : 'No repositories synced yet.' }}
           </div>
@@ -472,7 +472,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
 
         <div
           v-if="repoTotal > 0"
-          class="border-t border-neutral-200 dark:border-neutral-700 px-4 py-1.5 text-[11px] text-neutral-400 tabular-nums"
+          class="border-t border-neutral-200 dark:border-neutral-700 px-4 py-1.5 text-[11px] text-neutral-500 tabular-nums"
         >
           Showing {{ displayedRepos.length }} of {{ repoTotal }}
         </div>
@@ -484,7 +484,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Who can trigger
       </h4>
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden">
         <div class="px-4 py-3.5 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="text-sm text-neutral-900 dark:text-neutral-100">
@@ -514,7 +514,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Notifications
       </h4>
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden">
         <div class="px-4 py-3.5 space-y-2">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -566,7 +566,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Workspace repositories
       </h4>
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden divide-y divide-neutral-200 dark:divide-neutral-700">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden divide-y divide-neutral-200 dark:divide-neutral-700">
         <div class="px-4 py-3.5 space-y-2">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -593,7 +593,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
             <span
               v-for="repo in pinnedRepos"
               :key="repo.id"
-              class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 pl-2 pr-1 py-0.5"
+              class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-700 pl-2 pr-1 py-0.5"
             >
               <UIcon
                 name="i-lucide-book"
@@ -682,7 +682,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Webhooks
       </h4>
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden">
         <div class="px-4 py-3.5 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="text-sm text-neutral-900 dark:text-neutral-100">

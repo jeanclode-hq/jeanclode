@@ -127,7 +127,7 @@
   --ui-color-neutral-950: #0a0c0e;
 
   /* Text tokens */
-  --ui-text-dimmed: #c6c6cd;
+  --ui-text-dimmed: #9a9ba1;
   --ui-text-muted: #76777d;
   --ui-text-toned: #45464d;
   --ui-text: #45464d;
@@ -163,7 +163,7 @@
   --ui-bg-inverted: #f7f9fb; /* neutral-50 */
 
   /* Text */
-  --ui-text-dimmed: #45464d;  /* neutral-600 */
+  --ui-text-dimmed: #8a8b91;
   --ui-text-muted: #76777d;   /* neutral-500 */
   --ui-text-toned: #c6c6cd;   /* neutral-400 */
   --ui-text: #c6c6cd;         /* neutral-400 */

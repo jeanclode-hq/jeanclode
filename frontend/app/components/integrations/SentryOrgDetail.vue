@@ -311,9 +311,9 @@ async function handleImportNow() {
     </button>
 
     <!-- Org header -->
-    <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 p-5">
+    <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none p-5">
       <div class="flex items-start gap-4">
-        <div class="size-12 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0">
+        <div class="size-12 rounded-xl bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center shrink-0">
           <ProviderIcon
             light-src="/icons/sentry-light.svg"
             dark-src="/icons/sentry-dark.svg"
@@ -357,7 +357,7 @@ async function handleImportNow() {
 
       <div
         v-if="isLoadingProjects"
-        class="rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 flex items-center justify-center"
+        class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none p-8 flex items-center justify-center"
       >
         <UIcon
           name="i-lucide-loader-2"
@@ -367,7 +367,7 @@ async function handleImportNow() {
 
       <div
         v-else-if="!projects || projects.length === 0"
-        class="rounded-xl border border-neutral-200 dark:border-neutral-700 border-dashed p-8 text-center"
+        class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none border-dashed p-8 text-center"
       >
         <UIcon
           name="i-lucide-loader-2"
@@ -389,13 +389,13 @@ async function handleImportNow() {
               {{ mappedCount }} of {{ totalCount }} mapped
             </span>
             <span
-              :class="mappingProgress === 100 ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'"
+              :class="mappingProgress === 100 ? 'text-green-600 dark:text-green-400' : 'text-neutral-500'"
               class="font-medium"
             >
               {{ mappingProgress }}%
             </span>
           </div>
-          <div class="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+          <div class="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-700 overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-500"
               :class="mappingProgress === 100 ? 'bg-green-500' : 'bg-neutral-800 dark:bg-neutral-200'"
@@ -406,7 +406,7 @@ async function handleImportNow() {
 
         <!-- Toolbar: filter tabs + search -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div class="flex items-center gap-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 p-0.5 shrink-0">
+          <div class="flex items-center gap-1 rounded-lg bg-neutral-100 dark:bg-neutral-700 p-0.5 shrink-0">
             <button
               v-for="tab in ([
                 { key: 'all', label: 'All', count: totalCount },
@@ -417,7 +417,7 @@ async function handleImportNow() {
               type="button"
               class="cursor-pointer px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
               :class="activeFilter === tab.key
-                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-sm'
+                ? 'bg-white dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 shadow-sm'
                 : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'"
               @click="activeFilter = tab.key"
             >
@@ -439,18 +439,18 @@ async function handleImportNow() {
         </div>
 
         <!-- Project list -->
-        <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+        <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden">
           <div
             v-if="filteredProjects.length === 0"
             class="p-6 text-center"
           >
-            <p class="text-xs text-neutral-400">
+            <p class="text-xs text-neutral-500">
               No projects match your filter.
             </p>
           </div>
           <div
             v-else
-            class="divide-y divide-neutral-100 dark:divide-neutral-800"
+            class="divide-y divide-neutral-200 dark:divide-neutral-700"
           >
             <div
               v-for="project in paginatedProjects"
@@ -476,7 +476,7 @@ async function handleImportNow() {
                 class="flex items-center gap-2 shrink-0"
               >
                 <div
-                  class="flex items-center gap-1.5 rounded-md bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1"
+                  class="flex items-center gap-1.5 rounded-md bg-neutral-100 dark:bg-neutral-700 px-2.5 py-1"
                 >
                   <UIcon
                     name="i-lucide-book"
@@ -496,7 +496,7 @@ async function handleImportNow() {
                 />
                 <button
                   type="button"
-                  class="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                  class="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-600"
                   title="Unmap"
                   @click="handleUnmap(project)"
                 >
@@ -526,7 +526,7 @@ async function handleImportNow() {
           v-if="totalPages > 1"
           class="flex items-center justify-between pt-1"
         >
-          <p class="text-xs text-neutral-400 tabular-nums">
+          <p class="text-xs text-neutral-500 tabular-nums">
             {{ (currentPage - 1) * PAGE_SIZE + 1 }}–{{ Math.min(currentPage * PAGE_SIZE, filteredProjects.length) }}
             of {{ filteredProjects.length }}
           </p>
@@ -560,7 +560,7 @@ async function handleImportNow() {
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Triggers
       </h4>
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 divide-y divide-neutral-100 dark:divide-neutral-800 overflow-hidden">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none divide-y divide-neutral-200 dark:divide-neutral-700 overflow-hidden">
         <div class="px-4 py-3.5 space-y-2">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1.5">
@@ -668,7 +668,7 @@ async function handleImportNow() {
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Issue import
       </h4>
-      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden">
         <div class="px-4 py-3.5 space-y-2">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">

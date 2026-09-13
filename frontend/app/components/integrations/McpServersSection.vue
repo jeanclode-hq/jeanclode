@@ -112,7 +112,7 @@ function toggleAuthForm(id: string) {
 
     <div
       v-if="isLoading && !servers"
-      class="rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 flex items-center justify-center"
+      class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none p-8 flex items-center justify-center"
     >
       <UIcon
         name="i-lucide-loader-2"
@@ -129,7 +129,7 @@ function toggleAuthForm(id: string) {
 
     <ul
       v-else
-      class="rounded-xl border border-neutral-200 dark:border-neutral-700 divide-y divide-neutral-100 dark:divide-neutral-700 overflow-hidden"
+      class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none divide-y divide-neutral-200 dark:divide-neutral-700 overflow-hidden"
     >
       <li
         v-for="server in servers"
@@ -146,7 +146,7 @@ function toggleAuthForm(id: string) {
               <span class="text-sm truncate text-neutral-700 dark:text-neutral-300">{{ server.name }}</span>
               <span
                 v-if="server.has_credential"
-                class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 font-medium"
+                class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200 font-medium"
               >{{ t('connectors.authConfigured') }}</span>
             </div>
             <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate font-mono">

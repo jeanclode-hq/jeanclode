@@ -82,7 +82,7 @@ function handleBack() {
           v-for="org in gitOrgs"
           :key="org.id"
           type="button"
-          class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-900 dark:hover:text-neutral-200"
+          class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-neutral-900 dark:hover:text-neutral-200"
           @click="selectedOrgId = org.id"
         >
           <UAvatar
@@ -111,7 +111,7 @@ function handleBack() {
         <button
           v-if="!singleOrg"
           type="button"
-          class="cursor-pointer shrink-0 p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+          class="cursor-pointer shrink-0 p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
           title="Back to org selection"
           @click="handleBack"
         >
@@ -154,7 +154,7 @@ function handleBack() {
           <template #content-bottom>
             <div
               v-if="isLoading || hasMore"
-              class="border-t border-neutral-100 dark:border-neutral-800 p-1"
+              class="border-t border-neutral-200 dark:border-neutral-800 p-1"
             >
               <button
                 v-if="hasMore"
@@ -166,7 +166,7 @@ function handleBack() {
               </button>
               <p
                 v-else
-                class="px-2 py-1.5 text-xs text-neutral-400 text-center"
+                class="px-2 py-1.5 text-xs text-neutral-500 text-center"
               >
                 Loading…
               </p>
