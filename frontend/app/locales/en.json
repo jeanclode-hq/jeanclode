@@ -1,0 +1,507 @@
+{
+  "common": {
+    "appName": "Jeanclode",
+    "tagline": "Autonomous Sentry error triage and fix bot",
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling...",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "search": "Search...",
+    "noResults": "No results found",
+    "noResultsDescription": "Try adjusting your search terms.",
+    "collapse": "Collapse",
+    "continue": "Continue",
+    "connected": "Connected"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "issues": "Issues",
+    "pullRequests": "Pull Requests",
+    "integrations": "Integrations",
+    "settings": "Settings",
+    "logOut": "Log out"
+  },
+  "user": {
+    "profile": "Profile",
+    "signOut": "Sign out"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "greeting": "Welcome back",
+    "stats": {
+      "activeAgents": "Running",
+      "totalIssues": "Total Issues",
+      "prsCreated": "PRs Created",
+      "successRate": "Success Rate"
+    },
+    "activeExecutions": {
+      "title": "Active Executions",
+      "empty": "No active executions",
+      "emptyDescription": "Executions will appear here while they're queued or running."
+    }
+  },
+  "workspace": {
+    "title": "Workspace",
+    "description": "Manage your workspace.",
+    "select": "Select workspace",
+    "create": {
+      "title": "Create Workspace",
+      "description": "Create a new workspace to get started.",
+      "nameLabel": "Workspace name",
+      "namePlaceholder": "My Workspace",
+      "submit": "Create Workspace",
+      "trigger": "Create new workspace"
+    }
+  },
+  "issues": {
+    "title": "Issues",
+    "description": "All issues across connected sources.",
+    "empty": "No issues yet",
+    "emptyDescription": "Issues will appear here when connected sources report errors.",
+    "columns": {
+      "source": "Source",
+      "status": "Status",
+      "title": "Title",
+      "level": "Level",
+      "events": "Events",
+      "lastSeen": "Last Seen",
+      "pr": "PR",
+      "actions": "Actions"
+    },
+    "filters": {
+      "allSources": "All Sources",
+      "sentry": "Sentry",
+      "allStatuses": "All Statuses",
+      "allRepos": "All Repos",
+      "myIssues": "My issues",
+      "allIssues": "All issues",
+      "open": "Open",
+      "closed": "Closed",
+      "mappedReposOnly": "Mapped repos only",
+      "executionStatus": {
+        "all": "All Statuses",
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    },
+    "actions": {
+      "fix": "Fix",
+      "resolve": "Resolve",
+      "dismiss": "Dismiss",
+      "fixing": "Fixing...",
+      "resolving": "Resolving...",
+      "dismissing": "Dismissing...",
+      "repoDisabledTooltip": "Repository is disabled — enable it on the integrations settings"
+    }
+  },
+  "pullRequests": {
+    "title": "Pull Requests",
+    "description": "Pull requests created by agents.",
+    "empty": "No pull requests yet",
+    "emptyDescription": "Pull requests will appear here when agents fix issues.",
+    "columns": {
+      "status": "Status",
+      "title": "Title",
+      "repo": "Repo",
+      "sourceIssue": "Source Issue",
+      "branch": "Branch",
+      "created": "Created",
+      "merged": "Merged"
+    },
+    "filters": {
+      "allStatuses": "All Statuses",
+      "allRepos": "All Repos",
+      "myPRs": "My PRs",
+      "allPRs": "All PRs",
+      "allTime": "All time",
+      "today": "Today",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "executionStatus": {
+        "all": "All Statuses",
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    },
+    "reviewButton": {
+      "label": "Review",
+      "notAuthorTooltip": "Only the PR author can trigger a manual review",
+      "repoDisabledTooltip": "Repository is disabled — enable it on the integrations settings"
+    }
+  },
+  "integrations": {
+    "title": "Integrations",
+    "description": "Manage all external connections.",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "disconnect": "Disconnect",
+    "disconnecting": "Disconnecting...",
+    "connectNew": "Add Integration",
+    "comingSoon": "Coming soon",
+    "lastSynced": "Last synced",
+    "repos": "repositories",
+    "repo": "repository",
+    "projects": "projects",
+    "project": "project",
+    "syncingRepos": "Syncing repositories...",
+    "syncingProjects": "Syncing projects...",
+    "noOrgs": "No organizations connected yet.",
+    "github": {
+      "title": "GitHub",
+      "description": "Connect GitHub organizations via the GitHub App.",
+      "connectButton": "Connect GitHub Org",
+      "orgDetail": "Organization Details"
+    },
+    "gitlab": {
+      "title": "GitLab",
+      "description": "Connect GitLab groups with access tokens.",
+      "connectButton": "Connect GitLab Group",
+      "tokenLabel": "Group Access Token",
+      "tokenPlaceholder": "glpat-xxxxxxxxxxxxxxxxxxxx",
+      "tokenHint": "Requires a Group or Project Access Token with the api, read_repository and write_repository scopes and the Maintainer role, so Jeanclode can read repositories, open merge requests, post comments and manage webhooks.",
+      "urlLabel": "GitLab URL",
+      "urlPlaceholder": "https://gitlab.com",
+      "manageProjectWebhooksLabel": "Create project webhooks",
+      "manageProjectWebhooksHint": "Only if you don't have a group webhook (GitLab Free). New projects still need a system hook — set it up without merge request events."
+    },
+    "sentry": {
+      "title": "Sentry",
+      "description": "Connect Sentry organizations to triage errors.",
+      "connectButton": "Connect Sentry",
+      "orgSlugLabel": "Organization Slug",
+      "orgSlugPlaceholder": "my-org (from your Sentry URL)",
+      "authTokenLabel": "Auth Token",
+      "authTokenPlaceholder": "sntrys_...",
+      "clientSecretLabel": "Client Secret",
+      "clientSecretPlaceholder": "From the integration's credentials section",
+      "baseUrlLabel": "Sentry URL",
+      "baseUrlPlaceholder": "https://sentry.io",
+      "mappingTable": "Project Mappings",
+      "reResolve": "Re-resolve",
+      "resolving": "Resolving..."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "account": "Account",
+      "workspace": "Workspace"
+    },
+    "profile": {
+      "title": "Profile",
+      "memberSince": "Member since"
+    },
+    "accounts": {
+      "title": "Connected Accounts",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "linked": "{provider} account linked successfully.",
+      "disconnected": "{provider} account disconnected.",
+      "disconnectFailed": "Failed to disconnect account.",
+      "alreadyLinked": "This provider is already linked to your account.",
+      "accountInUse": "This account is already linked to another user.",
+      "cannotDisconnectLast": "You must have at least one connected account.",
+      "lastAccountWarning": "You need at least 2 connected providers to disconnect one."
+    },
+    "workspaceTab": {
+      "title": "Workspace Members",
+      "description": "Everyone with access to this workspace.",
+      "columns": {
+        "member": "Member",
+        "providers": "Providers",
+        "joined": "Joined"
+      }
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue"
+    },
+    "continueWithGithub": "Continue with GitHub",
+    "continueWithGitlab": "Continue with GitLab"
+  },
+  "onboarding": {
+    "title": "Set up your workspace",
+    "description": "Connect your code and integrations to get started.",
+    "gitProvider": {
+      "title": "Git Provider",
+      "description": "Connect your GitHub or GitLab organization.",
+      "github": {
+        "title": "GitHub",
+        "description": "Install the Jeanclode GitHub App on your organization.",
+        "install": "Install GitHub App",
+        "waiting": "Waiting for GitHub App installation...",
+        "installed": "GitHub App installed"
+      },
+      "gitlab": {
+        "title": "GitLab",
+        "description": "Connect your GitLab group with an access token.",
+        "tokenLabel": "Group Access Token",
+        "tokenPlaceholder": "glpat-xxxxxxxxxxxxxxxxxxxx",
+        "tokenHint": "Requires a Group or Project Access Token with the api, read_repository and write_repository scopes and the Maintainer role, so Jeanclode can read repositories, open merge requests, post comments and manage webhooks.",
+        "urlLabel": "GitLab URL",
+        "urlPlaceholder": "https://gitlab.com",
+        "connect": "Connect GitLab",
+        "connecting": "Connecting...",
+        "manageProjectWebhooksLabel": "Create project webhooks",
+        "manageProjectWebhooksHint": "Only if you don't have a group webhook (GitLab Free). New projects still need a system hook — set it up without merge request events."
+      },
+      "reposSynced": "{count} repositories synced"
+    },
+    "sentry": {
+      "title": "Sentry",
+      "description": "Link your Sentry organization to start receiving errors.",
+      "clientSecretLabel": "Client Secret",
+      "clientSecretPlaceholder": "Enter your Sentry integration client secret",
+      "connect": "Connect Sentry",
+      "connecting": "Connecting...",
+      "connected": "Sentry connected",
+      "projectsSynced": "{count} projects synced",
+      "backfillLabel": "Import existing issues",
+      "backfillHint": "How much of your existing Sentry backlog to bring in. New errors are picked up from webhooks either way.",
+      "backfillNone": "Don't import",
+      "backfill7d": "Last 7 days",
+      "backfill30d": "Last 30 days",
+      "backfillAll": "Everything",
+      "backfillHints": {
+        "none": "Nothing is imported now. Existing errors stay invisible until they recur — you can import them later from the integration settings.",
+        "7d": "Only issues seen in the last week. A small starting batch for a large backlog.",
+        "30d": "Issues seen in the last month. A good default for most teams.",
+        "all": "Every unresolved issue, however old. On a large org this can take days to work through."
+      },
+      "backfillNow": "Import now",
+      "backfillQueued": "Import queued",
+      "backfillQueuedFailed": "Could not queue the import"
+    },
+    "mapping": {
+      "title": "Project Mapping",
+      "description": "Map Sentry projects to their git repositories.",
+      "project": "Sentry Project",
+      "repository": "Repository",
+      "source": "Source",
+      "unmapped": "Unmapped",
+      "selectRepo": "Select repository...",
+      "reResolve": "Re-resolve",
+      "resolving": "Resolving...",
+      "completeSetup": "Complete Setup",
+      "sources": {
+        "code_mapping": "Code Mapping",
+        "fuzzy": "Fuzzy Match",
+        "manual": "Manual"
+      }
+    }
+  },
+  "admin": {
+    "title": "Admin",
+    "subtitle": "Manage instance-wide provider credentials.",
+    "gatePrompt": "Enter the ADMIN_SECRET configured for this instance.",
+    "secret": "Admin secret",
+    "unlock": "Unlock",
+    "logout": "Log out",
+    "continue": "Continue to app",
+    "save": "Save",
+    "configured": "Configured",
+    "setupIncomplete": {
+      "title": "Setup incomplete",
+      "description": "Configure at least one git provider (GitHub or GitLab) and an LLM provider to continue."
+    },
+    "invalidSecret": "Invalid admin secret",
+    "savedGithub": "GitHub settings saved",
+    "savedGitlab": "GitLab settings saved",
+    "savedLlm": "LLM settings saved",
+    "saveFailed": "Could not save settings",
+    "leaveBlankToKeep": "Leave blank to keep the current value",
+    "confirmDeleteGithub": "Delete the GitHub configuration? Users will no longer be able to sign in with GitHub and webhook deliveries will stop being processed.",
+    "confirmDeleteGitlab": "Delete the GitLab configuration? Users will no longer be able to sign in with GitLab and webhook deliveries will stop being processed.",
+    "confirmDeleteLlm": "Delete the LLM configuration? Automated triage and fix-drafting will stop until a new provider is configured.",
+    "confirmDeleteButton": "Yes, delete",
+    "cancel": "Cancel",
+    "deleted": "Configuration deleted",
+    "deleteGithub": "Delete GitHub configuration",
+    "deleteGitlab": "Delete GitLab configuration",
+    "deleteLlm": "Delete LLM configuration",
+    "github": {
+      "description": "OAuth login + App installation credentials for GitHub.",
+      "name": "App name",
+      "nameHelp": "GitHub App names are globally unique. Pick a suffix that's distinct — e.g. your GitHub handle or org slug.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "appId": "App ID",
+      "privateKeyPem": "Private key (PEM)",
+      "privateKeyHelp": "Paste the full contents of the .pem file generated by GitHub.",
+      "webhookSecret": "Webhook secret",
+      "createApp": "Create GitHub App",
+      "manifestHelp": "Create a new GitHub App in one click. You'll be redirected to GitHub to confirm the manifest, then returned here with credentials pre-filled.",
+      "orPasteBelow": "Or paste credentials for an existing app below.",
+      "publicUrlLabel": "Public backend URL",
+      "publicUrlHelp": "Publicly reachable URL where this backend is served — used by GitHub for OAuth callback and webhook delivery. In dev, paste your tunnel URL (e.g. ngrok).",
+      "accountTypeLabel": "Create App under",
+      "accountTypePersonal": "My personal account",
+      "accountTypeOrg": "An organization",
+      "orgSlugLabel": "Organization slug",
+      "orgSlugHelp": "The URL fragment for your org (e.g. 'my-org' from github.com/my-org). You must be an owner.",
+      "tabs": {
+        "manifest": "Create new App",
+        "paste": "I have an App"
+      },
+      "homepageUrlLabel": "Homepage URL",
+      "homepageUrlHelp": "Shown on the App's GitHub page. Defaults to the frontend URL in your backend config — override if the frontend lives on a different host.",
+      "callbackUrlLabel": "OAuth callback URL",
+      "callbackUrlHelp": "Where GitHub redirects after user authorization. Leave blank to use {backend}/auth/callback/github.",
+      "webhookUrlLabel": "Webhook URL",
+      "webhookUrlHelp": "Where GitHub delivers event payloads. Leave blank to use {backend}/webhooks/github.",
+      "setupUrlLabel": "Setup URL",
+      "setupUrlHelp": "Where users land after installing the App. Leave blank to use {frontend}/admin.",
+      "openOnGithub": "View on GitHub",
+      "deleteWarning": "Deleting here only removes the credentials from this instance. GitHub does not expose an API to delete the App itself — you'll need to remove it manually from GitHub settings if you want to reuse the name."
+    },
+    "gitlab": {
+      "description": "OAuth credentials for GitLab sign-in.",
+      "instanceUrl": "Instance URL",
+      "clientId": "Application ID",
+      "clientSecret": "Secret",
+      "webhookSecret": "Webhook secret",
+      "webhookSecretHelp": "Shared secret used to verify incoming GitLab webhooks (X-Gitlab-Token header).",
+      "openOnGitlab": "View on GitLab"
+    },
+    "llm": {
+      "heading": "LLM credentials",
+      "description": "An ordered pool of credentials — tried in priority order, with automatic failover when one is rate limited.",
+      "provider": "Provider",
+      "apiKey": "API key",
+      "oauthToken": "Claude Code OAuth token",
+      "oauthTokenHelp": "Generate with `claude setup-token` — runs Claude Code against your Anthropic subscription (no API key or model needed).",
+      "planTier": "Plan tier",
+      "planTierHelp": "Informational only — not used to decide when a credential is exhausted.",
+      "modelHigh": "High-tier model",
+      "modelHighHelp": "Used for reasoning-heavy work like drafting fixes.",
+      "modelLow": "Low-tier model",
+      "modelLowHelp": "Used for cheap utility calls like summaries and parsing.",
+      "baseUrl": "Base URL",
+      "priority": "Priority {n}",
+      "active": "Active",
+      "stale": "Rate limited",
+      "staleUntil": "Rate limited, retrying at {when}",
+      "add": "Add credential",
+      "remove": "Remove",
+      "confirmRemove": "Remove this credential from the pool? Dispatch will no longer be able to use it."
+    }
+  },
+  "plugins": {
+    "title": "Plugins",
+    "subtitle": "Connect marketplaces and install third-party plugins. Plugins extend the agent with custom skills.",
+    "empty": "No marketplaces connected. Connect one to browse and install plugins.",
+    "connectMarketplace": "Connect marketplace",
+    "urlPlaceholder": "https://github.com/org/skills",
+    "install": "Install",
+    "installAll": "Install all",
+    "uninstallAll": "Uninstall plugins",
+    "disconnect": "Disconnect",
+    "unreachable": "Unreachable",
+    "fetchFailed": "Failed to fetch marketplace.json.",
+    "emptyManifest": "This marketplace has no plugins.",
+    "addAuth": "Add auth",
+    "toast": {
+      "marketplaceConnected": "Marketplace connected",
+      "marketplaceDisconnected": "Marketplace disconnected",
+      "pluginInstalled": "Plugin installed",
+      "allInstalled": "All plugins installed",
+      "pluginUninstalled": "Plugin uninstalled",
+      "allUninstalled": "All plugins uninstalled",
+      "connectFailed": "Failed to connect marketplace",
+      "disconnectFailed": "Failed to disconnect marketplace",
+      "installFailed": "Failed to install plugin",
+      "uninstallFailed": "Failed to uninstall plugin"
+    }
+  },
+  "connectors": {
+    "title": "MCP servers",
+    "subtitle": "Register remote MCP servers for this org. Jeanclode is a client only — it connects out, it never hosts or spawns one.",
+    "empty": "No MCP servers registered yet.",
+    "addServer": "Add server",
+    "namePlaceholder": "Name",
+    "urlPlaceholder": "https://mcp.example.com/sse",
+    "authConfigured": "Auth configured",
+    "addAuth": "Add auth",
+    "editAuth": "Edit auth",
+    "remove": "Remove",
+    "save": "Save",
+    "authType": {
+      "apiKey": "API key",
+      "jwt": "JWT",
+      "basicAuth": "Basic auth",
+      "oauth2": "OAuth2"
+    },
+    "form": {
+      "authType": "Auth type",
+      "authTypeHelp": "API key / JWT: one static token sent in a header on every request. Basic auth: a username/password pair, sent Base64-encoded. OAuth2: Jeanclode mints and refreshes an access token itself from a client_id/client_secret — nothing to rotate by hand.",
+      "skillAuthTypesNote": "Skills currently support API key and JWT credentials only — Basic auth and OAuth2 have no way yet to wire their secret into a skill's env, so they're only offered for MCP servers.",
+      "editingNote": "Editing an existing credential. The secret isn't shown back for editing — re-enter it below to save any change.",
+      "envVarName": "Env var name",
+      "envVarNameHelp": "The environment variable the skill's script reads this value as — check the skill's own instructions for the name it expects (e.g. OUTLINE_API_KEY).",
+      "token": "Token",
+      "tokenHelpApiKey": "The API key value itself, exactly as issued by the provider — no header name or prefix, just the secret.",
+      "tokenHelpJwt": "The JWT itself (the full token string). Jeanclode sends it as-is on every request — it does not renew or re-sign an expired token for you, so use a long-lived one if the provider offers it.",
+      "advanced": "Advanced: header name and value prefix",
+      "header": "Header",
+      "headerHelp": "The HTTP header the token is sent in. Defaults to Authorization — only change this if the skill's instructions say otherwise.",
+      "valuePrefix": "Value prefix",
+      "valuePrefixHelp": "Text prepended to the token in the header, e.g. \"Bearer \". Clear it if the API expects the raw token with no prefix.",
+      "username": "Username",
+      "usernameHelp": "Sent Base64-encoded as the Authorization: Basic header on every request — the provider's login/service-account name.",
+      "password": "Password",
+      "passwordHelp": "Paired with the username above into the Basic auth header. Use an API password or app-specific token if the provider offers one, rather than a personal login password.",
+      "clientId": "Client ID",
+      "clientIdHelp": "From the provider's OAuth2 app/service-account settings — identifies which application is requesting a token.",
+      "clientSecret": "Client secret",
+      "clientSecretHelp": "Paired with the Client ID to authenticate the token request. Treated the same as any other secret — never shown back once saved.",
+      "tokenUrl": "Token URL",
+      "tokenUrlHelp": "The provider's OAuth2 token endpoint Jeanclode calls to mint an access token — usually ends in /oauth/token or /token. Not the API's base URL.",
+      "grantType": "Grant type",
+      "grantTypeClientCredentials": "Client credentials",
+      "grantTypePassword": "Password",
+      "grantTypeRefreshToken": "Refresh token",
+      "grantTypeHelp": "How Jeanclode mints the access token itself, headlessly, with no browser step — client_credentials from just the client ID/secret, password from a username/password pair, or refresh_token from a long-lived refresh token. Not offered: authorization_code, which needs an interactive redirect Jeanclode has no way to complete on its own.",
+      "scope": "Scope (optional)",
+      "scopeHelp": "Space-separated OAuth2 scopes to request, if the provider requires specific ones. Leave blank to request the client's default scope.",
+      "oauthUsername": "Username",
+      "oauthUsernameHelp": "The resource owner's username for the password grant — sent to the token endpoint alongside the client ID/secret to mint an access token.",
+      "oauthPassword": "Password",
+      "oauthPasswordHelp": "Paired with the username above. Use an API password or app-specific credential if the provider offers one, rather than a personal login password.",
+      "refreshToken": "Refresh token",
+      "refreshTokenHelp": "A refresh token already issued by the provider (outside Jeanclode). Exchanged for a fresh access token on every mint — if the provider rotates refresh tokens on use, this won't keep working past the first exchange, since there's no interactive flow here to capture the new one.",
+      "host": "Target host",
+      "hostHelp": "All outbound traffic from the agent goes through a security proxy that only forwards requests to hosts it knows about. A skill has no declared host of its own (unlike an MCP server), so this tells the proxy which host to allow through and to inject this credential into — e.g. wiki.example.com for a wiki API key. It should match the host the skill's own instructions call out to. If an API is split across subdomains (e.g. api.example.com, www.example.com), use a wildcard like *.example.com to cover all of them — it matches any subdomain but not the bare example.com itself."
+    },
+    "toast": {
+      "serverAdded": "MCP server added",
+      "serverAddFailed": "Failed to add MCP server",
+      "serverRemoved": "MCP server removed",
+      "serverRemoveFailed": "Failed to remove MCP server",
+      "credentialSaved": "Auth saved",
+      "credentialSaveFailed": "Failed to save auth",
+      "credentialRemoved": "Auth removed",
+      "credentialRemoveFailed": "Failed to remove auth"
+    }
+  },
+  "errorPage": {
+    "notFoundTitle": "Page not found",
+    "notFoundMessage": "The page you're looking for doesn't exist or has moved.",
+    "genericTitle": "Something broke on our end",
+    "genericMessage": "An unexpected error interrupted this page. It's on us, not you — try again in a moment.",
+    "backToDashboard": "Back to dashboard",
+    "tryAgain": "Try again"
+  }
+}

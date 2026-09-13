@@ -1,0 +1,59 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe the problem you're trying to solve.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this feature solve? Describe the pain point.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your ideal solution. How should it work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative approaches?
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of Jeanclode would this affect?
+      options:
+        - Sentry fix
+        - Code review
+        - PR summary
+        - Issue resolve
+        - jeanclode-bot mentions
+        - Backend (API server)
+        - Frontend (Dashboard)
+        - CLI
+        - Security proxy
+        - Docker / Deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any mockups, examples, or references that help illustrate the feature.

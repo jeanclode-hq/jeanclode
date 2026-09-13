@@ -1,0 +1,173 @@
+[project]
+name = "jeanclode"
+version = "0.8.3" # x-release-please-version
+description = "Multi-plugin CLI — auto-detects what to do from URLs and invokes Claude Code skills"
+authors = [{ name = "Jeanclode Contributors" }]
+readme = "README.md"
+requires-python = ">=3.14"
+license = "AGPL-3.0"
+keywords = ["sentry", "ai", "llm", "bug-fix", "automation", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+]
+
+dependencies = [
+    "claude-agent-sdk>=0.2.144",
+    "httpx>=0.28.0",
+    "jinja2>=3.1.0",
+    "pydantic>=2.9.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+jeanclode = "src.main:cli_entry"
+
+[project.urls]
+Homepage = "https://jeanclode.com"
+Repository = "https://github.com/jeanclode-hq/jeanclode"
+Issues = "https://github.com/jeanclode-hq/jeanclode/issues"
+Documentation = "https://jeanclode.com/docs"
+
+[build-system]
+requires = ["setuptools>=75.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["src", "src.*"]
+exclude = ["tests*"]
+namespaces = true
+
+# Agent prompts are plain .md files in dirs with no __init__.py; without this
+# they never make it into the wheel and every agent dies on read_text().
+[tool.setuptools.package-data]
+"*" = ["*.md"]
+
+# Ruff Configuration
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+fix = true
+
+lint.select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "UP",    # pyupgrade
+    "ARG",   # flake8-unused-arguments
+    "SIM",   # flake8-simplify
+    "PTH",   # flake8-use-pathlib
+    "RUF",   # Ruff-specific rules
+    "ASYNC", # flake8-async
+]
+lint.ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "UP007", # Use X | Y for type annotations (pydantic compatibility)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]          # Unused imports in __init__.py
+"tests/**/*.py" = ["ARG", "S101"] # Pytest uses assertions
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# MyPy Configuration
+[tool.mypy]
+python_version = "3.14"
+strict = true
+pretty = true
+show_error_codes = true
+warn_return_any = true
+warn_unused_configs = true
+allow_redefinition = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+no_implicit_reexport = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+plugins = ["pydantic.mypy"]
+mypy_path = "$MYPY_CONFIG_FILE_DIR"
+namespace_packages = true
+explicit_package_bases = true
+local_partial_types = true
+
+exclude = "^(tests|docs|venv|env|scripts)/"
+
+[[tool.mypy.overrides]]
+module = ["claude_agent_sdk.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# Pytest Configuration
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "-m not eval",
+]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+    "eval: LLM evaluation tests — opt-in, require GOOGLE_API_KEY or GEMINI_API_KEY",
+]
+
+# Coverage Configuration
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.15.4",
+    "mypy>=1.19.1",
+    "setuptools>=82.0.0",
+    "deepeval>=2.0.0",
+    "litellm>=1.0.0",
+]

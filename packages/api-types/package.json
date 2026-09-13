@@ -1,0 +1,16 @@
+{
+  "name": "@jeanclode/api-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./client": "./client.gen.ts"
+  },
+  "devDependencies": {
+    "@hey-api/client-fetch": "^0.8.4",
+    "@hey-api/openapi-ts": "^0.73.0"
+  }
+}

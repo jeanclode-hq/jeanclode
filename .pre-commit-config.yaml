@@ -1,0 +1,104 @@
+# Pre-commit configuration for jeanclode
+# Install: pre-commit install && pre-commit install --hook-type commit-msg
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Ruff - Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(backend|cli)/
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        files: ^(backend|cli)/
+        types_or: [python, pyi]
+
+  # MyPy - Static type checker
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.9.0
+          - types-redis>=4.6.0
+          - types-pyyaml>=6.0.12
+          - fastapi>=0.115.0
+        files: ^(backend|cli)/
+        exclude: ^(backend|cli)/(tests|alembic)/
+        args: [--install-types, --non-interactive, --ignore-missing-imports]
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+
+      # Check for merge conflicts
+      - id: check-merge-conflict
+
+      # Check JSON files
+      - id: check-json
+
+      # Check TOML files
+      - id: check-toml
+
+      # Check YAML files
+      - id: check-yaml
+        args: [--unsafe] # Allow custom YAML tags
+
+      # Detect private keys
+      - id: detect-private-key
+        exclude: |
+          (?x)^(
+            backend/tests/test_instance_settings_service\.py|
+            backend/tests/routers/test_admin_router\.py|
+            frontend/app/components/setup/GitHubForm\.vue
+          )$
+
+      # Fix end of files
+      - id: end-of-file-fixer
+        exclude: ^backend/tests/fixtures/
+
+      # Fix trailing whitespace
+      - id: trailing-whitespace
+        exclude: ^backend/tests/fixtures/
+
+      # Check Python AST
+      - id: check-ast
+        files: ^(backend|cli)/.*\.py$
+
+      # Check for debugger imports
+      - id: debug-statements
+        files: ^(backend|cli)/.*\.py$
+
+      # Check that docstrings come first
+      - id: check-docstring-first
+        files: ^(backend|cli)/.*\.py$
+
+  # Commitizen - Validate commit messages
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.29.1
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+# Global settings
+ci:
+  autofix_commit_msg: |
+    style: auto fixes from pre-commit hooks
+
+    Applied automatic fixes from pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "chore: pre-commit autoupdate"
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

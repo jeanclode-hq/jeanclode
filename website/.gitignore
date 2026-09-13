@@ -1,0 +1,9 @@
+node_modules/
+.output/
+.nuxt/
+# No trailing slash: `nuxt generate` creates `dist` as a symlink to
+# .output/public, and gitignore's trailing-slash dir patterns don't match
+# symlinks-to-directories, so `dist/` alone would let it slip through.
+dist
+.DS_Store
+.wrangler/
