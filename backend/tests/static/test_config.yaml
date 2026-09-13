@@ -1,0 +1,63 @@
+app: jeanclode-backend-test
+environment: development
+
+options:
+  backend_url: "http://localhost:8099"
+
+plugins:
+  database:
+    enabled: true
+    url: "postgresql://jeanclode:CHANGE_ME_STRONG_PASSWORD@localhost:5432/jeanclode_test"
+    echo: false
+    pool_size: 5
+    max_overflow: 10
+    encryption_key: "Ba0hfAFspUFKllVlFd5lTzFjKNkjfg3JBmSI7poX7Hw="
+
+  web:
+    enabled: true
+    host: "127.0.0.1"
+    port: 8099
+    skip_server: true
+    frontend_url: "http://localhost:3000"
+    cors:
+      allow_credentials: true
+      allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      allow_headers: ["content-type", "authorization"]
+    session:
+      cookie_name: jeanclode_session
+      cookie_httponly: true
+      cookie_samesite: lax
+      cookie_secure: false
+      inactivity_timeout_hours: 24
+      max_lifetime_days: 30
+      oauth_state_secret: "test-oauth-state-secret"
+    admin:
+      secret: "test-admin-secret-value-at-least-32-chars-long"
+      session_ttl_seconds: 3600
+      rate_limit_max_attempts: 5
+      rate_limit_window_seconds: 900
+      cookie_name: jeanclode_admin
+
+  oauth:
+    enabled: false
+
+  faststream:
+    enabled: true
+    redis:
+      url: "redis://localhost:6379"
+      db: 0
+
+  container:
+    enabled: false
+    backend: docker
+
+  sentry:
+    enabled: true
+    auth_token: "sntrys_test_token"
+    client_secret: "test-sentry-secret"
+
+  github:
+    enabled: false
+
+  gitlab:
+    enabled: false

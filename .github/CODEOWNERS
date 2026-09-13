@@ -1,0 +1,22 @@
+# Default owners for the entire repository
+* @adamsaimi
+
+# Backend
+/backend/ @adamsaimi
+
+# Frontend
+/frontend/ @adamsaimi
+
+# CLI
+/cli/ @adamsaimi
+
+# Security proxy
+/security-proxy/ @adamsaimi
+
+# Website
+/website/ @adamsaimi
+
+# Infrastructure & CI
+/docker-compose.yml @adamsaimi
+/.github/ @adamsaimi
+/Makefile @adamsaimi

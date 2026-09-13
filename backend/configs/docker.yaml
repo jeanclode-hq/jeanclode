@@ -1,0 +1,215 @@
+# Jeanclode Backend Configuration - Docker Container Backend
+# Use this config for local development with Docker Compose
+app: jeanclode-backend
+environment: development
+
+# Application Options
+options:
+  claude_code:
+    oauth_token: !ENV ${CLAUDE_CODE_OAUTH_TOKEN:-}
+    api_key: !ENV ${ANTHROPIC_API_KEY:-}
+    model_high: !ENV ${CLAUDE_CODE_MODEL_HIGH:-}
+    model_low: !ENV ${CLAUDE_CODE_MODEL_LOW:-}
+  # Must be reachable from sandboxed CLI containers, not just the host —
+  # they're on the jeanclode-network compose network, so the "backend"
+  # service DNS name (not localhost) is the correct default here.
+  backend_url: !ENV ${BACKEND_URL:-http://backend:8000}
+
+# Plugins Configuration
+plugins:
+  # Database plugin (SQLAlchemy engine management)
+  database:
+    enabled: true
+    url: !ENV ${DATABASE_URL:-postgresql://localhost:5432/jeanclode}
+    encryption_key: !ENV ${ENCRYPTION_KEY:-}
+    echo: false
+    pool_size: 5
+    max_overflow: 10
+
+  # Web server plugin (FastAPI HTTP server)
+  web:
+    enabled: true
+    host: 0.0.0.0
+    port: 8000
+    reload: false
+    behind_proxy: true
+    frontend_url: !ENV ${FRONTEND_URL:-http://localhost:3000}
+    cors:
+      allow_credentials: true
+      allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      allow_headers: ["content-type", "authorization", "x-requested-with"]
+      additional_dev_origins:
+        - http://localhost:3000
+        - http://127.0.0.1:3000
+    session:
+      cookie_name: jeanclode_session
+      cookie_httponly: true
+      cookie_samesite: lax
+      cookie_secure: false  # false for local dev (no HTTPS)
+      inactivity_timeout_hours: 24
+      max_lifetime_days: 30
+      oauth_state_secret: !ENV ${OAUTH_STATE_SECRET:-dev-oauth-state-secret-change-me}
+    admin:
+      # Required; must be at least 32 characters. Generate with: openssl rand -hex 32
+      secret: !ENV ${ADMIN_SECRET:-dev-admin-secret-change-me-at-least-32-chars}
+      session_ttl_seconds: 3600
+      rate_limit_max_attempts: 5
+      rate_limit_window_seconds: 900
+      cookie_name: jeanclode_admin
+
+  # GitHub integration (OAuth login + App installation auth)
+  github:
+    enabled: !ENV ${GITHUB_ENABLED:-true}
+    app:
+      client_id: !ENV ${GITHUB_CLIENT_ID:-}
+      client_secret: !ENV ${GITHUB_CLIENT_SECRET:-}
+      authorize_url: !ENV ${GITHUB_AUTHORIZE_URL:-https://github.com/login/oauth/authorize}
+      token_url: !ENV ${GITHUB_TOKEN_URL:-https://github.com/login/oauth/access_token}
+      api_base_url: !ENV ${GITHUB_API_URL:-https://api.github.com/}
+      scopes: ["read:user", "user:email", "read:org"]
+      app_id: !ENV ${GITHUB_APP_ID:-}
+      private_key_path: !ENV ${GITHUB_APP_PRIVATE_KEY_PATH:-}
+      webhook_secret: !ENV ${GITHUB_WEBHOOK_SECRET:-}
+      name: !ENV ${GITHUB_APP_NAME:-}
+
+  # GitLab integration (OAuth login + webhook)
+  gitlab:
+    enabled: !ENV ${GITLAB_ENABLED:-true}
+    oauth:
+      client_id: !ENV ${GITLAB_CLIENT_ID:-}
+      client_secret: !ENV ${GITLAB_CLIENT_SECRET:-}
+      instance_url: !ENV ${GITLAB_INSTANCE_URL:-https://gitlab.com}
+      scopes: ["read_user", "read_api"]
+    webhook_secret: !ENV ${GITLAB_WEBHOOK_SECRET:-}
+    webhook_url: !ENV ${GITLAB_WEBHOOK_URL:-}
+
+  # OAuth plugin (manages Authlib registration from provider configs)
+  oauth:
+    enabled: true
+
+  # FastStream Plugin (Redis message queue)
+  faststream:
+    enabled: true
+    app_name: jeanclode-queue
+    graceful_timeout: 30.0
+    log_level: INFO
+    redis:
+      url: !ENV ${REDIS_URL:-redis://redis:6379}
+      db: !ENV ${REDIS_DB:-0}
+      list_cap_size: 10000
+      auto_offset_reset: latest
+      batch_size: 1
+      polling_interval: 0.1
+      max_retries: 3
+      retry_delay: 1.0
+    consumers:
+      # Auth — membership sync after OAuth login
+      - topic: jeanclode.events.auth.sync_memberships
+        handler: "api.routers.auth.consumer:router"
+      # Orgs — pre-populate members when an org is connected
+      - topic: jeanclode.events.orgs.sync_members
+        handler: "api.routers.orgs.consumer:router"
+      # SSE — fan-out events to connected clients
+      - topic: jeanclode.events.sse
+        handler: "api.routers.stream.consumer:router"
+      # GitHub — repo sync after app install
+      - topic: jeanclode.events.github.sync_installation
+        handler: "api.routers.webhooks.github.consumer:router"
+      # GitHub — backfill for repos that appeared after the install sync
+      - topic: jeanclode.events.github.sync_repositories
+        handler: "api.routers.webhooks.github.consumer:router"
+      # GitHub — PR webhook processing
+      - topic: jeanclode.events.github.pr
+        handler: "api.routers.webhooks.github.pr_consumer:router"
+      # GitHub — issue webhook processing
+      - topic: jeanclode.events.github.issues
+        handler: "api.routers.webhooks.github.issue_consumer:router"
+      # GitHub — @jeanclode mention webhook processing (issue_comment,
+      # pull_request_review, pull_request_review_comment events)
+      - topic: jeanclode.events.github.mentions
+        handler: "api.routers.webhooks.github.mention_consumer:router"
+      # GitLab — group repo sync
+      - topic: jeanclode.events.gitlab.sync_group_repositories
+        handler: "api.routers.sources.gitlab.consumer:router"
+      # GitLab — single project repo sync (project token)
+      - topic: jeanclode.events.gitlab.sync_project_repository
+        handler: "api.routers.sources.gitlab.consumer:router"
+      # GitLab — project webhook teardown (manage_project_webhooks off / org delete)
+      - topic: jeanclode.events.gitlab.project_hook_teardown
+        handler: "api.routers.sources.gitlab.consumer:router"
+      # GitLab — MR webhook processing
+      - topic: jeanclode.events.gitlab.merge_requests
+        handler: "api.routers.webhooks.gitlab.consumer:router"
+      # GitLab — issue webhook processing
+      - topic: jeanclode.events.gitlab.issues
+        handler: "api.routers.webhooks.gitlab.issue_consumer:router"
+      # GitLab — @jeanclode note webhook processing
+      - topic: jeanclode.events.gitlab.mentions
+        handler: "api.routers.webhooks.gitlab.note_consumer:router"
+      # GitLab — group member add/update/remove webhook processing
+      - topic: jeanclode.events.gitlab.members
+        handler: "api.routers.webhooks.gitlab.member_consumer:router"
+      # GitLab — group hook project/subgroup lifecycle, and the instance-wide
+      # system hook equivalent
+      - topic: jeanclode.events.gitlab.group
+        handler: "api.routers.webhooks.gitlab.hook_consumer:router"
+      - topic: jeanclode.events.gitlab.system
+        handler: "api.routers.webhooks.gitlab.hook_consumer:router"
+      # Sentry — webhook processing
+      - topic: jeanclode.events.sentry.webhook
+        handler: "api.routers.webhooks.sentry.consumer:router"
+      # Sentry — installation webhook
+      - topic: jeanclode.events.sentry.installation
+        handler: "api.routers.webhooks.sentry.installation:consumer_router"
+      # Sentry — project sync + membership sync
+      - topic: jeanclode.events.sentry.sync_projects
+        handler: "api.routers.sources.sentry.consumer:router"
+      - topic: jeanclode.events.sentry.sync_memberships
+        handler: "api.routers.sources.sentry.consumer:router"
+      # Sentry — project mapping resolution
+      - topic: jeanclode.events.sentry.resolve_mappings
+        handler: "api.routers.sources.sentry.projects.consumer:router"
+      # Sentry — issue backfill
+      - topic: jeanclode.events.sentry.backfill
+        handler: "api.routers.sources.sentry.backfill.consumer:router"
+      # Manual dispatch — single-issue fix trigger
+      - topic: jeanclode.events.manual_dispatch
+        handler: "api.plugins.sentry.consumer:router"
+      # GitHub — PR workflow dispatch (manual + webhook-driven)
+      - topic: jeanclode.events.github.manual_dispatch
+        handler: "api.plugins.github.consumer:router"
+      # GitLab — MR workflow dispatch (manual + webhook-driven)
+      - topic: jeanclode.events.gitlab.manual_dispatch
+        handler: "api.plugins.gitlab.consumer:router"
+
+  # Sentry plugin (Sentry API client + issue dispatch)
+  sentry:
+    enabled: true
+    base_url: !ENV ${SENTRY_API_URL:-https://sentry.io}
+    auth_token: !ENV ${SENTRY_AUTH_TOKEN:-}
+    client_secret: !ENV ${SENTRY_CLIENT_SECRET:-}
+    timeout: 30.0
+    max_retries: 3
+    dispatch:
+      enabled: true
+      interval_seconds: 30
+      batch_size: 5
+      max_retries: 3
+      max_concurrent_dispatches: 50
+
+  # Container Plugin - Docker backend for local development
+  container:
+    enabled: true
+    backend: docker
+    watcher:
+      enabled: true
+      reconcile_interval: 60
+    docker:
+      socket: !ENV ${DOCKER_HOST:-tcp://docker-proxy:2375}
+      image: !ENV ${WORKER_IMAGE:-ghcr.io/jeanclode-hq/cli:0.8.3} # x-release-please-version
+      security_proxy_image: !ENV ${SECURITY_PROXY_IMAGE:-ghcr.io/jeanclode-hq/security-proxy:0.8.3} # x-release-please-version
+      network: jeanclode_jeanclode-network
+      memory_limit: 2g
+      cpu_limit: 2.0
+      timeout: 3600
+      cleanup_containers: false

@@ -1,0 +1,49 @@
+# Jeanclode
+
+> Self-hosted autonomous coding agent. Turns Sentry errors, GitHub issues and GitLab issues into reviewed, CI-verified pull requests.
+
+Jeanclode listens to Sentry, GitHub and GitLab. When an error fires or an issue lands, it triages the problem, writes the fix, verifies it against your repo's own CI, and opens a pull request — then reviews that pull request, works through its own findings, and tells your team when it's ready.
+
+## Workflows
+
+- Sentry fix: batched triage → root-cause grouping → fix → CI gate → PR, one PR per root cause across every repo the fix touches
+- Code review: 7-agent pipeline (IssueExplorer, 2× Analyzer, Synthesizer, Deduplicator, FactChecker, Guardrail, Styler) posting inline comments on GitHub PRs and GitLab MRs
+- Issue resolve: triage → fix → PR, for GitHub issues and GitLab issues/work items
+- PR summary: rewrites the PR/MR description with a summary of the change, preserving every link the old description carried
+- Jeanclode respond: handles `@jeanclode-bot` mentions — replies, pushes fixes, resolves threads, or routes the ask to the workflow that owns it
+
+## Features
+
+- CI-gated fixes: an agent cannot finish its turn until your repo's own CI passes on the commit it pushed
+- Self-driving review loop: review posts findings, the bot works through them, a push sends the PR back through review, until a pass comes back clean
+- Agent memory: corrections, conventions and repo gotchas persist across runs, containers and weeks
+- Multi-repo fixes: a change spanning several repos gets a PR in each, on one shared branch
+- LLM credential pool: several API keys and Claude subscriptions in priority order, with automatic failover on rate limits
+- Self-hosted: your code never leaves your infrastructure
+- Live execution feed: watch agents work in real time via server-sent events
+- Multi-tenant: isolated workspaces, per-organization triggers, RBAC
+- Open source under AGPL v3
+
+## Supported Integrations
+
+- Error tracking: Sentry
+- Git providers: GitHub (App), GitLab (gitlab.com and self-hosted)
+- LLMs: Claude (Anthropic API or a Claude subscription), plus any OpenAI-compatible endpoint
+
+## Links
+
+- Website: https://jeanclode.com
+- Docs: https://jeanclode.com/docs
+- GitHub: https://github.com/jeanclode-hq/jeanclode
+
+## Tech Stack
+
+- Backend: Python, FastAPI, PostgreSQL, Redis
+- CLI / Agent pipeline: Python, Claude Agent SDK
+- Frontend dashboard: Nuxt 4, Vue 3, TypeScript, NuxtUI
+- Isolation: ephemeral containers with a credential-injecting security-proxy sidecar
+- Deployment: Docker, Kubernetes
+
+## License
+
+AGPL v3 — free to use, modify, and self-host.

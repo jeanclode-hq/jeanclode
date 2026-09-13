@@ -1,0 +1,275 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme {
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /*
+   * Zenith Technical neutral scale — remapped so mid-range values are
+   * readable greys (not surfaces). The Zenith palette has 6 light surface
+   * tones (50–400) and 3 text tones (700–900), which breaks all existing
+   * text-neutral-500/600 usages. We compress the scale so:
+   *   50–300  = surface / container colours (Zenith light tones)
+   *   400     = outline-variant  (#c6c6cd) — placeholder / muted icons
+   *   500     = outline          (#76777d) — muted text
+   *   600     = on-surface-variant (#45464d) — secondary text
+   *   700     = #2d3133          — dark text / dark-mode elevated bg
+   *   800     = on-surface       (#191c1e) — primary text / dark card bg
+   *   900     = #0f1214          — deepest dark page bg
+   *   950     = #0a0c0e
+   */
+  --color-neutral-50: #f7f9fb;
+  --color-neutral-100: #f2f4f6;
+  --color-neutral-200: #eceef0;
+  --color-neutral-300: #e6e8ea;
+  --color-neutral-400: #c6c6cd;
+  --color-neutral-500: #76777d;
+  --color-neutral-600: #45464d;
+  --color-neutral-700: #2d3133;
+  --color-neutral-800: #191c1e;
+  --color-neutral-900: #0f1214;
+  --color-neutral-950: #0a0c0e;
+
+  /* Sidebar — white base so hover/active states are visible */
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-bg-dark: #191c1e;
+  --color-sidebar-border: #e6e8ea;
+  --color-sidebar-hover: #f2f4f6;
+  --color-sidebar-active: #eceef0;
+  --color-sidebar-text: #45464d;
+  --color-sidebar-text-muted: #76777d;
+
+  /* Success */
+  --color-success-50: rgb(240, 253, 244);
+  --color-success-100: rgb(220, 252, 231);
+  --color-success-200: rgb(187, 247, 208);
+  --color-success-300: rgb(134, 239, 172);
+  --color-success-400: rgb(74, 222, 128);
+  --color-success-500: rgb(34, 197, 94);
+  --color-success-600: rgb(22, 163, 74);
+  --color-success-700: rgb(21, 128, 61);
+  --color-success-800: rgb(22, 101, 52);
+  --color-success-900: rgb(20, 75, 45);
+
+  /* Warning */
+  --color-warning-50: rgb(255, 247, 237);
+  --color-warning-100: rgb(254, 243, 199);
+  --color-warning-200: rgb(253, 230, 138);
+  --color-warning-300: rgb(252, 211, 77);
+  --color-warning-400: rgb(251, 191, 36);
+  --color-warning-500: rgb(245, 158, 11);
+  --color-warning-600: rgb(217, 119, 6);
+  --color-warning-700: rgb(180, 83, 9);
+  --color-warning-800: rgb(146, 64, 14);
+  --color-warning-900: rgb(110, 50, 15);
+
+  /* Error */
+  --color-error-50: rgb(254, 242, 242);
+  --color-error-100: rgb(254, 226, 226);
+  --color-error-200: rgb(254, 202, 202);
+  --color-error-300: rgb(252, 165, 165);
+  --color-error-400: rgb(248, 113, 113);
+  --color-error-500: rgb(220, 38, 38);
+  --color-error-600: rgb(185, 28, 28);
+  --color-error-700: rgb(153, 27, 27);
+  --color-error-800: rgb(115, 28, 28);
+  --color-error-900: rgb(80, 25, 25);
+
+  /* Font sizes - semantic type scale */
+  --font-size-2xs: 0.625rem;
+  --font-size-xs: 0.6875rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+
+  /* Spacing scale */
+  --spacing-0: 0;
+  --spacing-px: 1px;
+  --spacing-0\.5: 0.125rem;
+  --spacing-1: 0.25rem;
+  --spacing-1\.5: 0.375rem;
+  --spacing-2: 0.5rem;
+  --spacing-2\.5: 0.625rem;
+  --spacing-3: 0.75rem;
+  --spacing-3\.5: 0.875rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-7: 1.75rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+}
+
+@theme inline {
+  --color-neutral-0: #ffffff;
+}
+
+:root {
+  /* NuxtUI neutral scale — mirrors the remapped @theme above */
+  --ui-color-neutral-50: #f7f9fb;
+  --ui-color-neutral-100: #f2f4f6;
+  --ui-color-neutral-200: #eceef0;
+  --ui-color-neutral-300: #e6e8ea;
+  --ui-color-neutral-400: #c6c6cd;
+  --ui-color-neutral-500: #76777d;
+  --ui-color-neutral-600: #45464d;
+  --ui-color-neutral-700: #2d3133;
+  --ui-color-neutral-800: #191c1e;
+  --ui-color-neutral-900: #0f1214;
+  --ui-color-neutral-950: #0a0c0e;
+
+  /* Text tokens */
+  --ui-text-dimmed: #c6c6cd;
+  --ui-text-muted: #76777d;
+  --ui-text-toned: #45464d;
+  --ui-text: #45464d;
+  --ui-text-highlighted: #191c1e;
+  --ui-text-inverted: #ffffff;
+
+  /* Surface tokens */
+  --ui-bg: #ffffff;
+  --ui-bg-muted: #f7f9fb;
+  --ui-bg-elevated: #f2f4f6;
+  --ui-bg-accented: #eceef0;
+  --ui-bg-inverted: #191c1e;
+
+  /* Border tokens — 1px tonal layers */
+  --ui-border: #e6e8ea;
+  --ui-border-muted: #eceef0;
+  --ui-border-accented: #c6c6cd;
+  --ui-border-inverted: #191c1e;
+
+  /* Primary: solid black per Zenith Technical spec */
+  --ui-primary: #000000;
+
+  --color-neutral-0: #ffffff;
+}
+
+/* Dark mode token overrides */
+.dark {
+  /* Surfaces — using the new neutral-800/900 which are now proper darks */
+  --ui-bg: #0f1214;          /* neutral-900 */
+  --ui-bg-muted: #191c1e;    /* neutral-800 */
+  --ui-bg-elevated: #2d3133; /* neutral-700 */
+  --ui-bg-accented: #45464d; /* neutral-600 */
+  --ui-bg-inverted: #f7f9fb; /* neutral-50 */
+
+  /* Text */
+  --ui-text-dimmed: #45464d;  /* neutral-600 */
+  --ui-text-muted: #76777d;   /* neutral-500 */
+  --ui-text-toned: #c6c6cd;   /* neutral-400 */
+  --ui-text: #c6c6cd;         /* neutral-400 */
+  --ui-text-highlighted: #f2f4f6; /* neutral-100 */
+  --ui-text-inverted: #191c1e;    /* neutral-800 */
+
+  /* Borders */
+  --ui-border: #2d3133;      /* neutral-700 */
+  --ui-border-muted: #191c1e; /* neutral-800 */
+  --ui-border-accented: #45464d; /* neutral-600 */
+  --ui-border-inverted: #f7f9fb;
+
+  /* Primary in dark mode: muted light-grey — near-white was too harsh */
+  --ui-primary: #c6c6cd;
+}
+
+body {
+  background-color: var(--ui-bg);
+  color: var(--ui-text-highlighted);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
+}
+
+code, pre, kbd, .font-mono {
+  font-family: var(--font-mono);
+}
+
+.dark body,
+html.dark body {
+  background-color: var(--ui-bg);
+  color: var(--ui-text-highlighted);
+}
+
+/* Subtle gradient for dashboard panel background */
+.dither-bg {
+  background: linear-gradient(to bottom, #f7f9fb, #f2f4f6);
+}
+
+.dark .dither-bg {
+  background: linear-gradient(to bottom, #0f1214, #0a0c0e);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-neutral-50);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-400);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: var(--color-neutral-900);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-700);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-600);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.3s ease-out both;
+}
+
+/*
+ * Input focus ring — override NuxtUI's compound-variant ring-2 ring-primary.
+ * Unlayered CSS beats @layer utilities regardless of specificity, so this
+ * definitively replaces the 2px black ring with a thin 1px neutral-500 ring.
+ */
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-neutral-500);
+}
+
+/* Center icons when sidebar is collapsed */
+[data-collapsed="true"] [data-orientation="vertical"] a {
+  justify-content: center;
+  padding-inline: 0;
+}
