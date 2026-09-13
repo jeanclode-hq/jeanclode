@@ -1,6 +1,6 @@
 [project]
 name = "security-proxy"
-version = "1.0.0" # x-release-please-version
+version = "1.0.1" # x-release-please-version
 description = "TLS-terminating egress proxy that injects per-host credentials for sandboxed agent containers."
 authors = [{ name = "Jeanclode Contributors" }]
 license = "AGPL-3.0"
