@@ -1,6 +1,6 @@
 # ==================== Variables ====================
 REGISTRY ?= ghcr.io/jeanclode-hq
-VERSION  ?= 0.8.3 # x-release-please-version
+VERSION  ?= 1.0.0 # x-release-please-version
 
 # ==================== Quality ====================
 qa: ## Run pre-commit checks (linting, formatting)
