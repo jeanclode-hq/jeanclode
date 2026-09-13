@@ -373,8 +373,7 @@ recorded, expired, Redis unreachable) is treated as current — the guard
 only ever suppresses what it can positively identify as stale.
 
 This requires `delete` on `secrets` and `configmaps` in the backend's Role,
-alongside the `delete` on `jobs` it already had (`helm/*/backend.yaml` in
-`jeanclode-deployment`). Without it the Job purge still works — the cascade
+alongside the `delete` on `jobs` it already had (your deployment's backend Helm values). Without it the Job purge still works — the cascade
 covers the ordinary case — and only the orphan sweep degrades to a logged
 warning.
 
