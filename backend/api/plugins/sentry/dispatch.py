@@ -11,6 +11,13 @@ org at a time. While a fixer container for a git org is still working, the
 dispatcher starts nothing new for that git org — a second concurrent fixer
 there would double that org's container and LLM load and race the first on
 the same repos. Different git orgs are unaffected.
+
+"Git org" here means the connected group's *root* org
+(``org_effective_root_id``), not a repo's own immediate (possibly subgroup)
+org — a single git token/bot identity spans every subgroup under the root, so
+the perimeter and the merge gate (``gate_on_open_fix_prs``) have to as well,
+or an open PR / running batch in one subgroup would never hold back a
+sibling subgroup sharing the same token.
 """
 
 import asyncio

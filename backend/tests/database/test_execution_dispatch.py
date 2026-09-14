@@ -263,6 +263,24 @@ def _enable_automatic(db: Session, org: Organization) -> None:
     db.commit()
 
 
+def _make_git_subgroup(db: Session, root: Organization, *, name: str) -> Organization:
+    """A subgroup org under ``root`` — mirrors ``_resolve_namespace_org``'s
+    placeholder rows for a project living in a subgroup of a connected group.
+    """
+    org = Organization(
+        workspace_id=root.workspace_id,
+        name=name,
+        external_org_id=f"git-subgroup-{uuid.uuid4().hex[:6]}",
+        provider="github",
+        parent_org_id=root.id,
+        root_org_id=root.id,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+
 def test_eligible_targets_fan_out_to_two_git_orgs(db_session):
     """One Sentry org whose projects map into two git orgs yields two pairs."""
     sentry_org = _make_org(db_session)
@@ -437,6 +455,89 @@ def test_claim_dispatch_window_atomic_with_int_minutes(db_session):
 
     # A longer window (1 week) still blocks a fresh claim.
     assert db_claim_dispatch_window(db_session, git_org.id, 10080) is False
+
+
+def test_gate_blocks_sibling_subgroup_sharing_root(db_session):
+    """An open FIX PR under one subgroup must hold the gate closed for a
+    sibling subgroup connected under the same root — they share one
+    git-platform token, so the merge gate has to span the whole root, not
+    stop at each subgroup's own org row (see ``org_effective_root_id``)."""
+    sentry_org = _make_org(db_session)
+    sentry_org.settings = {
+        "triggers": {"triage": "automatic"},
+        "gate_on_open_fix_prs": True,
+    }
+    db_session.commit()
+
+    root = _make_git_org(db_session, sentry_org, name="root")
+    subgroup_a = _make_git_subgroup(db_session, root, name="subgroup-a")
+    subgroup_b = _make_git_subgroup(db_session, root, name="subgroup-b")
+
+    repo_a = _make_repo(db_session, sentry_org, mapped=False)
+    repo_b = _make_repo(db_session, sentry_org, mapped=False)
+    git_repo_a = _map_to_git_org(db_session, repo_a, subgroup_a)
+    _map_to_git_org(db_session, repo_b, subgroup_b)
+    issue_a = _make_issue(db_session, repo_a, idx=0)
+    _make_issue(db_session, repo_b, idx=1)
+
+    # Both subgroups fold into a single (sentry_org, root) pair.
+    assert db_get_eligible_dispatch_targets(db_session, provider="sentry", max_retries=3) == [
+        (sentry_org.id, root.id)
+    ]
+
+    # A PR opened under subgroup_a (via a FIX execution on issue_a) must hold
+    # the gate closed for subgroup_b too — same root, same token.
+    execution = db_create_execution(
+        db_session,
+        provider="sentry",
+        issues=[issue_a],
+        workflow=ExecutionWorkflow.FIX.value,
+        status=ExecutionStatus.FAILED.value,
+    )
+    pr = PullRequest(
+        repository_id=git_repo_a.id,
+        pr_number=1,
+        title="fix",
+        author="jeanclode-bot",
+        state=PRState.OPEN.value,
+        pr_url="https://github.com/acme/git-proj/pull/1",
+        head_branch="fix/1",
+        base_branch="main",
+    )
+    db_session.add(pr)
+    db_session.commit()
+    db_link_execution_pull_requests(db_session, execution.id, [pr.id])
+
+    assert db_get_eligible_dispatch_targets(db_session, provider="sentry", max_retries=3) == []
+
+
+def test_running_fix_batch_blocks_sibling_subgroup_sharing_root(db_session):
+    """The concurrency perimeter is the connected root, not each subgroup:
+    a RUNNING fix execution under one subgroup must drop the whole root's
+    pair, holding back a sibling subgroup sharing the same token."""
+    sentry_org = _make_org(db_session)
+    _enable_automatic(db_session, sentry_org)
+
+    root = _make_git_org(db_session, sentry_org, name="root")
+    subgroup_a = _make_git_subgroup(db_session, root, name="subgroup-a")
+    subgroup_b = _make_git_subgroup(db_session, root, name="subgroup-b")
+
+    repo_a = _make_repo(db_session, sentry_org, mapped=False)
+    repo_b = _make_repo(db_session, sentry_org, mapped=False)
+    _map_to_git_org(db_session, repo_a, subgroup_a)
+    _map_to_git_org(db_session, repo_b, subgroup_b)
+    issue_a = _make_issue(db_session, repo_a, idx=0)
+    _make_issue(db_session, repo_b, idx=1)
+
+    db_create_execution(
+        db_session,
+        provider="sentry",
+        issues=[issue_a],
+        workflow=ExecutionWorkflow.FIX.value,
+        status=ExecutionStatus.RUNNING.value,
+    )
+
+    assert db_get_eligible_dispatch_targets(db_session, provider="sentry", max_retries=3) == []
 
 
 def test_disabled_git_target_blocks_sentry_dispatch(db_session):

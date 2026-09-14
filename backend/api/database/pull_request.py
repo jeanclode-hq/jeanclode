@@ -5,10 +5,12 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import exists, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload
 
+from api.database.organization import org_effective_root_id
 from api.models.execution_links import execution_pull_requests, issue_pull_requests
 from api.models.executions import Execution, ExecutionStatus, ExecutionWorkflow
+from api.models.organizations import Organization
 from api.models.pull_requests import PRState, PullRequest
 from api.models.repositories import Repository
 
@@ -153,24 +155,31 @@ def db_link_issue_pull_requests(
 
 
 def db_git_org_has_open_fix_pr(db: Session, git_org_id: UUID) -> bool:
-    """True while any repo under ``git_org_id`` has an open FIX-linked PR/MR.
+    """True while any repo under ``git_org_id``'s *root* has an open FIX-linked PR/MR.
 
     The merge gate (Part E2), re-checked inside ``_claim_batch`` after the
     eligibility query in case a PR opened in between. Only ``state = 'open'``
     counts — closed or merged is done. Bounded by the small number of
     outstanding bot PRs per git org.
+
+    ``git_org_id`` is expected to already be resolved to the connected
+    group's root org id (as returned by ``db_get_eligible_dispatch_targets``)
+    — matched here via ``org_effective_root_id`` so a PR under any subgroup
+    beneath that root still holds the gate closed.
     """
+    pr_git_org = aliased(Organization)
     return db.query(
         exists(
             select(PullRequest.id)
             .join(Repository, Repository.id == PullRequest.repository_id)
+            .join(pr_git_org, pr_git_org.id == Repository.org_id)
             .join(
                 execution_pull_requests,
                 execution_pull_requests.c.pull_request_id == PullRequest.id,
             )
             .join(Execution, Execution.id == execution_pull_requests.c.execution_id)
             .where(
-                Repository.org_id == git_org_id,
+                org_effective_root_id(pr_git_org) == git_org_id,
                 Execution.workflow == ExecutionWorkflow.FIX.value,
                 PullRequest.state == PRState.OPEN.value,
             )
@@ -181,22 +190,26 @@ def db_git_org_has_open_fix_pr(db: Session, git_org_id: UUID) -> bool:
 def db_get_open_fix_prs_for_git_org(
     db: Session, git_org_id: UUID
 ) -> list[tuple[PullRequest, Repository]]:
-    """Open FIX-linked ``(PullRequest, Repository)`` rows under a git org.
+    """Open FIX-linked ``(PullRequest, Repository)`` rows anywhere under a root git org.
 
     The input to active reconciliation (Part E1): the DB believes these PRs
     are open, so the provider is asked whether that is still true. Closed and
     merged rows are terminal and never re-polled, so they're excluded here.
+
+    ``git_org_id`` is the root org id — see :func:`db_git_org_has_open_fix_pr`.
     """
+    pr_git_org = aliased(Organization)
     return (
         db.query(PullRequest, Repository)
         .join(Repository, Repository.id == PullRequest.repository_id)
+        .join(pr_git_org, pr_git_org.id == Repository.org_id)
         .join(
             execution_pull_requests,
             execution_pull_requests.c.pull_request_id == PullRequest.id,
         )
         .join(Execution, Execution.id == execution_pull_requests.c.execution_id)
         .filter(
-            Repository.org_id == git_org_id,
+            org_effective_root_id(pr_git_org) == git_org_id,
             Execution.workflow == ExecutionWorkflow.FIX.value,
             PullRequest.state == PRState.OPEN.value,
         )

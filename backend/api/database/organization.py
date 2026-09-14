@@ -198,6 +198,17 @@ def db_get_descendant_orgs(
     return _walk_descendants(_children_by_parent(db, workspace_id), [org_id])
 
 
+def org_effective_root_id(entity: type[Organization] | AliasedClass = Organization):
+    """SQL expression for ``entity``'s ultimate root org id.
+
+    ``root_org_id`` is only set on non-root orgs (S1/S4 placeholder rows
+    created by ``db_upsert_org_with_ancestors``); the root itself has it
+    NULL, so falling back to its own id here always yields the top of the
+    chain a single git token/bot identity actually covers.
+    """
+    return func.coalesce(entity.root_org_id, entity.id)
+
+
 def db_get_org_subtree_ids(
     db: Session,
     org_ids: Iterable[UUID],
@@ -586,11 +597,14 @@ def db_claim_dispatch_window(
     """Atomically claim the dispatch window for an Organization.
 
     ``window_minutes`` is passed in rather than read from the row's own
-    settings: Sentry dispatch partitions by *git* org, and the window it
-    honours is the *Sentry* org's ``batch_window`` setting — a different row
-    (ADR-006 / the per-git-org batching design). One git org never receives
-    batches from more than one Sentry org (backend rule), so reusing
-    ``Organization.last_dispatched_at`` on the git-org row stays safe.
+    settings: Sentry dispatch partitions by *root git* org
+    (``org_effective_root_id``), and the window it honours is the *Sentry*
+    org's ``batch_window`` setting — a different row (ADR-006 / the per-git-org
+    batching design). ``org_id`` here is expected to already be that root, so
+    ``Organization.last_dispatched_at`` on it is now shared by every Sentry
+    org whose issues map into any subgroup under that root — a deliberate
+    trade for the merge gate/concurrency perimeter to hold across the whole
+    connected group instead of leaking between its subgroups.
     """
     result = db.execute(
         update(Organization)

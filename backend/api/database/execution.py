@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import false, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload
 
-from api.database.organization import batch_window_minutes_clause
+from api.database.organization import batch_window_minutes_clause, org_effective_root_id
 from api.database.repository import repo_enabled_clause
 from api.models.execution_links import execution_issues, execution_pull_requests
 from api.models.executions import Execution, ExecutionStatus, ExecutionTrigger, ExecutionWorkflow
@@ -426,17 +426,22 @@ def db_get_running_executions(
 # ── Dispatch queries ─────────────────────────────────────────────────
 
 
-def _git_org_running_fix_exists(git_org_id_col):
-    """EXISTS: a ``sentry`` FIX execution is QUEUED/RUNNING for this git org.
+def _git_org_running_fix_exists(root_org_id_col):
+    """EXISTS: a ``sentry`` FIX execution is QUEUED/RUNNING under this *root* git org.
 
     An execution's git org is reached the same way a dispatch target is:
     ``Execution → issue → Sentry Repository → RepositoryMapping → git
     Repository → org_id``. Manual fixes count too (same workflow + provider).
+
+    ``root_org_id_col`` is the connected group's root org id — see
+    :func:`_git_org_open_fix_pr_exists` for why this can't stop at the
+    repo's own (possibly subgroup) org.
     """
     ex_issue = aliased(Issue)
     ex_sentry_repo = aliased(Repository)
     ex_map = aliased(RepositoryMapping)
     ex_git_repo = aliased(Repository)
+    ex_git_org = aliased(Organization)
     return (
         select(literal_column("1"))
         .select_from(Execution)
@@ -445,11 +450,12 @@ def _git_org_running_fix_exists(git_org_id_col):
         .join(ex_sentry_repo, ex_sentry_repo.id == ex_issue.repository_id)
         .join(ex_map, ex_map.repo_id == ex_sentry_repo.id)
         .join(ex_git_repo, ex_git_repo.id == ex_map.mapped_repo_id)
+        .join(ex_git_org, ex_git_org.id == ex_git_repo.org_id)
         .where(
             Execution.provider == "sentry",
             Execution.workflow == ExecutionWorkflow.FIX.value,
             Execution.status.in_([ExecutionStatus.QUEUED.value, ExecutionStatus.RUNNING.value]),
-            ex_git_repo.org_id == git_org_id_col,
+            org_effective_root_id(ex_git_org) == root_org_id_col,
         )
         .exists()
     )
@@ -464,6 +470,11 @@ def db_git_org_has_running_fix_execution(db: Session, git_org_id: UUID) -> bool:
     same repos. Different git orgs are unaffected and dispatch concurrently.
     Checked before the window is claimed so a long fixer doesn't burn the
     org's window while it runs.
+
+    ``git_org_id`` is expected to already be resolved to the connected
+    group's root org id (as returned by ``db_get_eligible_dispatch_targets``)
+    — the perimeter spans every subgroup under one connected token, not just
+    the repo's own immediate org.
     """
     return db.query(_git_org_running_fix_exists(git_org_id)).scalar()
 
@@ -499,24 +510,31 @@ def _failed_fix_exec_count():
     )
 
 
-def _git_org_open_fix_pr_exists(git_org_id_col):
-    """Correlated EXISTS: a repo under this git org still has an open FIX-linked PR.
+def _git_org_open_fix_pr_exists(root_org_id_col):
+    """Correlated EXISTS: a repo anywhere under this *root* git org still has an open FIX-linked PR.
 
     This is the merge gate (Part E2): the sole marker is the definite
     ``execution_pull_requests`` link from a FIX execution — never a branch
     name. "Closed counts as done", so only ``state = 'open'`` blocks.
+
+    ``root_org_id_col`` is the connected group's root org id, not a repo's
+    immediate (possibly subgroup) org — a single git token/bot identity
+    spans the whole connected tree, so the gate has to too, or PRs opened
+    under a sibling subgroup never hold it closed.
     """
+    pr_git_org = aliased(Organization)
     return (
         select(literal_column("1"))
         .select_from(PullRequest)
         .join(Repository, Repository.id == PullRequest.repository_id)
+        .join(pr_git_org, pr_git_org.id == Repository.org_id)
         .join(
             execution_pull_requests,
             execution_pull_requests.c.pull_request_id == PullRequest.id,
         )
         .join(Execution, Execution.id == execution_pull_requests.c.execution_id)
         .where(
-            Repository.org_id == git_org_id_col,
+            org_effective_root_id(pr_git_org) == root_org_id_col,
             Execution.workflow == ExecutionWorkflow.FIX.value,
             PullRequest.state == PRState.OPEN.value,
         )
@@ -529,42 +547,47 @@ def db_get_eligible_dispatch_targets(
     provider: str,
     max_retries: int,
 ) -> list[tuple[UUID, UUID]]:
-    """``(sentry_org_id, git_org_id)`` pairs with a dispatchable batch waiting.
+    """``(sentry_org_id, root_git_org_id)`` pairs with a dispatchable batch waiting.
 
-    Sentry dispatch partitions by the **git org that owns the mapped target
-    repo**: one Sentry org's projects can map into several git orgs, and a
-    container gets exactly one git-platform token, so each git org is its own
-    independent batch — its own window, its own merge gate, dispatched
-    concurrently with the others.
+    Sentry dispatch partitions by the **root of the git org that owns the
+    mapped target repo**: a connected GitLab/GitHub group gets exactly one
+    git-platform token shared by every subgroup underneath it
+    (``org_effective_root_id``), and a container gets exactly one such token,
+    so the root — not the repo's own possibly-subgroup org — is the
+    independent batch: its own window, its own merge gate, dispatched
+    concurrently with other roots.
 
     A pair is returned when, joining
     ``Issue → Repository(sentry) → RepositoryMapping → Repository(git)``:
 
     - it has ≥1 dispatchable issue: mapped + enabled git target, no non-FAILED
       FIX execution, fewer than ``max_retries`` failed FIX executions
-    - the **git** org's ``last_dispatched_at`` is NULL or older than the
+    - the **root git org**'s ``last_dispatched_at`` is NULL or older than the
       **Sentry** org's ``batch_window`` ago
     - the Sentry org's ``triggers.triage`` is ``automatic``
-    - the git org has no fix batch currently running (the git org is the
-      concurrency perimeter — one batch per git org at a time)
-    - when the Sentry org enabled ``gate_on_open_fix_prs``: no repo under that
-      git org has an open FIX-linked PR (Part E2)
+    - the root git org has no fix batch currently running anywhere under it
+      (the root is the concurrency perimeter — one batch per root at a time)
+    - when the Sentry org enabled ``gate_on_open_fix_prs``: no repo anywhere
+      under that root git org has an open FIX-linked PR (Part E2)
     """
     sentry_org = aliased(Organization)
     git_org = aliased(Organization)
+    git_root_org = aliased(Organization)
     sentry_repo = aliased(Repository)
     git_repo = aliased(Repository)
 
     gate_enabled = func.coalesce(sentry_org.settings["gate_on_open_fix_prs"].as_boolean(), false())
+    root_git_org_id = org_effective_root_id(git_org)
 
     rows = (
-        db.query(sentry_org.id, git_org.id)
+        db.query(sentry_org.id, root_git_org_id)
         .select_from(Issue)
         .join(sentry_repo, Issue.repository_id == sentry_repo.id)
         .join(sentry_org, sentry_repo.org_id == sentry_org.id)
         .join(RepositoryMapping, RepositoryMapping.repo_id == sentry_repo.id)
         .join(git_repo, RepositoryMapping.mapped_repo_id == git_repo.id)
         .join(git_org, git_repo.org_id == git_org.id)
+        .join(git_root_org, git_root_org.id == root_git_org_id)
         .filter(
             sentry_org.provider == provider,
             sentry_org.settings["triggers"]["triage"].as_string() == TriageTrigger.AUTOMATIC.value,
@@ -572,16 +595,16 @@ def db_get_eligible_dispatch_targets(
             repo_enabled_clause(git_repo),
             ~_non_failed_fix_exec_exists(),
             _failed_fix_exec_count() < max_retries,
-            (git_org.last_dispatched_at.is_(None))
+            (git_root_org.last_dispatched_at.is_(None))
             | (
-                git_org.last_dispatched_at
+                git_root_org.last_dispatched_at
                 < func.now()
                 - func.make_interval(0, 0, 0, 0, 0, batch_window_minutes_clause(sentry_org), 0)
             ),
-            ~_git_org_running_fix_exists(git_org.id),
-            or_(~gate_enabled, ~_git_org_open_fix_pr_exists(git_org.id)),
+            ~_git_org_running_fix_exists(root_git_org_id),
+            or_(~gate_enabled, ~_git_org_open_fix_pr_exists(root_git_org_id)),
         )
-        .group_by(sentry_org.id, git_org.id)
+        .group_by(sentry_org.id, root_git_org_id)
         .all()
     )
     return [(row[0], row[1]) for row in rows]
@@ -601,15 +624,18 @@ def db_get_dispatchable_issues(
     - Its repository is mapped to a git target (``mapped_repo_id`` is set)
     - That git target is enabled — disabling a repo on the integrations page
       stops Sentry-driven fixes landing in it, not just the git triggers
-    - When ``git_org_id`` is given, that git target belongs to it — the batch
-      is scoped to a single ``(sentry_org, git_org)`` partition so every issue
-      in it shares one git-platform token
+    - When ``git_org_id`` is given, that git target's *root* org matches it
+      (``org_effective_root_id``) — the batch is scoped to a single
+      ``(sentry_org, root_git_org)`` partition, since every issue in it
+      shares one git-platform token regardless of which subgroup under that
+      root its own repo happens to live in
     - It has no execution, OR every execution is in FAILED status
     - Count of 'failed' executions < max_retries
 
     Uses FOR UPDATE SKIP LOCKED for row-level locking.
     """
     mapped_repo = aliased(Repository)
+    mapped_repo_org = aliased(Organization)
 
     filters = [
         Repository.org_id == sentry_org_id,
@@ -619,13 +645,14 @@ def db_get_dispatchable_issues(
         _failed_fix_exec_count() < max_retries,
     ]
     if git_org_id is not None:
-        filters.append(mapped_repo.org_id == git_org_id)
+        filters.append(org_effective_root_id(mapped_repo_org) == git_org_id)
 
     return (
         db.query(Issue)
         .join(Repository, Issue.repository_id == Repository.id)
         .join(RepositoryMapping, RepositoryMapping.repo_id == Repository.id)
         .join(mapped_repo, RepositoryMapping.mapped_repo_id == mapped_repo.id)
+        .join(mapped_repo_org, mapped_repo_org.id == mapped_repo.org_id)
         .options(
             joinedload(Issue.repository)
             .joinedload(Repository.mapping)
