@@ -2,6 +2,8 @@
 
 Jeanclode is a self-hosted autonomous coding agent that runs on your own infrastructure. It listens to events from Sentry, GitHub, and GitLab, then runs purpose-built multi-agent workflows on the Claude Agent SDK to triage and fix issues — opening PRs automatically without human intervention.
 
+![Jeanclode dashboard showing active agent executions](./docs/images/dashboard.png)
+
 ## What it does
 
 - **Sentry fix** — receives Sentry error webhooks, triages issues in parallel, groups related bugs by root cause, and opens fix PRs with code changes; a fix that spans several repos gets a PR in each, on one shared branch
@@ -36,6 +38,16 @@ website/           Marketing site, docs and blog
 
 ## Quick start
 
+### CLI (code review & PR summary)
+
+Requires Python 3.14+ and a working [Claude Code](https://claude.com/claude-code) setup (`claude` on `PATH`, authenticated).
+
+```bash
+pip install jeanclode
+# or
+uv tool install jeanclode
+```
+
 ```bash
 # Review a GitHub PR
 jeanclode https://github.com/org/repo/pull/123
@@ -47,8 +59,25 @@ jeanclode https://gitlab.com/group/project/-/merge_requests/42
 jeanclode summary https://github.com/org/repo/pull/123
 ```
 
-The CLI covers code review and PR summary. Sentry Fix and Issue Resolve
-run through the self-hosted platform (webhook-driven — see `backend/`).
+The CLI covers code review and PR summary standalone, against any repo you can
+already reach. Sentry Fix, Issue Resolve, and the dashboard shown above run
+through the self-hosted platform instead (webhook-driven, its own backend +
+frontend — see `backend/` and `frontend/`).
+
+### Self-hosted platform (Sentry Fix, Issue Resolve, dashboard)
+
+Requires Docker.
+
+```bash
+git clone https://github.com/jeanclode-hq/jeanclode.git
+cd jeanclode
+cp .env.example .env   # fill in the required secrets — see comments in the file
+docker compose --profile all up -d
+```
+
+Open `http://localhost:3000/admin` — the admin page walks you through
+connecting GitHub / GitLab / Sentry and an LLM credential. Once set up, sign
+in at `http://localhost:3000` to see the dashboard.
 
 ## Development
 
