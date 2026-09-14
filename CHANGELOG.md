@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.0...v1.1.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **backend:** scope Sentry dispatch gate and concurrency perimeter to the connected root org ([7d426f6](https://github.com/jeanclode-hq/jeanclode/commit/7d426f6306854f0cf51d1b37caa80737b35c7539))
+
 ## [1.1.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.0.1...v1.1.0) (2026-09-14)
 
 
