@@ -341,14 +341,14 @@ async def test_workflow_posts_without_dropdown_when_file_summarizer_fails(tmp_pa
         tmp_path, pr_description="Does things\n\n" + previous_dropdown, diff=_REAL_DIFF
     )
     ctx, _ = _ctx(tmp_path)
-    prompts: list[str] = []
+    calls: list[tuple[str, Any]] = []
 
     sq = _ScriptedQuery()
     sq.add("technical documentation assistant", "", {"description": "- a"})
     sq.add("expert editor", "", {"description": "- a"})
 
     def query_side_effect(*, prompt: str, options: Any) -> Any:
-        prompts.append(prompt)
+        calls.append((prompt, options))
         if "one-line changelog entry" in prompt:
             raise RuntimeError("file summarizer down")
         return sq(prompt=prompt, options=options)
@@ -364,8 +364,50 @@ async def test_workflow_posts_without_dropdown_when_file_summarizer_fails(tmp_pa
     body = run_mock.call_args.args[0][-1]
     assert "- a" in body
     assert "<details>" not in body
-    summarizer_prompt = next(p for p in prompts if "technical documentation assistant" in p)
-    assert "stale.py" not in summarizer_prompt
+    summarizer = next(o for p, o in calls if "technical documentation assistant" in p)
+    assert "Does things" in summarizer.system_prompt
+    assert "stale.py" not in summarizer.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_file_summarizer_can_read_the_summarizers_prompt_cache(tmp_path: Path) -> None:
+    """Prompt caching matches on an exact request prefix — tools (the output
+    schema), then system prompt — and only once the writing request answered."""
+    _write_pr_context(tmp_path, pr_description="Does things", diff=_REAL_DIFF)
+    ctx, _ = _ctx(tmp_path)
+    events: list[tuple[str, str, Any]] = []
+
+    sq = _ScriptedQuery()
+    sq.add("technical documentation assistant", "", {"description": "- a"})
+    sq.add("one-line changelog entry", "", {"files": [{"path": "uv.lock", "summary": "x"}]})
+    sq.add("expert editor", "", {"description": "- a"})
+
+    def query_side_effect(*, prompt: str, options: Any) -> Any:
+        name = "files" if "one-line changelog entry" in prompt else "summarizer"
+        events.append(("start", name, options))
+
+        async def gen() -> AsyncIterator[Any]:
+            async for message in sq(prompt=prompt, options=options):
+                yield message
+            events.append(("end", name, options))
+
+        return gen()
+
+    with (
+        patch("src.agents.base.query", side_effect=query_side_effect),
+        patch("src.activities.summary.update_description.subprocess.run") as run_mock,
+    ):
+        run_mock.return_value = _completed(0)
+        await PRSummaryWorkflow().run(ctx)
+
+    summarizer = next(o for kind, name, o in events if (kind, name) == ("start", "summarizer"))
+    files = next(o for kind, name, o in events if (kind, name) == ("start", "files"))
+    assert summarizer.system_prompt == files.system_prompt
+    assert "Does things" in files.system_prompt and "uv.lock" in files.system_prompt
+    assert summarizer.output_format == files.output_format
+    assert summarizer.allowed_tools == files.allowed_tools
+    order = [(kind, name) for kind, name, _ in events]
+    assert order.index(("end", "summarizer")) < order.index(("start", "files"))
 
 
 def test_format_summary_emits_activity_event(tmp_path: Path) -> None:
@@ -428,6 +470,7 @@ async def test_summarizer_agent_renders_inputs(tmp_path: Path) -> None:
 
     def fake_query(*, prompt: str, options: Any) -> Any:
         captured["prompt"] = prompt
+        captured["system_prompt"] = options.system_prompt
 
         async def gen() -> AsyncIterator[Any]:
             yield _result_message('{"description":"- Adds X"}', {"description": "- Adds X"})
@@ -440,8 +483,9 @@ async def test_summarizer_agent_renders_inputs(tmp_path: Path) -> None:
             ctx,
         )
 
-    assert "desc here" in captured["prompt"]
-    assert "diff here" in captured["prompt"]
+    assert "desc here" in captured["system_prompt"]
+    assert "diff here" in captured["system_prompt"]
+    assert "diff here" not in captured["prompt"]
     assert result.structured == {"description": "- Adds X"}
 
 

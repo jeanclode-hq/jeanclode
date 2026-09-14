@@ -1,7 +1,7 @@
 """PRSummaryWorkflow — generate a summary and write it into the PR/MR description.
 
 Pipeline:
-    (summarizer → parser) ∥ file summarizer → format_summary → update_pr_description
+    summarizer → (parser ∥ file summarizer) → format_summary → update_pr_description
 
 A separate issue-explorer stage used to fetch every linked GitHub/GitLab
 issue for context and hand back a list of issue URLs to render as a
@@ -10,8 +10,10 @@ change relates to, and the relationship ("closes", "depends on", "the
 Sentry error this fixes") is what a reader wants, not a bare list. The
 summarizer keeps those links in its own prose instead.
 
-The file summarizer only needs the diff, so it runs alongside the prose
-chain; when it fails the description is posted without the dropdown.
+The file summarizer shares the summarizer's system prompt (description +
+diff) and output schema, so its request reads the summarizer's prompt cache
+instead of paying for the diff again; when it fails the description is
+posted without the dropdown.
 """
 
 from __future__ import annotations
@@ -68,30 +70,27 @@ class PRSummaryWorkflow:
                 summary="missing or invalid .context — cannot run summary",
             )
 
-        refined, files = await asyncio.gather(
-            self._describe(ctx, snapshot),
-            self._summarize_files(ctx, snapshot),
-        )
-        if not refined:
+        description = strip_files_dropdown(snapshot.pr_description)
+        draft = await self._summarize(ctx, snapshot, description)
+        if not draft:
             return WorkflowResult(
                 status="error",
                 summary="summarizer produced no draft — cannot continue",
             )
+        # Not in parallel with the summarizer: a request can only read a cache
+        # entry once the request that writes it has been answered.
+        refined, files = await asyncio.gather(
+            self._refine(ctx, draft),
+            self._summarize_files(ctx, snapshot, description),
+        )
 
         payload = format_summary(ParsedSummary(description=refined, files=files), ctx=ctx)
         return await self._finalize(ctx, snapshot, payload)
 
-    async def _describe(self, ctx: RunContext, snap: PRSnapshot) -> str:
-        draft = await self._summarize(ctx, snap)
-        return await self._refine(ctx, draft) if draft else ""
-
-    async def _summarize(self, ctx: RunContext, snap: PRSnapshot) -> str:
+    async def _summarize(self, ctx: RunContext, snap: PRSnapshot, description: str) -> str:
         try:
             result = await SummarizerAgent().invoke(
-                SummarizerInput(
-                    pr_description=strip_files_dropdown(snap.pr_description),
-                    diff=snap.diff,
-                ),
+                SummarizerInput(pr_description=description, diff=snap.diff),
                 ctx,
             )
         except Exception:
@@ -99,13 +98,17 @@ class PRSummaryWorkflow:
             return ""
         return parse_description(result)
 
-    async def _summarize_files(self, ctx: RunContext, snap: PRSnapshot) -> list[FileLine]:
+    async def _summarize_files(
+        self, ctx: RunContext, snap: PRSnapshot, description: str
+    ) -> list[FileLine]:
         files = parse_diff_files(snap.diff)
         if not files:
             return []
         try:
             result = await FileSummarizerAgent().invoke(
-                FileSummarizerInput(files=render_file_list(files), diff=snap.diff),
+                FileSummarizerInput(
+                    pr_description=description, diff=snap.diff, files=render_file_list(files)
+                ),
                 ctx,
             )
         except Exception:

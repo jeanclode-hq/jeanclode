@@ -10,7 +10,7 @@ from typing import Any, cast
 from src.activities.summary.schemas import FileLine, PostResult, PRSnapshot, SummaryPayload
 from src.adaptors.diffn import DiffFile
 from src.agents.schemas import AgentResult
-from src.agents.summary.schemas import FileSummarizerOutput
+from src.agents.summary.schemas import SummaryOutput
 
 logger = logging.getLogger(__name__)
 
@@ -84,10 +84,10 @@ def build_file_lines(files: list[DiffFile], result: AgentResult) -> list[FileLin
     """
     raw = result.structured if result.structured is not None else _extract_json_object(result.text)
     try:
-        output = FileSummarizerOutput.model_validate(raw or {})
+        output = SummaryOutput.model_validate(raw or {})
     except ValueError:
         logger.warning("file summarizer returned an invalid payload")
-        output = FileSummarizerOutput()
+        output = SummaryOutput()
     summaries = {s.path: s.summary for s in output.files if s.summary.strip()}
     if not summaries.keys() & {f.path for f in files}:
         return []
