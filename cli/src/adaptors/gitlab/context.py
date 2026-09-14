@@ -8,7 +8,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from src.adaptors.diffn import format_diff_with_line_numbers
+from src.adaptors.diffn import prepare_diff
 from src.adaptors.discussions import (
     Comment,
     Discussions,
@@ -214,7 +214,7 @@ def fetch_mr_context(repo_dir: Path, url: str, token: str) -> None:
     description = f"# {title}\n\n{body}".strip() if title else body
 
     diff_proc = _run(["glab", "mr", "diff", iid_str, "-R", project], env=env, timeout=120)
-    diff = format_diff_with_line_numbers(diff_proc.stdout) if diff_proc.returncode == 0 else ""
+    diff = prepare_diff(diff_proc.stdout) if diff_proc.returncode == 0 else ""
 
     discussions = _fetch_discussions(project, iid_str, env)
 
