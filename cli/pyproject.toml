@@ -1,6 +1,6 @@
 [project]
 name = "jeanclode"
-version = "1.1.0" # x-release-please-version
+version = "1.1.1" # x-release-please-version
 description = "Multi-plugin CLI — auto-detects what to do from URLs and invokes Claude Code skills"
 authors = [{ name = "Jeanclode Contributors" }]
 readme = "README.md"
