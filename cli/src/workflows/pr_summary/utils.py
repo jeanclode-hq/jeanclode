@@ -92,8 +92,7 @@ def build_file_lines(files: list[DiffFile], result: AgentResult) -> list[FileLin
     if not summaries.keys() & {f.path for f in files}:
         return []
     return [
-        FileLine(path=f.path, old_path=f.old_path, summary=summaries.get(f.path, ""))
-        for f in files
+        FileLine(path=f.path, old_path=f.old_path, summary=summaries.get(f.path, "")) for f in files
     ]
 
 
