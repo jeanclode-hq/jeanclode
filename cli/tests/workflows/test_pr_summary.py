@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,11 @@ _REAL_DIFF = prepare_diff(
 )
 
 # ── helpers ──────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _no_cache_warmup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.workflows.pr_summary.runner._CACHE_WARMUP_S", 0)
 
 
 def _write_pr_context(
@@ -327,6 +333,20 @@ def test_build_file_lines_keeps_diff_order_and_drops_invented_paths() -> None:
     assert [(line.path, line.summary) for line in lines] == [("a.py", ""), ("b.py", "Edits b")]
 
 
+def test_build_file_lines_reads_entries_encoded_in_description() -> None:
+    files = [DiffFile(path="a.py")]
+    result = AgentResult(
+        text="",
+        structured={
+            "description": '{"files": [{"path": "a.py", "summary": "Edits a"}]}',
+            "files": [],
+        },
+    )
+    assert [(line.path, line.summary) for line in build_file_lines(files, result)] == [
+        ("a.py", "Edits a")
+    ]
+
+
 def test_build_file_lines_returns_nothing_when_no_summary_matches() -> None:
     files = [DiffFile(path="a.py")]
     assert build_file_lines(files, AgentResult(text="not json", structured=None)) == []
@@ -370,12 +390,16 @@ async def test_workflow_posts_without_dropdown_when_file_summarizer_fails(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_file_summarizer_can_read_the_summarizers_prompt_cache(tmp_path: Path) -> None:
+async def test_file_summarizer_can_read_the_summarizers_prompt_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Prompt caching matches on an exact request prefix — tools (the output
-    schema), then system prompt — and only once the writing request answered."""
+    schema), then system prompt — and only once the writer's response began."""
+    monkeypatch.setattr("src.workflows.pr_summary.runner._CACHE_WARMUP_S", 0.05)
     _write_pr_context(tmp_path, pr_description="Does things", diff=_REAL_DIFF)
     ctx, _ = _ctx(tmp_path)
     events: list[tuple[str, str, Any]] = []
+    started: dict[str, float] = {}
 
     sq = _ScriptedQuery()
     sq.add("technical documentation assistant", "", {"description": "- a"})
@@ -385,6 +409,7 @@ async def test_file_summarizer_can_read_the_summarizers_prompt_cache(tmp_path: P
     def query_side_effect(*, prompt: str, options: Any) -> Any:
         name = "files" if "one-line changelog entry" in prompt else "summarizer"
         events.append(("start", name, options))
+        started.setdefault(name, time.monotonic())
 
         async def gen() -> AsyncIterator[Any]:
             async for message in sq(prompt=prompt, options=options):
@@ -406,8 +431,7 @@ async def test_file_summarizer_can_read_the_summarizers_prompt_cache(tmp_path: P
     assert "Does things" in files.system_prompt and "uv.lock" in files.system_prompt
     assert summarizer.output_format == files.output_format
     assert summarizer.allowed_tools == files.allowed_tools
-    order = [(kind, name) for kind, name, _ in events]
-    assert order.index(("end", "summarizer")) < order.index(("start", "files"))
+    assert started["files"] - started["summarizer"] >= 0.05
 
 
 def test_format_summary_emits_activity_event(tmp_path: Path) -> None:

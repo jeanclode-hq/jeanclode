@@ -53,7 +53,8 @@ class BaseAgent:
     name: ClassVar[str] = ""
     prompt_file: ClassVar[str] = ""
     # Rendered with the same input and sent as the system prompt. Agents sharing one, with the
-    # same tools and output_schema, reuse each other's prompt cache when run one after another.
+    # same tools and output_schema, reuse each other's prompt cache once the first one's
+    # response has begun.
     system_prompt_file: ClassVar[str] = ""
     allowed_tools: ClassVar[list[str]] = []
     max_turns: ClassVar[int] = 150

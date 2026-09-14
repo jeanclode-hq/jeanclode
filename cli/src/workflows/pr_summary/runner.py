@@ -1,7 +1,8 @@
 """PRSummaryWorkflow — generate a summary and write it into the PR/MR description.
 
 Pipeline:
-    summarizer → (parser ∥ file summarizer) → format_summary → update_pr_description
+    summarizer, then 3s later file summarizer (parser once the draft is in)
+    → format_summary → update_pr_description
 
 A separate issue-explorer stage used to fetch every linked GitHub/GitLab
 issue for context and hand back a list of issue URLs to render as a
@@ -19,6 +20,7 @@ posted without the dropdown.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import ClassVar
 
@@ -55,6 +57,8 @@ from src.workflows.schemas import WorkflowResult
 
 logger = logging.getLogger(__name__)
 
+_CACHE_WARMUP_S = 3
+
 
 @register
 class PRSummaryWorkflow:
@@ -71,18 +75,20 @@ class PRSummaryWorkflow:
             )
 
         description = strip_files_dropdown(snapshot.pr_description)
-        draft = await self._summarize(ctx, snapshot, description)
+        summarizing = asyncio.create_task(self._summarize(ctx, snapshot, description))
+        # The summarizer's prompt cache is only readable once its response has begun.
+        await asyncio.sleep(_CACHE_WARMUP_S)
+        summarizing_files = asyncio.create_task(self._summarize_files(ctx, snapshot, description))
+        draft = await summarizing
         if not draft:
+            summarizing_files.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await summarizing_files
             return WorkflowResult(
                 status="error",
                 summary="summarizer produced no draft — cannot continue",
             )
-        # Not in parallel with the summarizer: a request can only read a cache
-        # entry once the request that writes it has been answered.
-        refined, files = await asyncio.gather(
-            self._refine(ctx, draft),
-            self._summarize_files(ctx, snapshot, description),
-        )
+        refined, files = await asyncio.gather(self._refine(ctx, draft), summarizing_files)
 
         payload = format_summary(ParsedSummary(description=refined, files=files), ctx=ctx)
         return await self._finalize(ctx, snapshot, payload)

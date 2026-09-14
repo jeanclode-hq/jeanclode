@@ -83,17 +83,25 @@ def build_file_lines(files: list[DiffFile], result: AgentResult) -> list[FileLin
     No usable summary at all means no dropdown.
     """
     raw = result.structured if result.structured is not None else _extract_json_object(result.text)
-    try:
-        output = SummaryOutput.model_validate(raw or {})
-    except ValueError:
-        logger.warning("file summarizer returned an invalid payload")
-        output = SummaryOutput()
+    output = _parse_summary_output(raw)
+    if not output.files:
+        # The schema is shared with the summarizer, and models sometimes
+        # JSON-encode the entries inside `description` instead.
+        output = _parse_summary_output(_extract_json_object(output.description))
     summaries = {s.path: s.summary for s in output.files if s.summary.strip()}
     if not summaries.keys() & {f.path for f in files}:
         return []
     return [
         FileLine(path=f.path, old_path=f.old_path, summary=summaries.get(f.path, "")) for f in files
     ]
+
+
+def _parse_summary_output(raw: object) -> SummaryOutput:
+    try:
+        return SummaryOutput.model_validate(raw or {})
+    except ValueError:
+        logger.warning("file summarizer returned an invalid payload")
+        return SummaryOutput()
 
 
 def _normalize_escaped_newlines(text: str) -> str:
