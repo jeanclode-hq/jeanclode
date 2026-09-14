@@ -40,6 +40,15 @@ def test_stops_on_lockfile_only(tmp_path: Path) -> None:
     assert "lockfile" in decision.reason
 
 
+def test_stops_on_omitted_asset_only(tmp_path: Path) -> None:
+    _write_diff(
+        tmp_path,
+        "diff --git a/logo.png b/logo.png\n(content omitted, lockfile, asset or generated file)\n",
+    )
+    decision = filter_and_route(ctx=_ctx(tmp_path))
+    assert decision.action == "stop"
+
+
 def test_reviews_real_diff(tmp_path: Path) -> None:
     _write_diff(tmp_path, "diff --git a/src/main.py b/src/main.py\n+def f(): pass\n")
     decision = filter_and_route(ctx=_ctx(tmp_path))

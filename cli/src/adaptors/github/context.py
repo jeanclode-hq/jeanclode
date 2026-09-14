@@ -8,7 +8,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from src.adaptors.diffn import format_diff_with_line_numbers
+from src.adaptors.diffn import prepare_diff
 from src.adaptors.discussions import (
     Comment,
     Discussions,
@@ -278,7 +278,7 @@ def fetch_pr_context(repo_dir: Path, url: str, token: str) -> None:
     description = f"# {title}\n\n{body}".strip() if title else body
 
     diff_proc = _run(["gh", "pr", "diff", pr_str, "-R", repo_full], env=env, timeout=120)
-    diff = format_diff_with_line_numbers(diff_proc.stdout) if diff_proc.returncode == 0 else ""
+    diff = prepare_diff(diff_proc.stdout) if diff_proc.returncode == 0 else ""
 
     discussions = _fetch_discussions(owner, repo, pr, env)
     pr_author = _fetch_pr_author(repo_full, pr, env)

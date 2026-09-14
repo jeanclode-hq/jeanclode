@@ -7,8 +7,10 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from src.activities.summary.schemas import PostResult, PRSnapshot, SummaryPayload
+from src.activities.summary.schemas import FileLine, PostResult, PRSnapshot, SummaryPayload
+from src.adaptors.diffn import DiffFile
 from src.agents.schemas import AgentResult
+from src.agents.summary.schemas import SummaryOutput
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,45 @@ def parse_description(result: AgentResult) -> str:
     raw = result.structured if result.structured is not None else _extract_json_object(result.text)
     text = (result.text or "").strip()
     return _normalize_escaped_newlines(_unwrap_description(raw, fallback=text))
+
+
+def render_file_list(files: list[DiffFile]) -> str:
+    """The ``<files>`` block the file summarizer reads."""
+    rows = []
+    for f in files:
+        name = f"{f.old_path} -> {f.path}" if f.old_path else f.path
+        noise = ", noise" if f.noise else ""
+        rows.append(f"- {name} ({f.status}, +{f.additions} -{f.deletions}{noise})")
+    return "\n".join(rows)
+
+
+def build_file_lines(files: list[DiffFile], result: AgentResult) -> list[FileLine]:
+    """Pair each diff file with its summary, in diff order.
+
+    The file list comes from the diff, never from the model: a path the
+    agent invents is dropped, and a file it skipped keeps an empty summary.
+    No usable summary at all means no dropdown.
+    """
+    raw = result.structured if result.structured is not None else _extract_json_object(result.text)
+    output = _parse_summary_output(raw)
+    if not output.files:
+        # The schema is shared with the summarizer, and models sometimes
+        # JSON-encode the entries inside `description` instead.
+        output = _parse_summary_output(_extract_json_object(output.description))
+    summaries = {s.path: s.summary for s in output.files if s.summary.strip()}
+    if not summaries.keys() & {f.path for f in files}:
+        return []
+    return [
+        FileLine(path=f.path, old_path=f.old_path, summary=summaries.get(f.path, "")) for f in files
+    ]
+
+
+def _parse_summary_output(raw: object) -> SummaryOutput:
+    try:
+        return SummaryOutput.model_validate(raw or {})
+    except ValueError:
+        logger.warning("file summarizer returned an invalid payload")
+        return SummaryOutput()
 
 
 def _normalize_escaped_newlines(text: str) -> str:

@@ -52,6 +52,10 @@ class BaseAgent:
 
     name: ClassVar[str] = ""
     prompt_file: ClassVar[str] = ""
+    # Rendered with the same input and sent as the system prompt. Agents sharing one, with the
+    # same tools and output_schema, reuse each other's prompt cache once the first one's
+    # response has begun.
+    system_prompt_file: ClassVar[str] = ""
     allowed_tools: ClassVar[list[str]] = []
     max_turns: ClassVar[int] = 150
     output_schema: ClassVar[type[BaseModel] | None] = None
@@ -88,14 +92,15 @@ class BaseAgent:
             return Path.cwd() / "prompts"
         return Path(module_file).resolve().parent / "prompts"
 
-    def _render(self, agent_input: BaseModel) -> str:
-        if not self.prompt_file:
-            return ""
-        path = Path(self.prompt_file)
+    def _render_file(self, prompt_file: str, agent_input: BaseModel) -> str:
+        path = Path(prompt_file)
         if not path.is_absolute():
-            path = self._prompts_dir() / self.prompt_file
+            path = self._prompts_dir() / prompt_file
         text = strip_frontmatter(path.read_text())
         return Template(text).render(**agent_input.model_dump())
+
+    def _render(self, agent_input: BaseModel) -> str:
+        return self._render_file(self.prompt_file, agent_input) if self.prompt_file else ""
 
     async def invoke(
         self,
@@ -114,6 +119,8 @@ class BaseAgent:
         if self.use_continuity:
             prompt = f"{prompt}\n\n{continuity_protocol_block()}"
         options = self._build_options(ctx, extra_hooks=extra_hooks)
+        if self.system_prompt_file:
+            options.system_prompt = self._render_file(self.system_prompt_file, agent_input)
 
         agent_name = self.name or self.__class__.__name__
         ctx.emit(AgentStart(name=agent_name))

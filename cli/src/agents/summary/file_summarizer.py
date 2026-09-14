@@ -8,14 +8,15 @@ from src.agents.summary.base import SummaryAgent
 from src.agents.summary.schemas import SummaryOutput
 
 
-class SummarizerInput(BaseModel):
+class FileSummarizerInput(BaseModel):
     pr_description: str
     diff: str
+    files: str
 
 
-class SummarizerAgent(SummaryAgent):
-    name: ClassVar[str] = "Summarizer"
-    prompt_file: ClassVar[str] = "summarizer.md"
+class FileSummarizerAgent(SummaryAgent):
+    name: ClassVar[str] = "File Summarizer"
+    prompt_file: ClassVar[str] = "file_summarizer.md"
     system_prompt_file: ClassVar[str] = "context.md"
     allowed_tools: ClassVar[list[str]] = []
     max_turns: ClassVar[int] = 150

@@ -1,28 +1,41 @@
 """PRSummaryWorkflow — generate a summary and write it into the PR/MR description.
 
-Sequential pipeline:
-    summarizer → styler → format_summary → update_pr_description
+Pipeline:
+    summarizer, then 3s later file summarizer (parser once the draft is in)
+    → format_summary → update_pr_description
 
-Two agents, not three. A separate issue-explorer stage used to fetch every
-linked GitHub/GitLab issue for context and hand back a list of issue URLs
-to render as a section — but the description it summarizes already states
-what this change relates to, and the relationship ("closes", "depends on",
-"the Sentry error this fixes") is what a reader wants, not a bare list.
-The summarizer keeps those links in its own prose instead.
+A separate issue-explorer stage used to fetch every linked GitHub/GitLab
+issue for context and hand back a list of issue URLs to render as a
+section — but the description it summarizes already states what this
+change relates to, and the relationship ("closes", "depends on", "the
+Sentry error this fixes") is what a reader wants, not a bare list. The
+summarizer keeps those links in its own prose instead.
+
+The file summarizer shares the summarizer's system prompt (description +
+diff) and output schema, so its request reads the summarizer's prompt cache
+instead of paying for the diff again; when it fails the description is
+posted without the dropdown.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from typing import ClassVar
 
 from src.activities.summary import (
+    FileLine,
     ParsedSummary,
     PRSnapshot,
     format_summary,
+    strip_files_dropdown,
     update_pr_description,
 )
+from src.adaptors.diffn import parse_diff_files
 from src.agents.summary import (
+    FileSummarizerAgent,
+    FileSummarizerInput,
     ParserAgent,
     ParserInput,
     SummarizerAgent,
@@ -32,15 +45,19 @@ from src.runtime.context import RunContext
 from src.runtime.events import Panel
 from src.workflows.base import register
 from src.workflows.pr_summary.utils import (
+    build_file_lines,
     load_pr_snapshot,
     panel_style,
     panel_title,
     parse_description,
+    render_file_list,
     result_panel,
 )
 from src.workflows.schemas import WorkflowResult
 
 logger = logging.getLogger(__name__)
+
+_CACHE_WARMUP_S = 3
 
 
 @register
@@ -57,30 +74,53 @@ class PRSummaryWorkflow:
                 summary="missing or invalid .context — cannot run summary",
             )
 
-        draft = await self._summarize(ctx, snapshot)
+        description = strip_files_dropdown(snapshot.pr_description)
+        summarizing = asyncio.create_task(self._summarize(ctx, snapshot, description))
+        # The summarizer's prompt cache is only readable once its response has begun.
+        await asyncio.sleep(_CACHE_WARMUP_S)
+        summarizing_files = asyncio.create_task(self._summarize_files(ctx, snapshot, description))
+        draft = await summarizing
         if not draft:
+            summarizing_files.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await summarizing_files
             return WorkflowResult(
                 status="error",
                 summary="summarizer produced no draft — cannot continue",
             )
-        refined = await self._refine(ctx, draft)
+        refined, files = await asyncio.gather(self._refine(ctx, draft), summarizing_files)
 
-        payload = format_summary(ParsedSummary(description=refined), ctx=ctx)
+        payload = format_summary(ParsedSummary(description=refined, files=files), ctx=ctx)
         return await self._finalize(ctx, snapshot, payload)
 
-    async def _summarize(self, ctx: RunContext, snap: PRSnapshot) -> str:
+    async def _summarize(self, ctx: RunContext, snap: PRSnapshot, description: str) -> str:
         try:
             result = await SummarizerAgent().invoke(
-                SummarizerInput(
-                    pr_description=snap.pr_description,
-                    diff=snap.diff,
-                ),
+                SummarizerInput(pr_description=description, diff=snap.diff),
                 ctx,
             )
         except Exception:
             logger.warning("summarizer failed", exc_info=True)
             return ""
         return parse_description(result)
+
+    async def _summarize_files(
+        self, ctx: RunContext, snap: PRSnapshot, description: str
+    ) -> list[FileLine]:
+        files = parse_diff_files(snap.diff)
+        if not files:
+            return []
+        try:
+            result = await FileSummarizerAgent().invoke(
+                FileSummarizerInput(
+                    pr_description=description, diff=snap.diff, files=render_file_list(files)
+                ),
+                ctx,
+            )
+        except Exception:
+            logger.warning("file summarizer failed; posting without the dropdown", exc_info=True)
+            return []
+        return build_file_lines(files, result)
 
     async def _refine(self, ctx: RunContext, draft: str) -> str:
         try:

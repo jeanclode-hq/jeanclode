@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -13,12 +14,17 @@ import pytest
 from claude_agent_sdk import ResultMessage
 
 from src.activities.summary import (
+    FILES_MARKER,
+    FileLine,
     ParsedSummary,
     PRSnapshot,
     SummaryPayload,
     format_summary,
+    strip_files_dropdown,
     update_pr_description,
 )
+from src.adaptors.diffn import DiffFile, prepare_diff
+from src.agents.schemas import AgentResult
 from src.agents.summary import (
     ParserAgent,
     ParserInput,
@@ -30,11 +36,23 @@ from src.runtime.context import RunContext
 from src.runtime.events import ActivityStart, AgentStart, Event, Panel
 from src.workflows.pr_summary.runner import PRSummaryWorkflow
 from src.workflows.pr_summary.utils import (
+    build_file_lines,
     load_pr_snapshot,
     parse_description,
+    render_file_list,
+)
+
+_REAL_DIFF = prepare_diff(
+    "diff --git a/src/app.py b/src/app.py\n@@ -1,1 +1,2 @@\n-old\n+new\n+more\n"
+    "diff --git a/uv.lock b/uv.lock\n@@ -1,1 +1,1 @@\n-pkg==1\n+pkg==2\n"
 )
 
 # ── helpers ──────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _no_cache_warmup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.workflows.pr_summary.runner._CACHE_WARMUP_S", 0)
 
 
 def _write_pr_context(
@@ -229,6 +247,193 @@ def test_format_summary_keeps_links_the_summary_wrote(tmp_path: Path) -> None:
     assert "#### Links" not in body
 
 
+def test_format_summary_renders_files_dropdown(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(
+        ParsedSummary(
+            description="- Adds X",
+            files=[
+                FileLine(path="src/a.py", summary="Adds\n  X  to a"),
+                FileLine(path="b.py", old_path="old_b.py", summary=""),
+            ],
+        ),
+        ctx=ctx,
+    ).body
+    assert body.startswith("#### Description\n\n- Adds X\n\n" + FILES_MARKER)
+    assert (
+        "<details><summary>Changes per file (2)</summary>\n\n"
+        "| File | Content |\n|---|---|\n"
+        "| `src/a.py` | Adds X to a |\n"
+        "| `old_b.py` → `b.py` |  |\n\n</details>"
+    ) in body
+
+
+def test_format_summary_escapes_pipes_in_table_cells(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(
+        ParsedSummary(description="- a", files=[FileLine(path="a|b.py", summary="Adds x | y")]),
+        ctx=ctx,
+    ).body
+    assert "| `a\\|b.py` | Adds x \\| y |" in body
+
+
+def test_format_summary_caps_file_line_length(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(
+        ParsedSummary(description="- a", files=[FileLine(path="a.py", summary="word " * 100)]),
+        ctx=ctx,
+    ).body
+    row = next(row for row in body.splitlines() if row.startswith("| `a.py`"))
+    assert len(row) < 200
+    assert row.endswith("… |")
+
+
+def test_format_summary_omits_dropdown_without_files(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(ParsedSummary(description="- a"), ctx=ctx).body
+    assert "<details>" not in body
+
+
+def test_strip_files_dropdown_removes_only_the_marked_block(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    previous = format_summary(
+        ParsedSummary(description="- Fixes https://x/1", files=[FileLine(path="a.py")]),
+        ctx=ctx,
+    ).body
+    user_block = "<details><summary>Logs</summary>\n\nkeep me\n</details>\n"
+    stripped = strip_files_dropdown(previous + user_block)
+    assert "https://x/1" in stripped
+    assert FILES_MARKER not in stripped
+    assert "a.py" not in stripped
+    assert "keep me" in stripped
+
+
+def test_render_file_list_marks_noise_and_renames() -> None:
+    rendered = render_file_list(
+        [
+            DiffFile(path="b.py", old_path="a.py", status="renamed"),
+            DiffFile(path="uv.lock", additions=4, deletions=2, noise=True),
+        ]
+    )
+    assert rendered == "- a.py -> b.py (renamed, +0 -0)\n- uv.lock (modified, +4 -2, noise)"
+
+
+def test_build_file_lines_keeps_diff_order_and_drops_invented_paths() -> None:
+    files = [DiffFile(path="a.py", additions=1), DiffFile(path="b.py")]
+    result = AgentResult(
+        text="",
+        structured={
+            "files": [
+                {"path": "b.py", "summary": "Edits b"},
+                {"path": "ghost.py", "summary": "Not in the diff"},
+            ]
+        },
+    )
+    lines = build_file_lines(files, result)
+    assert [(line.path, line.summary) for line in lines] == [("a.py", ""), ("b.py", "Edits b")]
+
+
+def test_build_file_lines_reads_entries_encoded_in_description() -> None:
+    files = [DiffFile(path="a.py")]
+    result = AgentResult(
+        text="",
+        structured={
+            "description": '{"files": [{"path": "a.py", "summary": "Edits a"}]}',
+            "files": [],
+        },
+    )
+    assert [(line.path, line.summary) for line in build_file_lines(files, result)] == [
+        ("a.py", "Edits a")
+    ]
+
+
+def test_build_file_lines_returns_nothing_when_no_summary_matches() -> None:
+    files = [DiffFile(path="a.py")]
+    assert build_file_lines(files, AgentResult(text="not json", structured=None)) == []
+    junk = AgentResult(text="", structured={"files": [{"path": "ghost.py", "summary": "x"}]})
+    assert build_file_lines(files, junk) == []
+
+
+@pytest.mark.asyncio
+async def test_workflow_posts_without_dropdown_when_file_summarizer_fails(tmp_path: Path) -> None:
+    previous_dropdown = f"{FILES_MARKER}\n<details><summary>Changes per file (1)</summary>\n\n- `stale.py`\n\n</details>\n"
+    _write_pr_context(
+        tmp_path, pr_description="Does things\n\n" + previous_dropdown, diff=_REAL_DIFF
+    )
+    ctx, _ = _ctx(tmp_path)
+    calls: list[tuple[str, Any]] = []
+
+    sq = _ScriptedQuery()
+    sq.add("technical documentation assistant", "", {"description": "- a"})
+    sq.add("expert editor", "", {"description": "- a"})
+
+    def query_side_effect(*, prompt: str, options: Any) -> Any:
+        calls.append((prompt, options))
+        if "one-line changelog entry" in prompt:
+            raise RuntimeError("file summarizer down")
+        return sq(prompt=prompt, options=options)
+
+    with (
+        patch("src.agents.base.query", side_effect=query_side_effect),
+        patch("src.activities.summary.update_description.subprocess.run") as run_mock,
+    ):
+        run_mock.return_value = _completed(0)
+        result = await PRSummaryWorkflow().run(ctx)
+
+    assert result.status == "success"
+    body = run_mock.call_args.args[0][-1]
+    assert "- a" in body
+    assert "<details>" not in body
+    summarizer = next(o for p, o in calls if "technical documentation assistant" in p)
+    assert "Does things" in summarizer.system_prompt
+    assert "stale.py" not in summarizer.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_file_summarizer_can_read_the_summarizers_prompt_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prompt caching matches on an exact request prefix — tools (the output
+    schema), then system prompt — and only once the writer's response began."""
+    monkeypatch.setattr("src.workflows.pr_summary.runner._CACHE_WARMUP_S", 0.05)
+    _write_pr_context(tmp_path, pr_description="Does things", diff=_REAL_DIFF)
+    ctx, _ = _ctx(tmp_path)
+    events: list[tuple[str, str, Any]] = []
+    started: dict[str, float] = {}
+
+    sq = _ScriptedQuery()
+    sq.add("technical documentation assistant", "", {"description": "- a"})
+    sq.add("one-line changelog entry", "", {"files": [{"path": "uv.lock", "summary": "x"}]})
+    sq.add("expert editor", "", {"description": "- a"})
+
+    def query_side_effect(*, prompt: str, options: Any) -> Any:
+        name = "files" if "one-line changelog entry" in prompt else "summarizer"
+        events.append(("start", name, options))
+        started.setdefault(name, time.monotonic())
+
+        async def gen() -> AsyncIterator[Any]:
+            async for message in sq(prompt=prompt, options=options):
+                yield message
+            events.append(("end", name, options))
+
+        return gen()
+
+    with (
+        patch("src.agents.base.query", side_effect=query_side_effect),
+        patch("src.activities.summary.update_description.subprocess.run") as run_mock,
+    ):
+        run_mock.return_value = _completed(0)
+        await PRSummaryWorkflow().run(ctx)
+
+    summarizer = next(o for kind, name, o in events if (kind, name) == ("start", "summarizer"))
+    files = next(o for kind, name, o in events if (kind, name) == ("start", "files"))
+    assert summarizer.system_prompt == files.system_prompt
+    assert "Does things" in files.system_prompt and "uv.lock" in files.system_prompt
+    assert summarizer.output_format == files.output_format
+    assert summarizer.allowed_tools == files.allowed_tools
+    assert started["files"] - started["summarizer"] >= 0.05
+
+
 def test_format_summary_emits_activity_event(tmp_path: Path) -> None:
     ctx, received = _ctx(tmp_path)
     format_summary(ParsedSummary(description="- a"), ctx=ctx)
@@ -289,6 +494,7 @@ async def test_summarizer_agent_renders_inputs(tmp_path: Path) -> None:
 
     def fake_query(*, prompt: str, options: Any) -> Any:
         captured["prompt"] = prompt
+        captured["system_prompt"] = options.system_prompt
 
         async def gen() -> AsyncIterator[Any]:
             yield _result_message('{"description":"- Adds X"}', {"description": "- Adds X"})
@@ -301,8 +507,9 @@ async def test_summarizer_agent_renders_inputs(tmp_path: Path) -> None:
             ctx,
         )
 
-    assert "desc here" in captured["prompt"]
-    assert "diff here" in captured["prompt"]
+    assert "desc here" in captured["system_prompt"]
+    assert "diff here" in captured["system_prompt"]
+    assert "diff here" not in captured["prompt"]
     assert result.structured == {"description": "- Adds X"}
 
 
@@ -331,10 +538,17 @@ async def test_parser_agent_renders_draft(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_workflow_runs_full_pipeline_and_posts(tmp_path: Path) -> None:
-    _write_pr_context(tmp_path, pr_description="Fixes #5\n\nDoes things")
+    _write_pr_context(tmp_path, pr_description="Fixes #5\n\nDoes things", diff=_REAL_DIFF)
     ctx, received = _ctx(tmp_path)
 
     sq = _ScriptedQuery()
+    files = {
+        "files": [
+            {"path": "src/app.py", "summary": "Replaces old with new"},
+            {"path": "uv.lock", "summary": "Updates lockfile"},
+        ]
+    }
+    sq.add("one-line changelog entry", "", files)
     sq.add(
         "technical documentation assistant",
         '{"description":"- Adds A, fixing https://github.com/o/r/issues/5\\n- Adds B"}',
@@ -363,9 +577,11 @@ async def test_workflow_runs_full_pipeline_and_posts(tmp_path: Path) -> None:
     assert "https://github.com/o/r/issues/5" in body
     assert "- Adds A and B" in body
 
-    # two agents, no explorer stage
+    assert "| `src/app.py` | Replaces old with new |" in body
+    assert "| `uv.lock` | Updates lockfile |" in body
+
     agent_names = [e.name for e in received if isinstance(e, AgentStart)]
-    assert agent_names == ["Summarizer", "Parser"]
+    assert sorted(agent_names) == ["File Summarizer", "Parser", "Summarizer"]
     activity_names = [e.name for e in received if isinstance(e, ActivityStart)]
     assert "Formatting summary" in activity_names
     assert "Updating PR description" in activity_names
