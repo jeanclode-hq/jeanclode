@@ -32,7 +32,7 @@ For each file in `<files>`, write one short line saying what changed in that fil
 <rules>
 - Exactly one entry per file listed, using the path exactly as written in `<files>`
 - One sentence, no line breaks, ideally under 12 words
-- Start with a verb in present tense: "Adds…", "Renames…", "Removes…"
+- Start with a third-person present-tense verb: "Adds…", "Renames…", "Removes…" — never the bare form ("Add…", "Update…")
 - Say what changed in *this* file, not the purpose of the whole PR
 - Be concrete: name the function, field, route or setting that changed
 - Files marked `noise` are lockfiles, assets or generated code whose content is omitted

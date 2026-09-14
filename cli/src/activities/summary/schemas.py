@@ -30,8 +30,6 @@ class FileLine(BaseModel):
 
     path: str
     old_path: str = ""
-    additions: int = 0
-    deletions: int = 0
     summary: str = ""
 
 

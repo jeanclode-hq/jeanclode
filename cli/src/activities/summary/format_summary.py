@@ -25,11 +25,14 @@ def _one_line(text: str) -> str:
     return line
 
 
+def _cell(text: str) -> str:
+    # Both platforms split table cells on "|", even inside code spans.
+    return text.replace("|", "\\|")
+
+
 def _render_file(file: FileLine) -> str:
     name = f"`{file.old_path}` → `{file.path}`" if file.old_path else f"`{file.path}`"
-    row = f"- {name} (+{file.additions} -{file.deletions})"
-    summary = _one_line(file.summary)
-    return f"{row}: {summary}" if summary else row
+    return f"| {_cell(name)} | {_cell(_one_line(file.summary))} |"
 
 
 def _render_files(files: list[FileLine]) -> str:
@@ -37,7 +40,7 @@ def _render_files(files: list[FileLine]) -> str:
     # GitHub and GitLab only render markdown inside <details> with blank lines around it.
     return (
         f"{FILES_MARKER}\n<details><summary>Changes per file ({len(files)})</summary>\n\n"
-        f"{rows}\n\n</details>\n"
+        f"| File | Content |\n|---|---|\n{rows}\n\n</details>\n"
     )
 
 

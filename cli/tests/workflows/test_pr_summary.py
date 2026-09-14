@@ -247,16 +247,28 @@ def test_format_summary_renders_files_dropdown(tmp_path: Path) -> None:
         ParsedSummary(
             description="- Adds X",
             files=[
-                FileLine(path="src/a.py", additions=3, deletions=1, summary="Adds\n  X  to a"),
+                FileLine(path="src/a.py", summary="Adds\n  X  to a"),
                 FileLine(path="b.py", old_path="old_b.py", summary=""),
             ],
         ),
         ctx=ctx,
     ).body
     assert body.startswith("#### Description\n\n- Adds X\n\n" + FILES_MARKER)
-    assert "<details><summary>Changes per file (2)</summary>\n\n" in body
-    assert "- `src/a.py` (+3 -1): Adds X to a\n" in body
-    assert "- `old_b.py` → `b.py` (+0 -0)\n\n</details>" in body
+    assert (
+        "<details><summary>Changes per file (2)</summary>\n\n"
+        "| File | Content |\n|---|---|\n"
+        "| `src/a.py` | Adds X to a |\n"
+        "| `old_b.py` → `b.py` |  |\n\n</details>"
+    ) in body
+
+
+def test_format_summary_escapes_pipes_in_table_cells(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(
+        ParsedSummary(description="- a", files=[FileLine(path="a|b.py", summary="Adds x | y")]),
+        ctx=ctx,
+    ).body
+    assert "| `a\\|b.py` | Adds x \\| y |" in body
 
 
 def test_format_summary_caps_file_line_length(tmp_path: Path) -> None:
@@ -265,9 +277,9 @@ def test_format_summary_caps_file_line_length(tmp_path: Path) -> None:
         ParsedSummary(description="- a", files=[FileLine(path="a.py", summary="word " * 100)]),
         ctx=ctx,
     ).body
-    line = next(row for row in body.splitlines() if row.startswith("- `a.py`"))
-    assert len(line) < 200
-    assert line.endswith("…")
+    row = next(row for row in body.splitlines() if row.startswith("| `a.py`"))
+    assert len(row) < 200
+    assert row.endswith("… |")
 
 
 def test_format_summary_omits_dropdown_without_files(tmp_path: Path) -> None:
@@ -497,8 +509,8 @@ async def test_workflow_runs_full_pipeline_and_posts(tmp_path: Path) -> None:
     assert "https://github.com/o/r/issues/5" in body
     assert "- Adds A and B" in body
 
-    assert "- `src/app.py` (+2 -1): Replaces old with new" in body
-    assert "- `uv.lock` (+1 -1): Updates lockfile" in body
+    assert "| `src/app.py` | Replaces old with new |" in body
+    assert "| `uv.lock` | Updates lockfile |" in body
 
     agent_names = [e.name for e in received if isinstance(e, AgentStart)]
     assert sorted(agent_names) == ["File Summarizer", "Parser", "Summarizer"]
