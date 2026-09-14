@@ -13,3 +13,16 @@ class ParserOutput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     description: str = ""
+
+
+class FileSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    path: str
+    summary: str = ""
+
+
+class FileSummarizerOutput(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    files: list[FileSummary] = []

@@ -13,12 +13,17 @@ import pytest
 from claude_agent_sdk import ResultMessage
 
 from src.activities.summary import (
+    FILES_MARKER,
+    FileLine,
     ParsedSummary,
     PRSnapshot,
     SummaryPayload,
     format_summary,
+    strip_files_dropdown,
     update_pr_description,
 )
+from src.adaptors.diffn import DiffFile, prepare_diff
+from src.agents.schemas import AgentResult
 from src.agents.summary import (
     ParserAgent,
     ParserInput,
@@ -30,8 +35,15 @@ from src.runtime.context import RunContext
 from src.runtime.events import ActivityStart, AgentStart, Event, Panel
 from src.workflows.pr_summary.runner import PRSummaryWorkflow
 from src.workflows.pr_summary.utils import (
+    build_file_lines,
     load_pr_snapshot,
     parse_description,
+    render_file_list,
+)
+
+_REAL_DIFF = prepare_diff(
+    "diff --git a/src/app.py b/src/app.py\n@@ -1,1 +1,2 @@\n-old\n+new\n+more\n"
+    "diff --git a/uv.lock b/uv.lock\n@@ -1,1 +1,1 @@\n-pkg==1\n+pkg==2\n"
 )
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -229,6 +241,121 @@ def test_format_summary_keeps_links_the_summary_wrote(tmp_path: Path) -> None:
     assert "#### Links" not in body
 
 
+def test_format_summary_renders_files_dropdown(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(
+        ParsedSummary(
+            description="- Adds X",
+            files=[
+                FileLine(path="src/a.py", additions=3, deletions=1, summary="Adds\n  X  to a"),
+                FileLine(path="b.py", old_path="old_b.py", summary=""),
+            ],
+        ),
+        ctx=ctx,
+    ).body
+    assert body.startswith("#### Description\n\n- Adds X\n\n" + FILES_MARKER)
+    assert "<details><summary>Changes per file (2)</summary>\n\n" in body
+    assert "- `src/a.py` (+3 -1): Adds X to a\n" in body
+    assert "- `old_b.py` → `b.py` (+0 -0)\n\n</details>" in body
+
+
+def test_format_summary_caps_file_line_length(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(
+        ParsedSummary(description="- a", files=[FileLine(path="a.py", summary="word " * 100)]),
+        ctx=ctx,
+    ).body
+    line = next(row for row in body.splitlines() if row.startswith("- `a.py`"))
+    assert len(line) < 200
+    assert line.endswith("…")
+
+
+def test_format_summary_omits_dropdown_without_files(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    body = format_summary(ParsedSummary(description="- a"), ctx=ctx).body
+    assert "<details>" not in body
+
+
+def test_strip_files_dropdown_removes_only_the_marked_block(tmp_path: Path) -> None:
+    ctx, _ = _ctx(tmp_path)
+    previous = format_summary(
+        ParsedSummary(description="- Fixes https://x/1", files=[FileLine(path="a.py")]),
+        ctx=ctx,
+    ).body
+    user_block = "<details><summary>Logs</summary>\n\nkeep me\n</details>\n"
+    stripped = strip_files_dropdown(previous + user_block)
+    assert "https://x/1" in stripped
+    assert FILES_MARKER not in stripped
+    assert "a.py" not in stripped
+    assert "keep me" in stripped
+
+
+def test_render_file_list_marks_noise_and_renames() -> None:
+    rendered = render_file_list(
+        [
+            DiffFile(path="b.py", old_path="a.py", status="renamed"),
+            DiffFile(path="uv.lock", additions=4, deletions=2, noise=True),
+        ]
+    )
+    assert rendered == "- a.py -> b.py (renamed, +0 -0)\n- uv.lock (modified, +4 -2, noise)"
+
+
+def test_build_file_lines_keeps_diff_order_and_drops_invented_paths() -> None:
+    files = [DiffFile(path="a.py", additions=1), DiffFile(path="b.py")]
+    result = AgentResult(
+        text="",
+        structured={
+            "files": [
+                {"path": "b.py", "summary": "Edits b"},
+                {"path": "ghost.py", "summary": "Not in the diff"},
+            ]
+        },
+    )
+    lines = build_file_lines(files, result)
+    assert [(line.path, line.summary) for line in lines] == [("a.py", ""), ("b.py", "Edits b")]
+
+
+def test_build_file_lines_returns_nothing_when_no_summary_matches() -> None:
+    files = [DiffFile(path="a.py")]
+    assert build_file_lines(files, AgentResult(text="not json", structured=None)) == []
+    junk = AgentResult(text="", structured={"files": [{"path": "ghost.py", "summary": "x"}]})
+    assert build_file_lines(files, junk) == []
+
+
+@pytest.mark.asyncio
+async def test_workflow_posts_without_dropdown_when_file_summarizer_fails(tmp_path: Path) -> None:
+    previous_dropdown = f"{FILES_MARKER}\n<details><summary>Changes per file (1)</summary>\n\n- `stale.py`\n\n</details>\n"
+    _write_pr_context(
+        tmp_path, pr_description="Does things\n\n" + previous_dropdown, diff=_REAL_DIFF
+    )
+    ctx, _ = _ctx(tmp_path)
+    prompts: list[str] = []
+
+    sq = _ScriptedQuery()
+    sq.add("technical documentation assistant", "", {"description": "- a"})
+    sq.add("expert editor", "", {"description": "- a"})
+
+    def query_side_effect(*, prompt: str, options: Any) -> Any:
+        prompts.append(prompt)
+        if "one-line changelog entry" in prompt:
+            raise RuntimeError("file summarizer down")
+        return sq(prompt=prompt, options=options)
+
+    with (
+        patch("src.agents.base.query", side_effect=query_side_effect),
+        patch("src.activities.summary.update_description.subprocess.run") as run_mock,
+    ):
+        run_mock.return_value = _completed(0)
+        result = await PRSummaryWorkflow().run(ctx)
+
+    assert result.status == "success"
+    body = run_mock.call_args.args[0][-1]
+    assert "- a" in body
+    assert "<details>" not in body
+    summarizer_prompt = next(p for p in prompts if "technical documentation assistant" in p)
+    assert "stale.py" not in summarizer_prompt
+
+
 def test_format_summary_emits_activity_event(tmp_path: Path) -> None:
     ctx, received = _ctx(tmp_path)
     format_summary(ParsedSummary(description="- a"), ctx=ctx)
@@ -331,10 +458,17 @@ async def test_parser_agent_renders_draft(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_workflow_runs_full_pipeline_and_posts(tmp_path: Path) -> None:
-    _write_pr_context(tmp_path, pr_description="Fixes #5\n\nDoes things")
+    _write_pr_context(tmp_path, pr_description="Fixes #5\n\nDoes things", diff=_REAL_DIFF)
     ctx, received = _ctx(tmp_path)
 
     sq = _ScriptedQuery()
+    files = {
+        "files": [
+            {"path": "src/app.py", "summary": "Replaces old with new"},
+            {"path": "uv.lock", "summary": "Updates lockfile"},
+        ]
+    }
+    sq.add("one-line changelog entry", "", files)
     sq.add(
         "technical documentation assistant",
         '{"description":"- Adds A, fixing https://github.com/o/r/issues/5\\n- Adds B"}',
@@ -363,9 +497,11 @@ async def test_workflow_runs_full_pipeline_and_posts(tmp_path: Path) -> None:
     assert "https://github.com/o/r/issues/5" in body
     assert "- Adds A and B" in body
 
-    # two agents, no explorer stage
+    assert "- `src/app.py` (+2 -1): Replaces old with new" in body
+    assert "- `uv.lock` (+1 -1): Updates lockfile" in body
+
     agent_names = [e.name for e in received if isinstance(e, AgentStart)]
-    assert agent_names == ["Summarizer", "Parser"]
+    assert sorted(agent_names) == ["File Summarizer", "Parser", "Summarizer"]
     activity_names = [e.name for e in received if isinstance(e, ActivityStart)]
     assert "Formatting summary" in activity_names
     assert "Updating PR description" in activity_names

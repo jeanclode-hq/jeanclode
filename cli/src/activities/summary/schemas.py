@@ -23,6 +23,18 @@ class PRSnapshot(BaseModel):
     diff: str = ""
 
 
+class FileLine(BaseModel):
+    """One row of the per-file dropdown."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    path: str
+    old_path: str = ""
+    additions: int = 0
+    deletions: int = 0
+    summary: str = ""
+
+
 class ParsedSummary(BaseModel):
     """The refined summary, ready to be rendered.
 
@@ -34,6 +46,7 @@ class ParsedSummary(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     description: str
+    files: list[FileLine] = []
 
 
 class SummaryPayload(BaseModel):

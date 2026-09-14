@@ -69,7 +69,7 @@ env vars that platform's tools need.
 | `sentry_fix` | fetch → parallel triage (triage *is* the planner) → deterministic filter/route → synthesis when several issues are actionable → per group: worktree + PR per target repo, one fixer session across them |
 | `code_review` | IssueExplorer → 2× Analyzer (parallel) → Synthesizer → Deduplicator → FactChecker → Guardrail → Styler → post inline comments |
 | `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit |
-| `pr_summary` | Summarizer → Parser → rewrite the PR/MR description |
+| `pr_summary` | (Summarizer → Parser) ∥ File Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
 | `jeanclode_respond` | one planner agent acting via Bash, plus two deterministic post-turn checks against provider state |
 | `_smoke/echo` | internal smoke test, no external calls |
 
