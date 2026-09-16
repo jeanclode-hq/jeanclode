@@ -166,6 +166,51 @@ def test_list_issues_period_filter_uses_last_seen(auth_client, app, mock_auth):
     assert titles == {"Recurring error"}
 
 
+def test_list_issues_sorted_by_first_seen(auth_client, app, mock_auth):
+    """Rows follow the provider's creation date, not our insertion time: backfills
+    store old issues late, and a recent recurrence must not bump an old issue."""
+    with app.database.session() as db:
+        ws, _, sp, _ = _setup_workspace_with_issues(db, mock_auth, issue_count=0)
+        now = datetime.now(UTC)
+        for title, first_seen, last_seen in [
+            ("Fresh", now - timedelta(hours=2), now - timedelta(hours=2)),
+            ("Old but recurring", now - timedelta(days=30), now - timedelta(minutes=5)),
+            ("Backfilled", now - timedelta(days=7), now - timedelta(days=7)),
+        ]:
+            db.add(
+                Issue(
+                    repository_id=sp.id,
+                    external_id=f"SENTRY-{title}",
+                    title=title,
+                    level="error",
+                    triage_result=TriageResult.ACTIONABLE.value,
+                    first_seen=first_seen,
+                    last_seen=last_seen,
+                )
+            )
+            db.commit()
+        db.add(
+            Issue(
+                repository_id=sp.id,
+                external_id="SENTRY-NO-FIRST-SEEN",
+                title="No first_seen",
+                level="error",
+                triage_result=TriageResult.ACTIONABLE.value,
+            )
+        )
+        db.commit()
+        ws_id = str(ws.id)
+
+    resp = auth_client.get(f"/issues?workspace_id={ws_id}")
+    assert resp.status_code == 200
+    assert [item["title"] for item in resp.json()["objects"]] == [
+        "No first_seen",
+        "Fresh",
+        "Backfilled",
+        "Old but recurring",
+    ]
+
+
 def test_list_issues_search(auth_client, app, mock_auth):
     """GET /issues filters by title search."""
     with app.database.session() as db:

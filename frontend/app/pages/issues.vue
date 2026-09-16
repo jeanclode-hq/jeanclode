@@ -159,7 +159,7 @@ const columns = computed<TableColumn<Issue>[]>(() => [
   { accessorKey: 'source', header: t('issues.columns.source') },
   { accessorKey: 'project', header: 'Project' },
   { accessorKey: 'execution_status', header: t('issues.columns.status') },
-  { accessorKey: 'last_seen', header: 'Date' },
+  { accessorKey: 'first_seen', header: 'Date' },
   { id: 'actions', header: '' },
 ])
 
@@ -378,8 +378,8 @@ function handleLimitChange(newLimit: number) {
                 :workflow="row.original.workflow ?? undefined"
               />
             </template>
-            <template #last_seen-cell="{ row }">
-              <span class="text-neutral-500 dark:text-neutral-400 whitespace-nowrap">{{ timeAgo(row.original.last_seen) }}</span>
+            <template #first_seen-cell="{ row }">
+              <span class="text-neutral-500 dark:text-neutral-400 whitespace-nowrap">{{ timeAgo(row.original.first_seen) }}</span>
             </template>
             <template #actions-cell="{ row }">
               <div
@@ -485,7 +485,7 @@ function handleLimitChange(newLimit: number) {
                   :status="displayStatus(issue)"
                   :workflow="issue.workflow ?? undefined"
                 />
-                <span>{{ timeAgo(issue.last_seen) }}</span>
+                <span>{{ timeAgo(issue.first_seen) }}</span>
               </div>
               <div @click.stop>
                 <UButton

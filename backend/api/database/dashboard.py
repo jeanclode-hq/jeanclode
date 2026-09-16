@@ -282,7 +282,12 @@ def db_get_issues_paginated(
 
     total = query.count()
     offset = (page - 1) * limit
-    results = query.order_by(Issue.created_at.desc()).offset(offset).limit(limit).all()
+    results = (
+        query.order_by(func.coalesce(Issue.first_seen, Issue.created_at).desc(), Issue.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     return results, total
 
