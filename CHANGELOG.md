@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.1...v1.1.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* **backend:** dispatch workflows on labels set when a PR/issue is created ([#24](https://github.com/jeanclode-hq/jeanclode/issues/24)) ([cad4089](https://github.com/jeanclode-hq/jeanclode/commit/cad4089d56f33c13e10f6dc97cf8b1436ea8b09a))
+
 ## [1.1.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.0...v1.1.1) (2026-09-14)
 
 
