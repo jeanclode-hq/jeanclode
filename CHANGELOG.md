@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.2...v1.1.3) (2026-09-16)
+
+
+### Bug Fixes
+
+* **dashboard:** order and date the issues list by first_seen ([#26](https://github.com/jeanclode-hq/jeanclode/issues/26)) ([aa047bf](https://github.com/jeanclode-hq/jeanclode/commit/aa047bf78c6af440a0a4113ca651a91a43eb7811))
+
 ## [1.1.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.1...v1.1.2) (2026-09-16)
 
 
