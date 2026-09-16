@@ -97,9 +97,13 @@ dispatch only on their `jeanclode:<workflow>` label being added to a PR/MR
 (see `api/plugins/github/dispatch.py`), `issue_resolve` only on
 `jeanclode:resolve` being added to an issue, and `respond` only on an
 `@jeanclode-bot` mention — nothing is ever auto-triggered by a PR/issue
-merely opening or a new commit. Manual dispatch (the dashboard "Fix" /
-"Resolve" buttons) is a separate, always-available path — it doesn't read
-these workflows' trigger settings at all, because there are none.
+merely opening or a new commit. A label set at creation counts as added: the
+`opened`/`open` event dispatches on the labels it carries, since neither
+provider documents a separate label event for them (GitLab sends none), and a
+duplicate `labeled` delivery is absorbed by the active-execution check.
+Manual dispatch (the dashboard "Fix" / "Resolve" buttons) is a separate,
+always-available path — it doesn't read these workflows' trigger settings at
+all, because there are none.
 
 What *is* configurable per org is who a mention listens to:
 `GitOrgSettings.trigger_permission` (`developer_only`, the default, or

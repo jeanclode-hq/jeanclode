@@ -40,19 +40,25 @@ def _parse_gitlab_datetime(value: str | None) -> datetime | None:
         return None
 
 
-def _normalize_action(action: str, changes: dict) -> tuple[str, list[str]]:
+def _normalize_action(action: str, event: dict) -> tuple[str, list[str]]:
     """Normalize a GitLab issue action to the GitHub vocabulary used by
     the dispatch evaluator.
 
     Returns ``(normalized_action, added_label_names)`` — the latter only
-    populated when the event represents one or more newly attached labels.
+    populated when the event represents one or more newly attached labels,
+    or on ``open`` every label the issue starts with.
     GitLab fires ``update`` for any metadata edit; a label attach is
     detected via the ``changes.labels`` delta, same as the MR handler.
     """
     if action == "open":
-        return "opened", []
+        # Labels set at creation only ever show up here: GitLab sends no update for them.
+        labels = event.get("labels") or event.get("object_attributes", {}).get("labels") or []
+        return "opened", sorted(
+            {lbl.get("title", "") for lbl in labels if isinstance(lbl, dict)} - {""}
+        )
 
     if action == "update":
+        changes = event.get("changes") or {}
         labels_change = changes.get("labels") if isinstance(changes, dict) else None
         if isinstance(labels_change, dict):
             previous = {lbl.get("title", "") for lbl in labels_change.get("previous", [])}
@@ -86,7 +92,7 @@ async def handle_issue_event(event: dict) -> WebhookResponse:
     action = issue_data.get("action", "")
     external_id = str(issue_data.get("iid", ""))
     status = _GITLAB_ISSUE_STATE_MAP.get(issue_data.get("state", "opened"), "open")
-    normalized_action, added_labels = _normalize_action(action, event.get("changes") or {})
+    normalized_action, added_labels = _normalize_action(action, event)
 
     def _upsert(db: Session) -> WebhookResponse | _Upserted:
         # Find repository by GitLab project ID
@@ -163,21 +169,13 @@ async def handle_issue_event(event: dict) -> WebhookResponse:
     # Webhook-driven issue-resolve dispatch. Skipped for closed issues —
     # resolving a closed issue makes no sense.
     if status == "open":
-        if normalized_action == "labeled":
-            for added in added_labels:
-                await maybe_dispatch_issue_workflow(
-                    issue_id=outcome.issue_id,
-                    org_id=outcome.org_id,
-                    provider="gitlab",
-                    action="labeled",
-                    label_added=added,
-                )
-        elif normalized_action == "opened":
+        for added in added_labels:
             await maybe_dispatch_issue_workflow(
                 issue_id=outcome.issue_id,
                 org_id=outcome.org_id,
                 provider="gitlab",
-                action="opened",
+                action="labeled",
+                label_added=added,
             )
 
     logger.info(f"Issue #{external_id} {action} → {status} (repo {outcome.repo_name})")

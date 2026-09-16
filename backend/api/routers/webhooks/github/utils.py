@@ -23,3 +23,16 @@ def resolve_pr_state(pr_data: dict) -> PRState:
     if state == "closed":
         return PRState.CLOSED
     return PRState.OPEN
+
+
+def added_labels(event: dict, action: str, item: dict) -> list[str]:
+    """Labels this event attaches: the one ``labeled`` names, or all an ``opened`` item starts with."""
+    if action == "labeled":
+        label_obj = event.get("label") or {}
+        name = label_obj.get("name") if isinstance(label_obj, dict) else None
+        return [name] if name else []
+    if action == "opened":
+        # GitHub doesn't document a `labeled` delivery for labels set at creation.
+        labels = item.get("labels") or []
+        return [lbl["name"] for lbl in labels if isinstance(lbl, dict) and lbl.get("name")]
+    return []

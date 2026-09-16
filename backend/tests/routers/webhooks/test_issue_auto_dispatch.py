@@ -61,7 +61,7 @@ def _silence_sse():
         yield
 
 
-def _github_payload(*, action, repo, state="open", label_added=None):
+def _github_payload(*, action, repo, state="open", label_added=None, labels=()):
     payload: dict = {
         "action": action,
         "issue": {
@@ -71,6 +71,7 @@ def _github_payload(*, action, repo, state="open", label_added=None):
             "user": {"login": "alice"},
             "html_url": "https://github.com/acme/app/issues/42",
             "comments": 0,
+            "labels": [{"name": name} for name in labels],
             "created_at": "2026-06-10T10:00:00Z",
             "updated_at": "2026-06-10T10:00:00Z",
         },
@@ -123,6 +124,27 @@ async def test_github_issue_opened_does_not_dispatch(app, db_session, mock_broke
     with app.database.session() as db:
         assert db.query(Issue).count() == 1
         assert db.query(Execution).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_github_issue_opened_with_resolve_label_dispatches(app, db_session, mock_broker):
+    """An issue created with the resolve label dispatches from the `opened` event itself."""
+    from api.routers.webhooks.github.issues import handle_issue_event
+
+    with app.database.session() as db:
+        _make_org_repo(db, provider="github", external_id="2346")
+
+    with app.database.session() as db:
+        repo = db_get_repository_by_external_id(db, "2346")
+        assert repo is not None
+        await handle_issue_event(
+            _github_payload(action="opened", repo=repo, labels=["jeanclode:resolve"]),
+        )
+
+    assert mock_broker.publish.await_count == 1
+    assert (
+        mock_broker.publish.await_args.kwargs["stream"] == "jeanclode.events.github.issue_resolve"
+    )
 
 
 @pytest.mark.asyncio
@@ -234,6 +256,26 @@ async def test_gitlab_issue_open_does_not_dispatch(app, db_session, mock_broker)
     assert mock_broker.publish.await_count == 0
     with app.database.session() as db:
         assert db.query(Issue).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_gitlab_issue_opened_with_resolve_label_dispatches(app, db_session, mock_broker):
+    """GitLab sends no label update for labels set at creation, so `open` must fire on them."""
+    from api.routers.webhooks.gitlab.issues import handle_issue_event
+
+    with app.database.session() as db:
+        _make_org_repo(db, provider="gitlab", external_id="6100")
+
+    with app.database.session() as db:
+        repo = db_get_repository_by_external_id(db, "6100")
+        assert repo is not None
+        payload = _gitlab_payload(action="open", repo=repo)
+        payload["labels"] = [{"title": "jeanclode:resolve"}]
+        await handle_issue_event(payload)
+
+    assert mock_broker.publish.await_count == 1
+    with app.database.session() as db:
+        assert db.query(Execution).count() == 1
 
 
 @pytest.mark.asyncio
