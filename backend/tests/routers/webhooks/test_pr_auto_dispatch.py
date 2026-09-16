@@ -90,11 +90,9 @@ def _github_payload(*, action, repo, labels=(), label_added=None):
 
 
 @pytest.mark.asyncio
-async def test_github_pr_opened_with_label_already_present_does_not_fire(
-    app, db_session, mock_broker
-):
-    """The review label sitting on the PR at creation doesn't dispatch —
-    only adding it does."""
+async def test_github_pr_opened_with_label_fires_once(app, db_session, mock_broker):
+    """A PR created with the review label fires, and a `labeled` delivery for
+    that same label doesn't queue a second run."""
     from api.routers.webhooks.github.pull_requests import handle_pull_request_event
 
     with app.database.session() as db:
@@ -104,11 +102,37 @@ async def test_github_pr_opened_with_label_already_present_does_not_fire(
         repo = db_get_repository_by_external_id(db, "1234")
         assert repo is not None
         await handle_pull_request_event(
-            _github_payload(action="opened", repo=repo, labels=["jeanclode:review"]),
+            _github_payload(action="opened", repo=repo, labels=["bug", "jeanclode:review"]),
+        )
+        await handle_pull_request_event(
+            _github_payload(
+                action="labeled",
+                repo=repo,
+                labels=["bug", "jeanclode:review"],
+                label_added="jeanclode:review",
+            ),
+        )
+    assert mock_broker.publish.await_count == 1
+    assert mock_broker.publish.await_args.args[0]["workflow"] == ExecutionWorkflow.REVIEW.value
+    with app.database.session() as db:
+        assert db.query(Execution).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_github_pr_opened_without_label_does_not_fire(app, db_session, mock_broker):
+    """Opening a PR on its own starts nothing."""
+    from api.routers.webhooks.github.pull_requests import handle_pull_request_event
+
+    with app.database.session() as db:
+        _make_org_repo(db, provider="github", external_id="1235")
+
+    with app.database.session() as db:
+        repo = db_get_repository_by_external_id(db, "1235")
+        assert repo is not None
+        await handle_pull_request_event(
+            _github_payload(action="opened", repo=repo, labels=["bug"]),
         )
     assert mock_broker.publish.await_count == 0
-    with app.database.session() as db:
-        assert db.query(Execution).count() == 0
 
 
 @pytest.mark.asyncio
@@ -228,6 +252,36 @@ async def test_gitlab_label_added_via_changes_block_fires(app, db_session, mock_
     with app.database.session() as db:
         await handle_merge_request_event(payload)
     assert mock_broker.publish.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_opened_with_label_fires(app, db_session, mock_broker):
+    """GitLab sends no label update for labels set at creation, so `open` must fire on them."""
+    from api.routers.webhooks.gitlab.merge_requests import handle_merge_request_event
+
+    with app.database.session() as db:
+        _make_org_repo(db, provider="gitlab", external_id="7100")
+
+    payload = {
+        "object_attributes": {
+            "iid": 23,
+            "id": 23000,
+            "title": "Refactor",
+            "url": "https://gitlab.com/acme/app/-/merge_requests/23",
+            "source_branch": "feat/z",
+            "target_branch": "main",
+            "state": "opened",
+            "action": "open",
+            "last_commit": {"id": "abc"},
+        },
+        "project": {"id": 7100},
+        "user": {"username": "alice"},
+        "labels": [{"title": "bug"}, {"title": "jeanclode:review"}],
+    }
+    with app.database.session() as db:
+        await handle_merge_request_event(payload)
+    assert mock_broker.publish.await_count == 1
+    assert mock_broker.publish.await_args.args[0]["workflow"] == ExecutionWorkflow.REVIEW.value
 
 
 @pytest.mark.asyncio

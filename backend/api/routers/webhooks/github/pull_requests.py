@@ -13,7 +13,7 @@ from api.routers.webhooks.git_dispatch import maybe_dispatch_pr_workflows
 from api.sse.publishers import publish_pull_request_event
 
 from ..utils import WebhookResponse
-from .utils import parse_github_datetime, resolve_pr_state
+from .utils import added_labels, parse_github_datetime, resolve_pr_state
 
 logger = logging.getLogger(__name__)
 
@@ -102,17 +102,14 @@ async def handle_pull_request_event(event: dict) -> WebhookResponse:
     # Skipped for closed/merged PRs since downstream containers can't post
     # on a closed PR cleanly.
     if state.value == "open":
-        label_added: str | None = None
-        if action == "labeled":
-            label_obj = event.get("label") or {}
-            label_added = label_obj.get("name") if isinstance(label_obj, dict) else None
-        await maybe_dispatch_pr_workflows(
-            pr_id=outcome.pr_id,
-            org_id=outcome.org_id,
-            provider="github",
-            action=action,
-            label_added=label_added,
-        )
+        for label_added in added_labels(event, action, pr_data):
+            await maybe_dispatch_pr_workflows(
+                pr_id=outcome.pr_id,
+                org_id=outcome.org_id,
+                provider="github",
+                action="labeled",
+                label_added=label_added,
+            )
 
     logger.info(f"PR #{outcome.pr_number} {action} → {state.value} (repo {outcome.repo_name})")
     return WebhookResponse(

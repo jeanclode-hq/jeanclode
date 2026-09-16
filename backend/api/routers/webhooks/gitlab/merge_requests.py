@@ -33,13 +33,14 @@ def _resolve_mr_state(mr_data: dict) -> PRState:
     return _GITLAB_STATE_MAP.get(state, PRState.OPEN)
 
 
-def _normalize_action(action: str, changes: dict) -> tuple[str, list[str]]:
+def _normalize_action(action: str, event: dict) -> tuple[str, list[str]]:
     """Normalize a GitLab MR action to the GitHub vocabulary used by the
     trigger evaluator.
 
     Returns ``(normalized_action, added_label_names)`` — the latter only
     populated when the event represents one or more newly attached
-    labels (so the evaluator can fire ON_LABEL once per added label).
+    labels, or on ``open`` every label the MR starts with (so the
+    evaluator can fire ON_LABEL once per added label).
 
     GitLab fires ``update`` for both new commits *and* metadata edits
     (labels, title, …). We disambiguate via ``changes``: if labels
@@ -47,9 +48,14 @@ def _normalize_action(action: str, changes: dict) -> tuple[str, list[str]]:
     push (synchronize). This is the same heuristic the predecessor project used.
     """
     if action == "open":
-        return "opened", []
+        # Labels set at creation only ever show up here: GitLab sends no update for them.
+        labels = event.get("labels") or event.get("object_attributes", {}).get("labels") or []
+        return "opened", sorted(
+            {lbl.get("title", "") for lbl in labels if isinstance(lbl, dict)} - {""}
+        )
 
     if action == "update":
+        changes = event.get("changes") or {}
         labels_change = changes.get("labels") if isinstance(changes, dict) else None
         if isinstance(labels_change, dict):
             previous = {lbl.get("title", "") for lbl in labels_change.get("previous", [])}
@@ -141,10 +147,11 @@ async def handle_merge_request_event(event: dict) -> WebhookResponse:
         )
 
     # Webhook-driven workflow dispatch — REVIEW + SUMMARY, label-gated.
-    # Only fires for open MRs, and only when a label was just added.
+    # Only fires for open MRs, and only when a label was just added
+    # (including labels the MR was opened with).
     if state == PRState.OPEN:
-        normalized_action, added_labels = _normalize_action(action, event.get("changes") or {})
-        if normalized_action == "labeled" and added_labels:
+        _, added_labels = _normalize_action(action, event)
+        if added_labels:
             # Fire once per added label — the evaluator only matches the
             # workflow whose label was added, so iterating is cheap.
             for added in added_labels:

@@ -13,7 +13,7 @@ from api.routers.webhooks.git_dispatch import maybe_dispatch_issue_workflow
 from api.sse.publishers import publish_issue_event
 
 from ..utils import WebhookResponse
-from .utils import parse_github_datetime
+from .utils import added_labels, parse_github_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -132,18 +132,15 @@ async def handle_issue_event(event: dict) -> WebhookResponse:
 
     # Webhook-driven issue-resolve dispatch. Skipped for closed issues —
     # resolving a closed issue makes no sense.
-    if status == "open" and action in ("opened", "labeled"):
-        label_added: str | None = None
-        if action == "labeled":
-            label_obj = event.get("label") or {}
-            label_added = label_obj.get("name") if isinstance(label_obj, dict) else None
-        await maybe_dispatch_issue_workflow(
-            issue_id=outcome.issue_id,
-            org_id=outcome.org_id,
-            provider="github",
-            action=action,
-            label_added=label_added,
-        )
+    if status == "open":
+        for label_added in added_labels(event, action, issue_data):
+            await maybe_dispatch_issue_workflow(
+                issue_id=outcome.issue_id,
+                org_id=outcome.org_id,
+                provider="github",
+                action="labeled",
+                label_added=label_added,
+            )
 
     logger.info(f"Issue #{external_id} {action} → {status} (repo {outcome.repo_name})")
     return WebhookResponse(
