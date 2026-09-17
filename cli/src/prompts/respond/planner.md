@@ -81,6 +81,8 @@ Route to the dedicated pipeline for:
 
 Everything else is `handle` — a specific code change, a question, "resolve this" / "mark as done", scope narrowing, an out-of-scope follow-up, a refusal. Judge intent, not keywords: "any update on this?" is a question (`handle` → reply), "please fix this" or "can you handle it?" is resolve/fix intent.
 
+**You never open a new PR/MR.** `handle` may only commit and push onto the *existing* branch of the PR/MR the mention came from (`<repo>`/`<pr>`) — never `gh pr create` / `glab mr create`, never a fresh branch pushed as a new PR, never a commit to any repo other than `<repo>`. Any ask that would require opening a PR — a fix that needs its own PR, a fix scoped to a different repo, "open a PR for this", "file a fix" — is `route` → `jeanclode:resolve` (issue surface) or, on a PR/MR surface, a reply explaining that a new PR is out of scope for a mention reply and pointing at filing an issue instead. When genuinely unsure whether an ask fits inside the current PR/MR or needs its own, route or ask for clarification — don't default to opening one to be helpful.
+
 Don't conflate a literal, conversational question ("how are you?", "what's up?") with a status check on the ticket/PR. Answer what was actually asked, plainly and briefly — don't repurpose it into a report on the fix/resolve/investigation just because that's what the surrounding thread happens to be about. Only pull in the ticket's/PR's actual status when the mention itself asks about it ("any update on this?", "how's the fix going?").
 
 If a mention narrows or corrects scope right before asking you to pick it up ("fix this but skip the last part", "handle it, just not X"), fold the constraint into the issue body first (`handle`), then `route` → `jeanclode:resolve`, in that order — the resolver reads the issue body fresh. If it only narrows scope with no fix-it-now intent, `handle` alone (edit the issue body).
@@ -93,7 +95,7 @@ Compound and conditional asks resolve the way a person would read them: *"what d
 
 1. Edit files with the Edit/Write tools.
 2. `git add .` then `git commit -m '<summary>'`.
-3. Decide whether to push. If you do: `git push origin HEAD`. There is no separate gate or fact-check step — pushing is entirely your call, the same way deciding *whether* to make the change was. If you're not confident the change is right, or want a human to weigh in first, it's fine to commit without pushing, or to skip the change and reply explaining why instead. Every push re-attaches `jeanclode:review` automatically so it gets normal PR review regardless.
+3. Decide whether to push. If you do: `git push origin HEAD` — onto the current branch of `<repo>`/`<pr>` only, never a new branch, never `gh pr create` / `glab mr create`. There is no separate gate or fact-check step — pushing is entirely your call, the same way deciding *whether* to make the change was. If you're not confident the change is right, or want a human to weigh in first, it's fine to commit without pushing, or to skip the change and reply explaining why instead. Every push re-attaches `jeanclode:review` automatically so it gets normal PR review regardless.
 
 ### Reply
 
@@ -230,6 +232,7 @@ List every distinct kind of action you executed, in the order you executed them 
 - Reply style: action-first, 1–2 sentences, no pleasantries, code blocks only for code.
 - Do not invent context beyond what's in the fields above and what you fetch in Step 1.
 - For `route`, do NOT do the job yourself first. The label triggers a multi-step workflow with dedicated analyzers — a one-shot reply from you is never a substitute.
+- Never `gh pr create` / `glab mr create`. `handle` pushes only onto the existing branch of the PR/MR the mention came from — anything needing its own PR is `route`, never something you open yourself.
 
 ## Third-party skill guardrail
 
