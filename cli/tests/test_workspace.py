@@ -3,15 +3,30 @@
 from __future__ import annotations
 
 import subprocess
+from unittest.mock import patch
 
 import pytest
 
 from src.workspace import (
+    _CLONE_MAX_ATTEMPTS,
     _embed_token,
     cleanup_workspace,
+    clone_repo,
     create_workspace,
     disable_commit_signing,
 )
+
+
+def _fake_run(clone_results: list[int]):
+    """subprocess.run stand-in: pops ``clone_results`` for each ``git clone``
+    call (in order), always succeeds for any other git command (the
+    post-clone identity/signing setup)."""
+
+    def run(cmd, **kwargs):
+        returncode = clone_results.pop(0) if "clone" in cmd else 0
+        return subprocess.CompletedProcess(cmd, returncode, stdout="", stderr="boom")
+
+    return run
 
 
 def test_create_workspace() -> None:
@@ -117,3 +132,34 @@ def test_disable_commit_signing_overrides_signing_host_config(tmp_path) -> None:
         text=True,
     )
     assert commit.returncode == 0, commit.stderr
+
+
+def test_clone_repo_retries_transient_failure_then_succeeds(tmp_path) -> None:
+    """A clone that fails because the proxy sidecar died mid-stream (see
+    security-proxy) shouldn't permanently drop the repo for the run — it
+    should recover once the sidecar is back."""
+    results = [128, 128, 0]  # two transient failures, then success
+    with (
+        patch("src.workspace.subprocess.run", side_effect=_fake_run(results)) as run,
+        patch("src.workspace.time.sleep") as sleep,
+    ):
+        target = clone_repo("https://github.com/owner/repo", tmp_path)
+
+    assert target == tmp_path / "owner_repo"
+    clone_calls = [c for c in run.call_args_list if "clone" in c.args[0]]
+    assert len(clone_calls) == 3
+    # Backoff doubles each retry: 500ms, then 1000ms — only 2 sleeps for 3 attempts.
+    assert [c.args[0] for c in sleep.call_args_list] == [0.5, 1.0]
+
+
+def test_clone_repo_raises_after_exhausting_retries(tmp_path) -> None:
+    results = [128] * _CLONE_MAX_ATTEMPTS
+    with (
+        patch("src.workspace.subprocess.run", side_effect=_fake_run(results)) as run,
+        patch("src.workspace.time.sleep"),
+        pytest.raises(RuntimeError, match="clone failed"),
+    ):
+        clone_repo("https://github.com/owner/repo", tmp_path)
+
+    clone_calls = [c for c in run.call_args_list if "clone" in c.args[0]]
+    assert len(clone_calls) == _CLONE_MAX_ATTEMPTS

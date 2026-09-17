@@ -89,6 +89,17 @@ _GITLAB_API_PROJECT_RE = re.compile(r"^/api/v4/projects/([^/?]+)")
 # strip it so both forms match the same ``path_prefix``.
 _GIT_SUFFIX_RE = re.compile(r"\.git(?=/|$)")
 
+# git's smart-HTTP endpoints — the response to a clone/fetch is an
+# arbitrarily large packfile (a shallow clone of one production repo runs
+# 1GB+). mitmproxy buffers a flow's full body in memory to hand it to
+# addon hooks, which OOM-kills the sidecar on a repo that size; these paths
+# are streamed straight through instead (see ``responseheaders``).
+_GIT_SMART_HTTP_RE = re.compile(r"/(info/refs|git-upload-pack|git-receive-pack)$")
+
+
+def _is_git_smart_http(path: str) -> bool:
+    return bool(_GIT_SMART_HTTP_RE.search(path.split("?", 1)[0]))
+
 
 def _gitlab_match_path(path: str) -> str:
     """Normalize a GitLab request path onto the ``/namespace/repo/...`` shape
@@ -491,12 +502,18 @@ class SecurityProxy:
             {"Content-Type": "text/plain; charset=utf-8"},
         )
 
-    def response(self, flow: http.HTTPFlow) -> None:
+    def responseheaders(self, flow: http.HTTPFlow) -> None:
+        """Fires once response headers arrive, before the body does — the
+        only point where credential headers can still be stripped *and*
+        streaming can still be enabled (both are no-ops once the body has
+        already been buffered, which is what ``response`` would see)."""
         if flow.response is None:
             return
         for header in STRIPPED_RESPONSE_HEADERS:
             if header in flow.response.headers:
                 del flow.response.headers[header]
+        if _is_git_smart_http(flow.request.path):
+            flow.response.stream = True
 
 
 addons = [SecurityProxy()]

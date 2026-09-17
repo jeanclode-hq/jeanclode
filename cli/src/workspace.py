@@ -7,11 +7,19 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
+
+# A clone can hit a transient failure unrelated to the repo itself — e.g.
+# the security-proxy sidecar restarting mid-run after being OOM-killed by
+# an earlier, larger clone. Retry a few times with backoff before giving
+# up on the repo.
+_CLONE_MAX_ATTEMPTS = 3
+_CLONE_RETRY_BACKOFF_MS = 500  # doubles after each failed attempt
 
 
 def create_workspace() -> Path:
@@ -223,18 +231,38 @@ def clone_repo(
         cmd += ["--branch", ref]
     cmd += [clone_url, str(target)]
 
-    proc = subprocess.run(cmd, capture_output=True, env=clone_env, text=True)
-    if proc.returncode != 0:
-        # Strip embedded token from any error output before surfacing it.
-        safe_url = repo_url
-        stderr = proc.stderr.strip().replace(clone_url, safe_url) if token else proc.stderr.strip()
-        stdout = proc.stdout.strip().replace(clone_url, safe_url) if token else proc.stdout.strip()
-        msg = (
-            f"clone failed for {safe_url} (exit={proc.returncode})\n"
-            f"--- stderr ---\n{stderr}\n"
-            f"--- stdout ---\n{stdout}"
+    backoff_ms = _CLONE_RETRY_BACKOFF_MS
+    for attempt in range(1, _CLONE_MAX_ATTEMPTS + 1):
+        shutil.rmtree(target, ignore_errors=True)
+        proc = subprocess.run(cmd, capture_output=True, env=clone_env, text=True)
+        if proc.returncode == 0:
+            break
+        if attempt == _CLONE_MAX_ATTEMPTS:
+            # Strip embedded token from any error output before surfacing it.
+            safe_url = repo_url
+            stderr = (
+                proc.stderr.strip().replace(clone_url, safe_url) if token else proc.stderr.strip()
+            )
+            stdout = (
+                proc.stdout.strip().replace(clone_url, safe_url) if token else proc.stdout.strip()
+            )
+            msg = (
+                f"clone failed for {safe_url} (exit={proc.returncode}, "
+                f"{attempt} attempts)\n"
+                f"--- stderr ---\n{stderr}\n"
+                f"--- stdout ---\n{stdout}"
+            )
+            raise RuntimeError(msg)
+        logger.warning(
+            "Clone attempt %d/%d failed for %s (exit=%d), retrying in %dms",
+            attempt,
+            _CLONE_MAX_ATTEMPTS,
+            repo_url,
+            proc.returncode,
+            backoff_ms,
         )
-        raise RuntimeError(msg)
+        time.sleep(backoff_ms / 1000)
+        backoff_ms *= 2
 
     ensure_local_git_identity(target)
     disable_commit_signing(target)
