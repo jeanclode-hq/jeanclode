@@ -651,7 +651,7 @@ def test_response_strips_credential_headers_from_upstream(header: str) -> None:
     proxy = SecurityProxy(make_config())
     flow = make_flow("https://api.github.com/repos/foo/bar")
     flow.response = Response.make(200, b"{}", {header: "leaked-value"})
-    proxy.response(flow)
+    proxy.responseheaders(flow)
     assert header not in flow.response.headers
 
 
@@ -663,9 +663,36 @@ def test_response_preserves_normal_headers() -> None:
         b"{}",
         {"Content-Type": "application/json", "Authorization": "leaked"},
     )
-    proxy.response(flow)
+    proxy.responseheaders(flow)
     assert flow.response.headers["Content-Type"] == "application/json"
     assert "Authorization" not in flow.response.headers
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/jdoe/webshop/info/refs?service=git-upload-pack",
+        "/jdoe/webshop.git/info/refs?service=git-upload-pack",
+        "/jdoe/webshop.git/git-upload-pack",
+        "/jdoe/webshop/git-receive-pack",
+    ],
+)
+def test_responseheaders_streams_git_smart_http_paths(path: str) -> None:
+    """The packfile body is what OOM-killed the sidecar on a 1GB+ shallow
+    clone — these paths must stream instead of buffering into memory."""
+    proxy = SecurityProxy(make_config())
+    flow = make_flow(f"https://api.github.com{path}")
+    flow.response = Response.make(200, b"pack-bytes")
+    proxy.responseheaders(flow)
+    assert flow.response.stream is True
+
+
+def test_responseheaders_does_not_stream_ordinary_api_paths() -> None:
+    proxy = SecurityProxy(make_config())
+    flow = make_flow("https://api.github.com/repos/foo/bar/issues/10")
+    flow.response = Response.make(200, b"{}")
+    proxy.responseheaders(flow)
+    assert not flow.response.stream
 
 
 # ---------------------------------------------------------------------------
