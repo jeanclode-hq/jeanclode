@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.4](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.3...v1.1.4) (2026-09-17)
+
+
+### Bug Fixes
+
+* **respond:** clone related repos for cross-repo context, tighten no-PR guardrail ([#28](https://github.com/jeanclode-hq/jeanclode/issues/28)) ([256abb6](https://github.com/jeanclode-hq/jeanclode/commit/256abb6e1030078f1e85bd024436bbab6448ffa5))
+* **security-proxy,cli:** stream git clone responses, retry transient clone failures ([#30](https://github.com/jeanclode-hq/jeanclode/issues/30)) ([af01f11](https://github.com/jeanclode-hq/jeanclode/commit/af01f11f509c60e959548908e681fbc16790393c))
+
 ## [1.1.3](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.2...v1.1.3) (2026-09-16)
 
 
