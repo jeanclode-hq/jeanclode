@@ -113,14 +113,20 @@ def build_command(workflow: ExecutionWorkflow, pr: PullRequest) -> list[str]:
     return [pr.pr_url]
 
 
-def build_respond_command(target_url: str) -> list[str]:
+def build_respond_command(target_url: str, related_repo_urls: list[str] | None = None) -> list[str]:
     """Build the CLI command for a mention-driven respond run.
 
-    Respond is deliberately single-repo: a mention that needs a change
-    spanning grouped repos should route to ``jeanclode:resolve`` (which
-    does expand related repos), not be handled one-shot from the mention.
+    ``related_repo_urls`` are cloned read-only alongside the mention's own
+    repo so the planner can answer questions that reach into a grouped
+    repo (e.g. a monorepo the mention's repo is only a QA harness for) —
+    the prompt guardrail (not this command) is what keeps ``handle`` from
+    writing to anything but the mention's own repo. A change that spans
+    repos still has to go through ``route`` -> ``jeanclode:resolve``.
     """
-    return ["respond", target_url]
+    cmd = ["respond", target_url]
+    for url in related_repo_urls or []:
+        cmd.extend(["--related-repo", url])
+    return cmd
 
 
 def build_issue_resolve_command(
@@ -436,7 +442,9 @@ async def launch_respond_container(
     author / thread state from the GitHub API itself.
 
     ``repo`` may be ``None`` for issue mentions where we don't need a
-    clone (``gh issue`` / ``gh pr`` work against the API). Credentials
+    clone (``gh issue`` / ``gh pr`` work against the API). When known,
+    it's also used to resolve related repos to clone alongside it, same
+    as issue-resolve. Credentials
     still resolve via the org's installation token.
 
     ``workspace_id``, when set, wires the memory credential (caller confirms opt-in first).
@@ -495,11 +503,13 @@ async def launch_respond_container(
             image = container_plugin.config.docker.image
             timeout = container_plugin.config.docker.timeout
 
-    tmp_size_limit = await resolve_tmp_size_limit(repo)
+    related_repos = _resolve_related_repos(repo)
+    related_repo_urls = [r.web_url for r in related_repos if r.web_url]
+    tmp_size_limit = await resolve_tmp_size_limit(repo, related_repos)
 
     request = ContainerRequest(
         image=image,
-        command=build_respond_command(target_url),
+        command=build_respond_command(target_url, related_repo_urls),
         env=inputs.public_env,
         secrets=inputs.secrets,
         upstreams=inputs.upstreams,

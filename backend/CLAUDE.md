@@ -136,10 +136,13 @@ must never cost the tenant the MR.
 
 ## Which repos a run clones (`related_repos`)
 
-Only `issue-resolve` and `sentry-fix` clone more than one repo — review,
-summary and respond are single-repo by design. What joins the workspace is
-resolved in `api/plugins/container/related.py`, as a set union of three
-sources minus the repo the run was triggered on:
+`issue-resolve`, `sentry-fix` and `respond` clone more than one repo —
+review and summary stay single-repo by design. For `respond` the extra
+repos are read-only context (the planner's write access stays scoped to
+the mention's own repo via its prompt guardrail, not via what's cloned);
+for `issue-resolve`/`sentry-fix` they're fix targets like any other. What
+joins the workspace is resolved in `api/plugins/container/related.py`, as
+a set union of three sources minus the repo the run was triggered on:
 
 1. **Repo groups** (`RepositoryMapping`) — symmetric, hand-made, never capped.
 2. **`related_repos.always_include`** — repo ids on the connected group's
