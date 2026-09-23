@@ -145,6 +145,36 @@ async def test_sync_links_subgroup_projects_to_own_namespace_org(gitlab_app):
 
 
 @pytest.mark.asyncio
+async def test_sync_ensures_trigger_labels_on_the_group(gitlab_app):
+    """The group sync calls ensure_group_labels once, on the top-level group."""
+    db_plugin = gitlab_app.database
+
+    with db_plugin.session() as db:
+        workspace = db_create_workspace(db, name="acme", slug="acme")
+        top_org = db_create_org(
+            db=db,
+            workspace_id=workspace.id,
+            name="acme",
+            external_org_id="900",
+            provider=Provider.GITLAB.value,
+            installation_id="gitlab-group-900",
+            auth_token_encrypted=db_plugin.encrypt("real-group-token"),
+        )
+        top_org_id = top_org.id
+
+    gitlab_plugin = gitlab_app.gitlab
+    gitlab_plugin.ensure_group_labels = AsyncMock()
+    gitlab_plugin.fetch_group_projects = AsyncMock(return_value=[])
+
+    message = GitLabSyncGroupRepositoriesMessage(org_id=str(top_org_id), group_id="900")
+    await sync_gitlab_group_repositories(message)
+
+    gitlab_plugin.ensure_group_labels.assert_awaited_once_with(
+        "real-group-token", "900", provider_url="https://gitlab.com"
+    )
+
+
+@pytest.mark.asyncio
 async def test_sync_reuses_existing_namespace_org_across_projects(gitlab_app):
     """Two projects in the same subgroup share one namespace org, not one each."""
     db_plugin = gitlab_app.database
