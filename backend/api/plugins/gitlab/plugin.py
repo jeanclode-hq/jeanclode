@@ -20,11 +20,20 @@ from api.plugins.container.backend import ContainerBackend
 from api.plugins.container.docker import DockerBackend
 from api.plugins.container.kubernetes import KubernetesBackend
 from api.plugins.gitlab.config import GitLabOAuthConfig, GitLabPluginConfig
+from api.plugins.gitlab.dispatch import LABEL_RESOLVE, LABEL_REVIEW, LABEL_SUMMARY
 from api.plugins.gitlab.schemas import GitlabTokenType
 from api.plugins.gitlab.watcher import GitLabWatcher
 from api.plugins.httpx.plugin import BaseHttpPlugin
 
 logger = logging.getLogger(__name__)
+
+# GitLab group labels are inherited by every subgroup/project underneath, so
+# these only need creating once per connected group.
+_TRIGGER_LABELS: dict[str, tuple[str, str]] = {
+    LABEL_REVIEW: ("#0E8A16", "Jeanclode runs a code review on this merge request"),
+    LABEL_SUMMARY: ("#1D76DB", "Jeanclode writes this merge request's description"),
+    LABEL_RESOLVE: ("#5319E7", "Jeanclode attempts a fix for this issue"),
+}
 
 
 class GitLabPlugin(BaseHttpPlugin[GitLabPluginConfig]):
@@ -871,6 +880,56 @@ class GitLabPlugin(BaseHttpPlugin[GitLabPluginConfig]):
                 detail=f"GitLab API returned {updated.status_code} updating hook: {updated.text}",
             )
         return "updated"
+
+    async def ensure_group_labels(
+        self,
+        access_token: str,
+        group_id: str,
+        *,
+        provider_url: str | None = None,
+    ) -> None:
+        """Create the jeanclode:* trigger labels on a group if they're missing.
+
+        Runs once per connected group — GitLab inherits group labels down to
+        every subgroup and project, so there's no need to touch each project.
+        Best-effort: a failure here logs and returns rather than raising, so
+        it never holds up the connect flow.
+        """
+        instance_url = provider_url or self.get_effective_instance_url()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        base = f"{instance_url}/api/v4/groups/{group_id}/labels"
+
+        existing: set[str] = set()
+        page = 1
+        per_page = 100
+        while True:
+            resp = await self.http.get(
+                base, headers=headers, params={"page": page, "per_page": per_page}
+            )
+            if resp.status_code != 200:
+                logger.warning("Failed to list group labels for %s: %s", group_id, resp.status_code)
+                return
+            page_labels = resp.json()
+            if not page_labels:
+                break
+            existing.update(label["name"] for label in page_labels)
+            page += 1
+
+        for name, (color, description) in _TRIGGER_LABELS.items():
+            if name in existing:
+                continue
+            created = await self.http.post(
+                base,
+                headers=headers,
+                json={"name": name, "color": color, "description": description},
+            )
+            if created.status_code not in (200, 201):
+                logger.warning(
+                    "Failed to create group label %s on %s: %s",
+                    name,
+                    group_id,
+                    created.status_code,
+                )
 
     async def delete_project_webhook(
         self,
