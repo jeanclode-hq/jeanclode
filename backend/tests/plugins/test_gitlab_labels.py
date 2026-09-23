@@ -31,7 +31,10 @@ def gitlab_plugin():
 
 @pytest.mark.asyncio
 async def test_creates_only_missing_labels(gitlab_plugin):
-    gitlab_plugin.http.get.return_value = _response(200, [{"name": LABEL_REVIEW}])
+    gitlab_plugin.http.get.side_effect = [
+        _response(200, [{"name": LABEL_REVIEW}]),
+        _response(200, []),
+    ]
     gitlab_plugin.http.post.return_value = _response(201)
 
     await gitlab_plugin.ensure_group_labels("token", "500", provider_url="https://gitlab.com")
@@ -46,9 +49,10 @@ async def test_creates_only_missing_labels(gitlab_plugin):
 
 @pytest.mark.asyncio
 async def test_all_labels_already_exist_creates_nothing(gitlab_plugin):
-    gitlab_plugin.http.get.return_value = _response(
-        200, [{"name": LABEL_REVIEW}, {"name": LABEL_SUMMARY}, {"name": LABEL_RESOLVE}]
-    )
+    gitlab_plugin.http.get.side_effect = [
+        _response(200, [{"name": LABEL_REVIEW}, {"name": LABEL_SUMMARY}, {"name": LABEL_RESOLVE}]),
+        _response(200, []),
+    ]
 
     await gitlab_plugin.ensure_group_labels("token", "500", provider_url="https://gitlab.com")
 

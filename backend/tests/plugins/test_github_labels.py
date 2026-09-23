@@ -32,7 +32,10 @@ def github_plugin():
 @pytest.mark.asyncio
 async def test_creates_only_missing_labels(github_plugin):
     """One of the three labels already exists — only the other two get created."""
-    github_plugin.http.get.return_value = _response(200, [{"name": LABEL_REVIEW}])
+    github_plugin.http.get.side_effect = [
+        _response(200, [{"name": LABEL_REVIEW}]),
+        _response(200, []),
+    ]
     github_plugin.http.post.return_value = _response(201)
 
     await github_plugin.ensure_repo_labels("token", "acme/app")
@@ -46,9 +49,10 @@ async def test_creates_only_missing_labels(github_plugin):
 
 @pytest.mark.asyncio
 async def test_all_labels_already_exist_creates_nothing(github_plugin):
-    github_plugin.http.get.return_value = _response(
-        200, [{"name": LABEL_REVIEW}, {"name": LABEL_SUMMARY}, {"name": LABEL_RESOLVE}]
-    )
+    github_plugin.http.get.side_effect = [
+        _response(200, [{"name": LABEL_REVIEW}, {"name": LABEL_SUMMARY}, {"name": LABEL_RESOLVE}]),
+        _response(200, []),
+    ]
 
     await github_plugin.ensure_repo_labels("token", "acme/app")
 
