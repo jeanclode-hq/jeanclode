@@ -17,10 +17,18 @@ from api.plugins.container.backend import ContainerBackend
 from api.plugins.container.docker import DockerBackend
 from api.plugins.container.kubernetes import KubernetesBackend
 from api.plugins.github.config import GitHubAppConfig, GitHubPluginConfig
+from api.plugins.github.dispatch import LABEL_RESOLVE, LABEL_REVIEW, LABEL_SUMMARY
 from api.plugins.github.watcher import GitHubWatcher
 from api.plugins.httpx.plugin import BaseHttpPlugin
 
 logger = logging.getLogger(__name__)
+
+# GitHub has no org-level label — every repo needs its own copy of these.
+_TRIGGER_LABELS: dict[str, tuple[str, str]] = {
+    LABEL_REVIEW: ("0E8A16", "Jeanclode runs a code review on this pull request"),
+    LABEL_SUMMARY: ("1D76DB", "Jeanclode writes this pull request's description"),
+    LABEL_RESOLVE: ("5319E7", "Jeanclode attempts a fix for this issue"),
+}
 
 
 class GitHubPlugin(BaseHttpPlugin[GitHubPluginConfig]):
@@ -386,6 +394,50 @@ class GitHubPlugin(BaseHttpPlugin[GitHubPluginConfig]):
             logger.warning("Failed to fetch repository %s: %s", external_id, response.status_code)
             return None
         return response.json()
+
+    async def ensure_repo_labels(self, installation_token: str, full_name: str) -> None:
+        """Create the jeanclode:* trigger labels on a repo if they're missing.
+
+        Best-effort — a failure here logs and returns rather than raising, so
+        it never holds up the repo sync it runs alongside.
+        """
+        headers = {
+            "Authorization": f"token {installation_token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        existing: set[str] = set()
+        page = 1
+        per_page = 100
+        while True:
+            response = await self.http.get(
+                f"/repos/{full_name}/labels",
+                headers=headers,
+                params={"page": page, "per_page": per_page},
+            )
+            if response.status_code != 200:
+                logger.warning("Failed to list labels for %s: %s", full_name, response.status_code)
+                return
+            page_labels = response.json()
+            if not page_labels:
+                break
+            existing.update(label["name"] for label in page_labels)
+            page += 1
+
+        for name, (color, description) in _TRIGGER_LABELS.items():
+            if name in existing:
+                continue
+            created = await self.http.post(
+                f"/repos/{full_name}/labels",
+                headers=headers,
+                json={"name": name, "color": color, "description": description},
+            )
+            if created.status_code not in (201, 422):  # 422: created by a racing sync
+                logger.warning(
+                    "Failed to create label %s on %s: %s",
+                    name,
+                    full_name,
+                    created.status_code,
+                )
 
     async def fetch_repo_tree_bytes(
         self, installation_token: str, external_id: str, default_branch: str

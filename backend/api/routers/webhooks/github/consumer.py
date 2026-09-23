@@ -26,6 +26,22 @@ logger = logging.getLogger(__name__)
 router = RedisRouter()
 
 
+async def _ensure_repo_labels(
+    github_plugin, installation_token: str, repo_map: dict[str, tuple]
+) -> None:
+    """Best-effort: create the jeanclode:* labels on each newly-synced repo."""
+
+    async def _one(full_name: str) -> None:
+        try:
+            await github_plugin.ensure_repo_labels(installation_token, full_name)
+        except Exception as e:
+            logger.warning(f"Failed to ensure trigger labels on {full_name}: {e}")
+
+    full_names = [full_name for _, full_name in repo_map.values() if full_name]
+    if full_names:
+        await asyncio.gather(*(_one(full_name) for full_name in full_names))
+
+
 async def _sync_prs(
     github_plugin,
     db_plugin,
@@ -206,6 +222,8 @@ async def sync_installation_repositories(message: GitHubSyncInstallationMessage)
 
     logger.info(f"Successfully synced {len(repos)} repositories for installation {installation_id}")
 
+    await _ensure_repo_labels(github_plugin, installation_token, repo_map)
+
     # Publish SSE event after repo sync so frontend updates repo_count immediately
     if workspace_id:
         await publish_sync_event(
@@ -313,6 +331,8 @@ async def sync_added_repositories(message: GitHubSyncRepositoriesMessage) -> Non
 
     if not repo_map:
         return
+
+    await _ensure_repo_labels(github_plugin, installation_token, repo_map)
 
     if workspace_id:
         await publish_sync_event(

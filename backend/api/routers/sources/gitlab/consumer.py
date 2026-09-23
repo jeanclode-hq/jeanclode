@@ -277,6 +277,11 @@ async def sync_gitlab_group_repositories(message: GitLabSyncGroupRepositoriesMes
 
     # Phase 2: External API calls — no DB session held
     try:
+        await gitlab_plugin.ensure_group_labels(access_token, group_id, provider_url=provider_url)
+    except Exception as e:
+        logger.error(f"Failed to ensure trigger labels on group {group_id}: {e}")
+
+    try:
         projects = await gitlab_plugin.fetch_group_projects(
             access_token, group_id, provider_url=provider_url
         )
