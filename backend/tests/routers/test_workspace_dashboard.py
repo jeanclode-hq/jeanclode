@@ -111,7 +111,7 @@ def test_stats_are_served_from_cache_until_an_event_invalidates_them(
         ws_id = _setup_workspace_with_stats(db, mock_auth).id
 
     first = auth_client.get(f"/workspaces/{ws_id}/stats").json()
-    assert first["total_issues"] == 9
+    assert first["issues"]["handled"] == 5
 
     with app.database.session() as db:
         repo = (
@@ -120,14 +120,15 @@ def test_stats_are_served_from_cache_until_an_event_invalidates_them(
             .filter(Organization.workspace_id == ws_id)
             .first()
         )
-        _issue(db, repo)
+        issue = _issue(db, repo)
+        issue.triage_result = "not_actionable"
         db.commit()
 
     assert auth_client.get(f"/workspaces/{ws_id}/stats").json() == first
 
     asyncio.run(invalidate_stats(str(ws_id)))
 
-    assert auth_client.get(f"/workspaces/{ws_id}/stats").json()["total_issues"] == 10
+    assert auth_client.get(f"/workspaces/{ws_id}/stats").json()["issues"]["handled"] == 6
 
 
 def test_cached_stats_still_require_membership(auth_client, app, mock_auth, fake_redis):
@@ -150,7 +151,7 @@ def test_stats_fall_back_to_the_database_when_redis_fails(auth_client, app, mock
         resp = auth_client.get(f"/workspaces/{ws_id}/stats")
 
     assert resp.status_code == 200
-    assert resp.json()["total_issues"] == 9
+    assert resp.json()["issues"]["handled"] == 5
 
 
 async def test_stats_computed_before_an_event_are_not_served_after_it(fake_redis):

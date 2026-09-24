@@ -21,6 +21,7 @@ export function useApi() {
     // never rejected. Throwing here makes the existing catch blocks
     // (and extractApiError) actually fire.
     throwOnError: true,
+    fetch: async (request) => guideDemoResponse(request) ?? globalThis.fetch(request),
   })
 
   return client

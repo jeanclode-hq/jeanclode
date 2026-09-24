@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from api.context import get_current_app
 from api.database import run_in_session
 from api.database.execution import db_create_execution, db_has_active_execution
+from api.database.identity import db_get_identity_by_external_id
 from api.database.issue import db_create_issue, db_get_issue_by_sentry_id
 from api.database.organization import db_get_org_by_id, db_resolve_org_settings
 from api.database.pull_request import (
@@ -73,6 +74,7 @@ class _NormalizedEvent(BaseModel):
     surface: _Surface
     body: str
     sender_login: str
+    sender_id: int | None = None
     sender_is_bot: bool
     repo_external_id: str
     repo_full_name: str = ""
@@ -124,6 +126,7 @@ def _normalize(event_type: str, payload: dict) -> _NormalizedEvent | None:
     repo_full_name = repo.get("full_name") or ""
     sender = payload.get("sender") or {}
     sender_login = sender.get("login") or ""
+    sender_id = sender.get("id")
     sender_is_bot = (sender.get("type") or "").lower() == "bot" or _is_bot_login(sender_login)
 
     if event_type == "issue_comment":
@@ -139,6 +142,7 @@ def _normalize(event_type: str, payload: dict) -> _NormalizedEvent | None:
                 surface=_Surface.PR_TOP_LEVEL,
                 body=body,
                 sender_login=sender_login,
+                sender_id=sender_id,
                 sender_is_bot=sender_is_bot,
                 repo_external_id=repo_external_id,
                 repo_full_name=repo_full_name,
@@ -154,6 +158,7 @@ def _normalize(event_type: str, payload: dict) -> _NormalizedEvent | None:
             surface=_Surface.ISSUE,
             body=body,
             sender_login=sender_login,
+            sender_id=sender_id,
             sender_is_bot=sender_is_bot,
             repo_external_id=repo_external_id,
             repo_full_name=repo_full_name,
@@ -175,6 +180,7 @@ def _normalize(event_type: str, payload: dict) -> _NormalizedEvent | None:
             surface=_Surface.PR_REVIEW_SUBMISSION,
             body=body,
             sender_login=sender_login,
+            sender_id=sender_id,
             sender_is_bot=sender_is_bot,
             repo_external_id=repo_external_id,
             repo_full_name=repo_full_name,
@@ -191,6 +197,7 @@ def _normalize(event_type: str, payload: dict) -> _NormalizedEvent | None:
             surface=_Surface.PR_INLINE_THREAD,
             body=body,
             sender_login=sender_login,
+            sender_id=sender_id,
             sender_is_bot=sender_is_bot,
             repo_external_id=repo_external_id,
             repo_full_name=repo_full_name,
@@ -320,6 +327,11 @@ async def handle_mention_event(event_type: str, payload: dict) -> WebhookRespons
 
     # Resolve target row (PR or issue) and create the execution.
     def _reserve(db: Session) -> WebhookResponse | RespondDispatchPayload:
+        sender_identity = (
+            db_get_identity_by_external_id(db, "github", str(normalized.sender_id))
+            if normalized.sender_id is not None
+            else None
+        )
         pr_id: str | None = None
         issue_id: str | None = None
         queued_behind_active = False
@@ -367,6 +379,7 @@ async def handle_mention_event(event_type: str, payload: dict) -> WebhookRespons
                 status=ExecutionStatus.QUEUED.value,
                 retry_target_url=normalized.target_url,
                 prompt_text=normalized.body,
+                triggered_by_identity_id=sender_identity.id if sender_identity else None,
             )
             pr_id = str(pr.id)
         elif normalized.issue_number:
@@ -400,6 +413,7 @@ async def handle_mention_event(event_type: str, payload: dict) -> WebhookRespons
                 status=ExecutionStatus.QUEUED.value,
                 retry_target_url=normalized.target_url,
                 prompt_text=normalized.body,
+                triggered_by_identity_id=sender_identity.id if sender_identity else None,
             )
             issue_id = str(issue.id)
         else:

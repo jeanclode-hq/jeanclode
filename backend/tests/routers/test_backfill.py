@@ -109,6 +109,7 @@ def sentry_org(backfill_app, workspace, auth_user):
             external_org_id="backfill-org",
             provider="sentry",
             installation_id="sentry-install-backfill",
+            settings={"backfill": "30d"},
         )
         grant_org_access(db, org, auth_user.id)
         return org.id
@@ -542,10 +543,10 @@ async def test_backfill_scope_7d_narrows_window(mock_get_app, mock_sse, backfill
     "api.routers.sources.sentry.backfill.consumer.publish_backfill_event", new_callable=AsyncMock
 )
 @patch("api.routers.sources.sentry.backfill.consumer.get_current_app")
-async def test_backfill_defaults_to_30d_without_stored_scope(
+async def test_backfill_imports_nothing_without_stored_scope(
     mock_get_app, mock_sse, backfill_app, scoped_org
 ):
-    """Orgs connected before the setting existed keep the old 30-day behavior."""
+    """An org that never picked a scope imports nothing rather than a guessed window."""
     from api.routers.sources.sentry.backfill.consumer import backfill_issues
     from api.routers.sources.sentry.backfill.schemas import BackfillIssuesMessage
 
@@ -560,9 +561,8 @@ async def test_backfill_defaults_to_30d_without_stored_scope(
 
     await backfill_issues(BackfillIssuesMessage(org_id=str(org_id), org_slug="legacy-org"))
 
-    payload = mock_sse.call_args.kwargs["payload"]
-    assert payload["created"] == 1
-    assert payload["scope"] == "30d"
+    backfill_app.sentry.list_issues.assert_not_awaited()
+    assert mock_sse.call_args.kwargs["action"] == "skipped"
 
 
 @pytest.mark.asyncio

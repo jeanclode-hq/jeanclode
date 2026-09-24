@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DateTime,
+    ForeignKey,
     Index,
     String,
     Text,
@@ -70,6 +71,7 @@ class Execution(Base):
         Index("ix_executions_created_at", "created_at"),
         Index("ix_executions_provider_status", "provider", "status"),
         Index("ix_executions_status_retry_at", "status", "retry_at"),
+        Index("ix_executions_triggered_by_identity_id", "triggered_by_identity_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -95,6 +97,10 @@ class Execution(Base):
     # The @jeanclode-bot mention/comment body that triggered a RESPOND
     # execution, surfaced read-only in the dashboard detail modal.
     prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Who @-mentioned the bot (RESPOND), when their provider identity is synced.
+    triggered_by_identity_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("provider_identities.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

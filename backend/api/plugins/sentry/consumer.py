@@ -30,6 +30,7 @@ from api.models.pull_requests import PRState
 from api.models.repositories import Repository, RepositoryMapping
 from api.plugins.container.consumer_gate import status_consumer_gate
 from api.plugins.container.dispatch_inputs import resolve_memory_workspace_id
+from api.plugins.container.issue_resolve_result import normalize_web_url
 from api.plugins.sentry.launch import launch_container
 from api.sse.publishers import publish_execution_event
 
@@ -240,18 +241,6 @@ def _persist_triage_results(db: Session, execution: Execution, result: dict[str,
         )
 
 
-def _normalize_web_url(url: str | None) -> str:
-    """Lowercase, scheme-stripped, ``.git``/slash-trimmed URL for prefix matching."""
-    if not url:
-        return ""
-    u = url.strip().lower()
-    for prefix in ("https://", "http://", "git@"):
-        if u.startswith(prefix):
-            u = u[len(prefix) :]
-            break
-    return u.rstrip("/").removesuffix(".git")
-
-
 def _persist_pull_requests(db: Session, execution_id: uuid.UUID, result: dict[str, Any]) -> None:
     """Persist + link the fix PRs the CLI reported (Part D3).
 
@@ -313,7 +302,7 @@ def _persist_pull_requests(db: Session, execution_id: uuid.UUID, result: dict[st
             continue
 
         candidates = [primary, *db_get_related_repos(db, primary.id)]
-        by_url = {_normalize_web_url(r.web_url): r for r in candidates if r.web_url}
+        by_url = {normalize_web_url(r.web_url): r for r in candidates if r.web_url}
         group_pr_ids: list[uuid.UUID] = []
 
         for info in repos.values():
@@ -326,7 +315,7 @@ def _persist_pull_requests(db: Session, execution_id: uuid.UUID, result: dict[st
                     info,
                 )
                 continue
-            normalized = _normalize_web_url(pr_url)
+            normalized = normalize_web_url(pr_url)
             target = next(
                 (
                     repo

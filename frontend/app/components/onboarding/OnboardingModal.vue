@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const workspaceStore = useWorkspaceStore()
 const onboarding = useOnboarding()
+const guide = useGuide()
 
 const steps = [
   { title: 'Git Provider', description: 'Connect your code' },
@@ -146,7 +147,7 @@ function goToStep(index: number) {
               :key="1"
               :workspace-id="workspaceId"
               :git-org-ids="onboarding.gitOrgIds.value"
-              @complete="onboarding.complete()"
+              @complete="onboarding.complete(); guide.open()"
               @back="slideDirection = 'back'; onboarding.setStep('git_provider')"
             />
           </Transition>

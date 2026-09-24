@@ -3,6 +3,7 @@ const { t } = useI18n()
 const { user: authUser, logout } = useAuth()
 const workspaceStore = useWorkspaceStore()
 const onboarding = useOnboarding()
+const guide = useGuide()
 
 const navItems = computed(() => [
   [
@@ -12,6 +13,7 @@ const navItems = computed(() => [
     { label: t('nav.integrations'), icon: 'i-lucide-plug', to: '/integrations' },
   ],
   [
+    { label: t('nav.guide'), icon: 'i-lucide-book-open', onSelect: () => guide.open() },
     { label: t('nav.settings'), icon: 'i-lucide-settings', to: '/settings' },
   ],
 ])
@@ -24,7 +26,7 @@ const navItemsWithActive = computed(() =>
       ...item,
       active: item.to === '/'
         ? route.path === '/'
-        : route.path.startsWith(item.to),
+        : !!item.to && route.path.startsWith(item.to),
     })),
   ),
 )
@@ -235,4 +237,6 @@ onUnmounted(() => {
 
   <!-- Onboarding wizard modal -->
   <OnboardingModal />
+
+  <GuideModal />
 </template>

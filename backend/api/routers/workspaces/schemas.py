@@ -156,17 +156,46 @@ class WorkspaceMembersResponse(BaseModel):
     has_more: bool
 
 
-class WorkspaceStatsResponse(BaseModel):
-    """Workspace issue statistics."""
+class TopUserEntry(BaseModel):
+    """Someone who @-mentioned the bot, with how many times."""
 
-    total_issues: int = Field(description="Total number of issues")
-    pending: int = Field(description="Pending issues")
-    running: int = Field(description="Running issues")
-    pr_open: int = Field(description="Issues with open PRs")
-    pr_merged: int = Field(description="Issues with merged PRs")
-    not_actionable: int = Field(description="Issues marked not actionable")
-    rejected: int = Field(description="Rejected issues")
-    failed: int = Field(description="Failed issues")
-    pr_success_rate: float = Field(
-        description="PR success rate (merged / (merged + rejected + failed))"
-    )
+    identity_id: UUID
+    username: str | None
+    avatar_url: str | None
+    provider: str
+    pings: int
+
+
+class DashboardStatsSection(BaseModel):
+    """Dashboard cards. Runs, reviews and pings cover the stats window."""
+
+    running: int = Field(description="Executions running now, any workflow")
+    queued: int = Field(description="Executions waiting to start")
+    successful_runs: int = Field(description="Completed executions in the window")
+    reviewed_prs: int = Field(description="PRs with a completed review in the window")
+    top_users: list[TopUserEntry] = Field(description="Who pinged the bot most in the window")
+
+
+class IssueStatsSection(BaseModel):
+    """Issues page cards, all-time."""
+
+    handled: int = Field(description="Issues triaged not actionable, or fixed with a PR")
+    prs_created: int = Field(description="PRs Jeanclode opened for issues")
+    prs_merged: int = Field(description="Of those, merged")
+
+
+class PullRequestStatsSection(BaseModel):
+    """PR page cards, all-time."""
+
+    reviewed: int = Field(description="PRs with a completed review")
+    pending_review: int = Field(description="Open PRs on enabled repos never reviewed")
+    summarized: int = Field(description="PRs with a completed summary")
+
+
+class WorkspaceStatsResponse(BaseModel):
+    """Stat cards for the dashboard, issues and PR pages."""
+
+    window_days: int
+    dashboard: DashboardStatsSection
+    issues: IssueStatsSection
+    pull_requests: PullRequestStatsSection

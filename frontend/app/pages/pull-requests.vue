@@ -5,12 +5,11 @@ import type { PRFilters, PRStatus, PullRequest } from '~/types/api'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const workspaceStore = useWorkspaceStore()
 
 useHead({ title: () => `${t('pullRequests.title')} - Jeanclode` })
 
 const { user: authUser } = useAuth()
-const workspaceId = computed(() => workspaceStore.currentWorkspace?.id)
+const workspaceId = useActiveWorkspaceId()
 const { data: stats, status: statsStatus } = useWorkspaceStatsQuery(workspaceId)
 const statsLoading = computed(() => statsStatus.value === 'pending')
 const { data: sources } = useWorkspaceSourcesQuery(workspaceId)
@@ -154,7 +153,6 @@ const { data, status: queryStatus } = usePullRequestsQuery(workspaceId, filters)
 const prs = computed(() => data.value?.objects ?? [])
 const total = computed(() => data.value?.pagination?.total ?? 0)
 const loading = computed(() => queryStatus.value === 'pending')
-const totalPrs = computed(() => (stats.value?.pr_open ?? 0) + (stats.value?.pr_merged ?? 0))
 const connectedSources = computed(() =>
   (sources.value?.sources ?? []).filter((s) => s.provider === 'github' || s.provider === 'gitlab'),
 )
@@ -214,37 +212,29 @@ function handleLimitChange(newLimit: number) {
   <div class="flex flex-col h-[calc(100vh-3.5rem-3rem)]">
     <div class="shrink-0 space-y-4 pb-4">
       <!-- Stats -->
-      <div class="grid grid-cols-3 gap-3">
-        <template v-if="statsLoading">
-          <StatCardSkeleton
-            v-for="i in 3"
-            :key="i"
-          />
-        </template>
-        <template v-else>
-          <StatCard
-            icon="i-lucide-git-pull-request"
-            icon-bg="bg-neutral-100 dark:bg-neutral-700"
-            icon-color="text-neutral-500 dark:text-neutral-400"
-            :value="totalPrs"
-            label="Total"
-          />
-          <StatCard
-            icon="i-lucide-clock"
-            icon-bg="bg-amber-50 dark:bg-amber-900/30"
-            icon-color="text-amber-500"
-            :value="stats?.pr_open ?? 0"
-            label="Pending"
-          />
-          <StatCard
-            icon="i-lucide-check-circle"
-            icon-bg="bg-emerald-50 dark:bg-emerald-900/30"
-            icon-color="text-emerald-500"
-            :value="stats?.pr_merged ?? 0"
-            label="Reviewed"
-          />
-        </template>
-      </div>
+      <StatStrip :columns="3">
+        <StatTile
+          icon="i-lucide-scan-eye"
+          :label="$t('pullRequests.stats.reviewed')"
+          :value="stats?.pull_requests.reviewed"
+          :hint="$t('pullRequests.stats.reviewedHint')"
+          :loading="statsLoading"
+        />
+        <StatTile
+          icon="i-lucide-hourglass"
+          :label="$t('pullRequests.stats.awaiting')"
+          :value="stats?.pull_requests.pending_review"
+          :hint="$t('pullRequests.stats.awaitingHint')"
+          :loading="statsLoading"
+        />
+        <StatTile
+          icon="i-lucide-file-text"
+          :label="$t('pullRequests.stats.summarized')"
+          :value="stats?.pull_requests.summarized"
+          :hint="$t('pullRequests.stats.summarizedHint')"
+          :loading="statsLoading"
+        />
+      </StatStrip>
 
       <!-- Source tabs -->
       <SourceTabs
@@ -253,7 +243,10 @@ function handleLimitChange(newLimit: number) {
       />
 
       <!-- Filters -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div
+        data-guide="prFilters"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
         <div class="flex items-center gap-3 shrink-0">
           <div class="flex items-center gap-2">
             <span
@@ -330,6 +323,7 @@ function handleLimitChange(newLimit: number) {
         <!-- Desktop -->
         <div
           v-if="prs.length > 0 || loading"
+          data-guide="prList"
           class="hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0 overflow-hidden"
         >
           <UTable
@@ -379,6 +373,7 @@ function handleLimitChange(newLimit: number) {
             </template>
             <template #execution_status-cell="{ row }">
               <ExecutionBadge
+                data-guide="prLoop"
                 :status="reviewDisplayStatus(row.original)"
                 :workflow="row.original.workflow ?? undefined"
               />
@@ -388,6 +383,7 @@ function handleLimitChange(newLimit: number) {
             </template>
             <template #actions-cell="{ row }">
               <div
+                data-guide="prReview"
                 class="text-right"
                 @click.stop
               >

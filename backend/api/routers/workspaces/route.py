@@ -249,31 +249,20 @@ async def get_stats(
     workspace_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
 ) -> WorkspaceStatsResponse:
-    """Get issue statistics for a workspace."""
+    """Stat cards for the dashboard, issues and PR pages."""
     cached, version = await get_cached_stats(str(workspace_id))
 
     def _load(db: Session) -> WorkspaceStatsResponse | None:
         verify_workspace_access_from_path(db, current_user, workspace_id)
         if cached is not None:
             return None
-        stats = db_get_workspace_stats(db, workspace_id)
-        return WorkspaceStatsResponse(
-            total_issues=int(stats["total_issues"]),
-            pending=int(stats["pending"]),
-            running=int(stats["running"]),
-            pr_open=int(stats["pr_open"]),
-            pr_merged=int(stats["pr_merged"]),
-            not_actionable=int(stats["not_actionable"]),
-            rejected=int(stats["rejected"]),
-            failed=int(stats["failed"]),
-            pr_success_rate=float(stats["pr_success_rate"]),
-        )
+        return WorkspaceStatsResponse.model_validate(db_get_workspace_stats(db, workspace_id))
 
     fresh = await run_in_session(_load)
     if fresh is None:
         return WorkspaceStatsResponse.model_validate(cached)
     if version is not None:
-        await store_stats(str(workspace_id), version, fresh.model_dump())
+        await store_stats(str(workspace_id), version, fresh.model_dump(mode="json"))
     return fresh
 
 

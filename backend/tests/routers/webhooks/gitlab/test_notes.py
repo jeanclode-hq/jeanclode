@@ -15,6 +15,7 @@ from api.database import db_create_workspace
 from api.database.execution import db_create_execution
 from api.database.repository import db_get_repository_by_external_id
 from api.models.executions import Execution, ExecutionStatus, ExecutionTrigger, ExecutionWorkflow
+from api.models.identities import ProviderIdentity
 from api.models.issues import Issue
 from api.models.organizations import Organization
 from api.models.pull_requests import PullRequest
@@ -445,3 +446,32 @@ async def test_issue_mention_not_blocked_by_unrelated_workflow(app, db_session, 
     assert result.processed is True
     assert "queued behind" not in result.message
     assert mock_broker.publish.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synced", [True, False])
+async def test_mention_records_the_sender_identity_when_synced(
+    app, db_session, mock_broker, synced
+):
+    from api.routers.webhooks.gitlab.notes import handle_note_event
+
+    with app.database.session() as db:
+        _, _, repo = _make_org_repo(db, settings={}, external_id="8899")
+        _seed_mr(db, repo, iid=31)
+        identity_id = None
+        if synced:
+            identity = ProviderIdentity(provider="gitlab", external_id="4242", username="bob")
+            db.add(identity)
+            db.commit()
+            identity_id = identity.id
+
+    with app.database.session() as db:
+        repo = db_get_repository_by_external_id(db, "8899")
+        result = await handle_note_event(
+            _mr_top_level_payload(repo=repo, iid=31, body="@jeanclode-bot help", sender="bob"),
+        )
+    assert result.processed is True
+
+    with app.database.session() as db:
+        execution = db.query(Execution).one()
+        assert execution.triggered_by_identity_id == identity_id

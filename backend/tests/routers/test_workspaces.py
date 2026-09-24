@@ -74,6 +74,8 @@ def _setup_workspace_with_stats(db, mock_auth):
         ex.issues = list(issues)
         if pull_requests:
             ex.pull_requests = list(pull_requests)
+            for pr in pull_requests:
+                pr.issues = list(issues)
         db.add(ex)
         return ex
 
@@ -143,7 +145,6 @@ def _setup_workspace_with_stats(db, mock_auth):
 
 
 def test_workspace_stats(auth_client, app, mock_auth):
-    """GET /workspaces/{id}/stats returns correct counts."""
     with app.database.session() as db:
         ws = _setup_workspace_with_stats(db, mock_auth)
         ws_id = str(ws.id)
@@ -152,20 +153,20 @@ def test_workspace_stats(auth_client, app, mock_auth):
     assert resp.status_code == 200
     data = resp.json()
 
-    assert data["total_issues"] == 9
-    assert data["pending"] == 2
-    assert data["running"] == 1
-    assert data["pr_open"] == 1
-    assert data["pr_merged"] == 2
-    assert data["not_actionable"] == 1
-    assert data["rejected"] == 1
-    assert data["failed"] == 1
-    # pr_success_rate = 2 / (2 + 1 + 1) = 0.5
-    assert data["pr_success_rate"] == 0.5
+    assert data["window_days"] == 30
+    assert data["dashboard"] == {
+        "running": 1,
+        "queued": 0,
+        "successful_runs": 4,
+        "reviewed_prs": 0,
+        "top_users": [],
+    }
+    # not_actionable #6 plus the four issues with a fix PR; pending/running/failed ones aren't.
+    assert data["issues"] == {"handled": 5, "prs_created": 4, "prs_merged": 2}
+    assert data["pull_requests"] == {"reviewed": 0, "pending_review": 1, "summarized": 0}
 
 
 def test_workspace_stats_empty(auth_client, app, mock_auth):
-    """GET /workspaces/{id}/stats returns zeros for workspace with no issues."""
     with app.database.session() as db:
         ws = db_create_workspace(db=db, name="empty-ws", slug=f"empty-ws-{uuid.uuid4().hex[:6]}")
         db_create_workspace_membership(db=db, workspace_id=ws.id, user_id=mock_auth.id)
@@ -174,8 +175,10 @@ def test_workspace_stats_empty(auth_client, app, mock_auth):
     resp = auth_client.get(f"/workspaces/{ws_id}/stats")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["total_issues"] == 0
-    assert data["pr_success_rate"] == 0.0
+    assert data["dashboard"]["successful_runs"] == 0
+    assert data["dashboard"]["top_users"] == []
+    assert data["issues"] == {"handled": 0, "prs_created": 0, "prs_merged": 0}
+    assert data["pull_requests"] == {"reviewed": 0, "pending_review": 0, "summarized": 0}
 
 
 def test_workspace_stats_forbidden(auth_client, app, mock_auth):

@@ -106,7 +106,7 @@ export function getExecStatusColor(status: string): string {
 
 export function getExecStatusLabel(status: string, workflow: string = 'fix'): string {
   const labels = EXEC_STATUS_LABELS[workflow] ?? EXEC_STATUS_LABELS.fix
-  return labels[status] ?? status
+  return labels[status] ?? EXEC_STATUS_LABELS.fix[status] ?? status
 }
 
 const EXEC_STATUS_ICONS: Record<string, string> = {

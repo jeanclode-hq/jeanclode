@@ -24,6 +24,7 @@ from api.models.executions import Execution, ExecutionStatus, ExecutionWorkflow
 from api.models.pull_requests import PullRequest
 from api.plugins.container.consumer_gate import status_consumer_gate
 from api.plugins.container.dispatch_inputs import resolve_memory_workspace_id
+from api.plugins.container.issue_resolve_result import persist_issue_resolve_result
 from api.plugins.container.respond_queue import dispatch_next_queued_respond
 from api.plugins.container.retry_dispatch import (
     recheck_issue_still_actionable,
@@ -528,6 +529,8 @@ async def _handle_execution_status(message: ExecutionStatusMessage) -> None:
                     error_type=message.error_type,
                     error_detail=message.error_message,
                 )
+                if execution and message.result:
+                    persist_issue_resolve_result(db, execution_id, message.result)
 
             # Read fields while the session is still open — attribute access
             # after the `with` block closes can raise DetachedInstanceError

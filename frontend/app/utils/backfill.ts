@@ -10,7 +10,7 @@ import type { BackfillScope } from '@jeanclode/api-types'
  */
 export const BACKFILL_SCOPES: readonly BackfillScope[] = ['none', '7d', '30d', 'all']
 
-export const DEFAULT_BACKFILL_SCOPE: BackfillScope = '30d'
+export const DEFAULT_BACKFILL_SCOPE: BackfillScope = 'none'
 
 const LABEL_KEYS: Record<BackfillScope, string> = {
   'none': 'onboarding.sentry.backfillNone',

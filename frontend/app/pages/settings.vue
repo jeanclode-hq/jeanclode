@@ -17,7 +17,6 @@ const {
   connectedProviderCount,
 } = useAuth()
 
-const workspaceStore = useWorkspaceStore()
 const { data: appConfig } = useAppConfigQuery()
 
 useHead({
@@ -25,7 +24,7 @@ useHead({
 })
 
 // Settings tabs
-const activeTab = ref('account')
+const activeTab = ref(toValue(inject(GUIDE_SETTINGS_TAB, 'account')))
 const tabs = computed(() => [
   { id: 'account', label: t('settings.tabs.account'), icon: 'i-lucide-user' },
   { id: 'workspace', label: t('settings.tabs.workspace'), icon: 'i-lucide-building-2' },
@@ -123,7 +122,7 @@ const memberSince = computed(() => {
 })
 
 // === Workspace tab ===
-const workspaceId = computed(() => workspaceStore.currentWorkspace?.id)
+const workspaceId = useActiveWorkspaceId()
 
 const membersPage = ref(1)
 const { data: membersData, isLoading: membersLoading } = useWorkspaceMembersQuery(
@@ -186,7 +185,7 @@ function providerIcon(provider: string | null) {
         </section>
 
         <!-- Connected Accounts -->
-        <section>
+        <section data-guide="settingsAccounts">
           <h3 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-2">
             {{ $t('settings.accounts.title') }}
           </h3>
@@ -338,7 +337,7 @@ function providerIcon(provider: string | null) {
 
       <!-- Workspace tab -->
       <template v-if="activeTab === 'workspace'">
-        <section>
+        <section data-guide="settingsMembers">
           <div class="mb-4">
             <h3 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
               {{ $t('settings.workspaceTab.title') }}
@@ -350,15 +349,27 @@ function providerIcon(provider: string | null) {
 
           <!-- Member table -->
           <UCard>
-            <div v-if="membersLoading" class="flex items-center justify-center py-8">
-              <UIcon name="i-lucide-loader-2" class="size-5 animate-spin text-neutral-400" />
+            <div
+              v-if="membersLoading"
+              class="flex items-center justify-center py-8"
+            >
+              <UIcon
+                name="i-lucide-loader-2"
+                class="size-5 animate-spin text-neutral-400"
+              />
             </div>
-            <div v-else-if="!membersData?.members.length" class="py-8 text-center">
+            <div
+              v-else-if="!membersData?.members.length"
+              class="py-8 text-center"
+            >
               <p class="text-sm text-neutral-500 dark:text-neutral-400">
                 {{ $t('common.noResults') }}
               </p>
             </div>
-            <div v-else class="overflow-x-auto">
+            <div
+              v-else
+              class="overflow-x-auto"
+            >
               <table class="w-full text-sm">
                 <thead>
                   <tr class="border-b border-neutral-200 dark:border-neutral-700">
@@ -391,7 +402,10 @@ function providerIcon(provider: string | null) {
                       </div>
                     </td>
                     <td class="py-3 pr-4">
-                      <div v-if="member.providers.length" class="flex items-center gap-2">
+                      <div
+                        v-if="member.providers.length"
+                        class="flex items-center gap-2"
+                      >
                         <UIcon
                           v-for="p in member.providers"
                           :key="p"
@@ -400,7 +414,10 @@ function providerIcon(provider: string | null) {
                           class="size-4 text-neutral-500"
                         />
                       </div>
-                      <span v-else class="text-neutral-400">—</span>
+                      <span
+                        v-else
+                        class="text-neutral-400"
+                      >—</span>
                     </td>
                     <td class="py-3 text-neutral-500 dark:text-neutral-400">
                       {{ formatJoinedDate(member.joined_at) }}

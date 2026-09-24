@@ -82,6 +82,7 @@ async function handleRemove(relatedRepoId: string) {
         class="size-3.5 text-neutral-400 animate-spin shrink-0"
       />
       <RepoMapPicker
+        data-guide="gitRelated"
         class="shrink-0"
         :git-orgs="linkableOrgs"
         :exclude-ids="excludeIds"
@@ -102,6 +103,7 @@ async function handleRemove(relatedRepoId: string) {
 
     <div
       v-if="related.length > 0"
+      data-guide="gitRelated"
       class="flex items-center gap-1.5 overflow-x-auto scrollbar-none pl-7 min-w-0 py-0.5"
     >
       <span

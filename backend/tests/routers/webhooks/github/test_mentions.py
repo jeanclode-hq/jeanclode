@@ -15,6 +15,7 @@ from api.database import db_create_workspace
 from api.database.execution import db_create_execution
 from api.database.repository import db_get_repository_by_external_id
 from api.models.executions import Execution, ExecutionStatus, ExecutionTrigger, ExecutionWorkflow
+from api.models.identities import ProviderIdentity
 from api.models.issues import Issue
 from api.models.organizations import Organization
 from api.models.pull_requests import PullRequest
@@ -122,6 +123,7 @@ def _issue_comment_payload(
     sender: str,
     sender_type: str = "User",
     pr_author: str = "alice",
+    sender_id: int | None = None,
 ) -> dict:
     return {
         "action": "created",
@@ -139,7 +141,7 @@ def _issue_comment_payload(
             "html_url": f"https://github.com/{repo.name}/pull/{pr_number}#issuecomment-1001",
         },
         "repository": {"id": int(repo.external_id), "full_name": f"acme/{repo.name}"},
-        "sender": {"login": sender, "type": sender_type},
+        "sender": {"login": sender, "type": sender_type, "id": sender_id},
     }
 
 
@@ -481,3 +483,35 @@ async def test_issue_mention_not_blocked_by_unrelated_workflow(app, db_session, 
     assert result.processed is True
     assert "queued behind" not in result.message
     assert mock_broker.publish.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synced", [True, False])
+async def test_mention_records_the_sender_identity_when_synced(
+    app, db_session, mock_broker, synced
+):
+    from api.routers.webhooks.github.mentions import handle_mention_event
+
+    with app.database.session() as db:
+        _, _, repo = _make_org_repo(db, settings=_SETTINGS_ON, external_id="7788")
+        _seed_pr(db, repo)
+        identity_id = None
+        if synced:
+            identity = ProviderIdentity(provider="github", external_id="555", username="bob")
+            db.add(identity)
+            db.commit()
+            identity_id = identity.id
+
+    with app.database.session() as db:
+        repo = db_get_repository_by_external_id(db, "7788")
+        result = await handle_mention_event(
+            "issue_comment",
+            _issue_comment_payload(
+                repo=repo, pr_number=7, body="@jeanclode-bot help", sender="bob", sender_id=555
+            ),
+        )
+    assert result.processed is True
+
+    with app.database.session() as db:
+        execution = db.query(Execution).one()
+        assert execution.triggered_by_identity_id == identity_id

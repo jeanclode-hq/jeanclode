@@ -22,7 +22,7 @@ class LinkSentrySourceRequest(BaseModel):
         description=(
             "How much existing Sentry history to import on connect. Omit to "
             "keep an already-linked org's stored scope; new orgs default to "
-            "the last 30 days."
+            "importing nothing."
         ),
     )
 
