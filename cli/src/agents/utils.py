@@ -54,6 +54,10 @@ def tool_summary(block: ToolUseBlock, cwd: Path | None = None) -> str:
             return str(inp.get("query", ""))
         case "Agent":
             return str(inp.get("description", ""))
+        case "ToolSearch":
+            return str(inp.get("query", ""))
+        case "Skill":
+            return str(inp.get("skill", ""))
         case "StructuredOutput":
             # Keys only — the payload carries whole fix plans. Enough to
             # tell "the agent handed over nothing" from "it handed over

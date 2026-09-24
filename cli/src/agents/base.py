@@ -17,6 +17,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     HookMatcher,
     ResultMessage,
+    SystemMessage,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -166,6 +167,9 @@ class BaseAgent:
                                     parent_tool_use_id=parent_id,
                                 )
                             )
+
+                elif isinstance(message, SystemMessage) and message.subtype == "init":
+                    _log_session_init(agent_name, message.data)
 
                 elif isinstance(message, ResultMessage):
                     text = message.result or ""
@@ -435,3 +439,30 @@ class BaseAgent:
                 "schema": self._schema_for_cli(self.output_schema),
             }
         return ClaudeAgentOptions(**kwargs)
+
+
+def _log_session_init(agent_name: str, data: dict[str, Any]) -> None:
+    """Log what the CLI actually loaded — the only proof a plugin skill or MCP
+    server made it into the session, as opposed to merely being configured.
+    """
+
+    def names(key: str) -> str:
+        items = data.get(key) or []
+        return (
+            ", ".join(str(i.get("name", i)) if isinstance(i, dict) else str(i) for i in items)
+            or "none"
+        )
+
+    servers = (
+        ", ".join(f"{s.get('name')}={s.get('status')}" for s in data.get("mcp_servers") or [])
+        or "none"
+    )
+    logger.info(
+        "%s: session init — model=%s plugins=[%s] skills=[%s] mcp=[%s] tools=%d",
+        agent_name,
+        data.get("model"),
+        names("plugins"),
+        names("skills"),
+        servers,
+        len(data.get("tools") or []),
+    )

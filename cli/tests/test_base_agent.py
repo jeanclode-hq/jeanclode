@@ -13,6 +13,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     HookMatcher,
     ResultMessage,
+    SystemMessage,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -228,6 +229,35 @@ async def test_invoke_without_extra_hooks_leaves_hooks_unset(tmp_path: Path) -> 
         await Agent().invoke(_Input(message="x"), ctx)
 
     assert getattr(captured["options"], "hooks", None) is None
+
+
+async def test_session_init_logs_loaded_plugins_skills_and_servers(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    Agent = _make_agent(tmp_path)
+    ctx, _ = _ctx(tmp_path)
+    init = SystemMessage(
+        subtype="init",
+        data={
+            "model": "claude-x",
+            "tools": ["Read", "Bash", "Skill"],
+            "plugins": [{"name": "figma", "path": "/p/figma"}],
+            "skills": ["figma-context", "email-html"],
+            "mcp_servers": [{"name": "memory", "status": "connected"}],
+        },
+    )
+
+    def fake_query(*, prompt: str, options: Any) -> Any:
+        return _stream([init, _result_message("ok")])
+
+    with patch("src.agents.base.query", side_effect=fake_query), caplog.at_level("INFO"):
+        await Agent().invoke(_Input(message="x"), ctx)
+
+    line = next(r.getMessage() for r in caplog.records if "session init" in r.getMessage())
+    assert "plugins=[figma]" in line
+    assert "skills=[figma-context, email-html]" in line
+    assert "mcp=[memory=connected]" in line
+    assert "tools=3" in line
 
 
 async def test_invoke_emits_failed_end_on_exception(tmp_path: Path) -> None:

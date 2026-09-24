@@ -14,7 +14,7 @@ class IssueFixerAgent(IssueAgent):
     name: ClassVar[str] = "issue-fixer"
     prompt_file: ClassVar[str] = "fixer.md"
     allowed_tools: ClassVar[list[str]] = ["Read", "Edit", "Write", "Grep", "Glob", "Bash"]
-    max_turns: ClassVar[int] = 150
+    max_turns: ClassVar[int] = 250
     output_schema: ClassVar[type[BaseModel] | None] = IssueFixerOutput
     use_third_party_skills: ClassVar[bool] = True
     use_mcp_connectors: ClassVar[bool] = True
