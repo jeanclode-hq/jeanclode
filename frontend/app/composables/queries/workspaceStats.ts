@@ -1,4 +1,4 @@
-import type { DashboardStats, WorkspaceSources } from '~/types/api'
+import type { WorkspaceStats, WorkspaceSources } from '~/types/api'
 
 export function useWorkspaceStatsQuery(workspaceId: MaybeRefOrGetter<string | undefined>) {
   const client = useApi()
@@ -9,7 +9,7 @@ export function useWorkspaceStatsQuery(workspaceId: MaybeRefOrGetter<string | un
       const wsId = toValue(workspaceId)
       if (!wsId) return null
 
-      const { data } = await client.get<{ 200: DashboardStats }>({
+      const { data } = await client.get<{ 200: WorkspaceStats }>({
         url: '/workspaces/{workspace_id}/stats',
         path: { workspace_id: wsId },
       })

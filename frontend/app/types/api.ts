@@ -236,16 +236,33 @@ export interface WorkspaceMembers {
   has_more: boolean
 }
 
-export interface DashboardStats {
-  total_issues: number
-  pending: number
-  running: number
-  pr_open: number
-  pr_merged: number
-  failed: number
-  not_actionable: number
-  rejected: number
-  pr_success_rate: number
+export interface TopUser {
+  identity_id: string
+  username: string | null
+  avatar_url: string | null
+  provider: Provider
+  pings: number
+}
+
+export interface WorkspaceStats {
+  window_days: number
+  dashboard: {
+    running: number
+    queued: number
+    successful_runs: number
+    reviewed_prs: number
+    top_users: TopUser[]
+  }
+  issues: {
+    handled: number
+    prs_created: number
+    prs_merged: number
+  }
+  pull_requests: {
+    reviewed: number
+    pending_review: number
+    summarized: number
+  }
 }
 
 // -- Pagination --

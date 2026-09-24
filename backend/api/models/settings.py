@@ -221,7 +221,7 @@ class SentryOrgSettings(BaseModel):
 
     triggers: SentryTriggerSettings = Field(default_factory=SentryTriggerSettings)
     backfill: BackfillScope = Field(
-        default=BackfillScope.DAYS_30,
+        default=BackfillScope.NONE,
         description="How much existing Sentry history to import on connect",
     )
     batch_window: BatchWindow = Field(

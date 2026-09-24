@@ -336,7 +336,7 @@ async function handleImportNow() {
     </div>
 
     <!-- Project mappings -->
-    <section>
+    <section data-guide="sentryMapping">
       <div class="flex items-center justify-between mb-3">
         <div>
           <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
@@ -561,7 +561,10 @@ async function handleImportNow() {
         Triggers
       </h4>
       <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none divide-y divide-neutral-200 dark:divide-neutral-700 overflow-hidden">
-        <div class="px-4 py-3.5 space-y-2">
+        <div
+          data-guide="sentryAutofix"
+          class="px-4 py-3.5 space-y-2"
+        >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1.5">
               <p class="text-sm text-neutral-900 dark:text-neutral-100">
@@ -586,6 +589,7 @@ async function handleImportNow() {
         </div>
         <div
           v-if="settings.triggers.triage === 'automatic'"
+          data-guide="sentryBatch"
           class="px-4 py-3.5 space-y-2"
         >
           <div class="flex items-center justify-between">
@@ -612,6 +616,7 @@ async function handleImportNow() {
         </div>
         <div
           v-if="settings.triggers.triage === 'automatic'"
+          data-guide="sentryBatch"
           class="px-4 py-3.5 space-y-2"
         >
           <div class="flex items-center justify-between">
@@ -638,6 +643,7 @@ async function handleImportNow() {
         </div>
         <div
           v-if="settings.triggers.triage === 'automatic'"
+          data-guide="sentryGate"
           class="px-4 py-3.5 space-y-2"
         >
           <div class="flex items-center justify-between">
@@ -664,7 +670,10 @@ async function handleImportNow() {
     </section>
 
     <!-- Issue import -->
-    <section v-if="settings">
+    <section
+      v-if="settings"
+      data-guide="sentryImport"
+    >
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Issue import
       </h4>

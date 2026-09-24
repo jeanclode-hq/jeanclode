@@ -29,6 +29,7 @@ def db_create_execution(
     status: str = ExecutionStatus.QUEUED.value,
     retry_target_url: str | None = None,
     prompt_text: str | None = None,
+    triggered_by_identity_id: UUID | None = None,
 ) -> Execution:
     """Create a new execution record linked to one or more targets.
 
@@ -59,6 +60,7 @@ def db_create_execution(
         status=status,
         retry_target_url=retry_target_url,
         prompt_text=prompt_text,
+        triggered_by_identity_id=triggered_by_identity_id,
     )
     if issues:
         execution.issues = list(issues)

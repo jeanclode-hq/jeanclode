@@ -320,6 +320,38 @@ export type CredentialStatus = {
 };
 
 /**
+ * DashboardStatsSection
+ * Dashboard cards. Runs, reviews and pings cover the stats window.
+ */
+export type DashboardStatsSection = {
+    /**
+     * Running
+     * Executions running now, any workflow
+     */
+    running: number;
+    /**
+     * Queued
+     * Executions waiting to start
+     */
+    queued: number;
+    /**
+     * Successful Runs
+     * Completed executions in the window
+     */
+    successful_runs: number;
+    /**
+     * Reviewed Prs
+     * PRs with a completed review in the window
+     */
+    reviewed_prs: number;
+    /**
+     * Top Users
+     * Who pinged the bot most in the window
+     */
+    top_users: Array<TopUserEntry>;
+};
+
+/**
  * DisconnectProviderResponse
  * Response after disconnecting a provider.
  */
@@ -925,6 +957,28 @@ export type IssueResponse = {
 };
 
 /**
+ * IssueStatsSection
+ * Issues page cards, all-time.
+ */
+export type IssueStatsSection = {
+    /**
+     * Handled
+     * Issues triaged not actionable, or fixed with a PR
+     */
+    handled: number;
+    /**
+     * Prs Created
+     * PRs Jeanclode opened for issues
+     */
+    prs_created: number;
+    /**
+     * Prs Merged
+     * Of those, merged
+     */
+    prs_merged: number;
+};
+
+/**
  * LLMCredentialInput
  * Input for creating/updating one credential in the LLM pool (ADR-010).
  *
@@ -1151,7 +1205,7 @@ export type LinkSentrySourceRequest = {
      */
     base_url?: string;
     /**
-     * How much existing Sentry history to import on connect. Omit to keep an already-linked org's stored scope; new orgs default to the last 30 days.
+     * How much existing Sentry history to import on connect. Omit to keep an already-linked org's stored scope; new orgs default to importing nothing.
      */
     backfill_scope?: BackfillScope | null;
 };
@@ -1975,6 +2029,28 @@ export type PullRequestResponse = {
 };
 
 /**
+ * PullRequestStatsSection
+ * PR page cards, all-time.
+ */
+export type PullRequestStatsSection = {
+    /**
+     * Reviewed
+     * PRs with a completed review
+     */
+    reviewed: number;
+    /**
+     * Pending Review
+     * Open PRs on enabled repos never reviewed
+     */
+    pending_review: number;
+    /**
+     * Summarized
+     * PRs with a completed summary
+     */
+    summarized: number;
+};
+
+/**
  * PullRequestSummary
  * Summary of a pull/merge request opened by an execution.
  */
@@ -2401,6 +2477,33 @@ export type SyncOrgRepositoriesResponse = {
      * Human-readable outcome
      */
     message: string;
+};
+
+/**
+ * TopUserEntry
+ * Someone who @-mentioned the bot, with how many times.
+ */
+export type TopUserEntry = {
+    /**
+     * Identity Id
+     */
+    identity_id: string;
+    /**
+     * Username
+     */
+    username: string | null;
+    /**
+     * Avatar Url
+     */
+    avatar_url: string | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Pings
+     */
+    pings: number;
 };
 
 /**
@@ -2854,54 +2957,16 @@ export type WorkspaceSourcesResponse = {
 
 /**
  * WorkspaceStatsResponse
- * Workspace issue statistics.
+ * Stat cards for the dashboard, issues and PR pages.
  */
 export type WorkspaceStatsResponse = {
     /**
-     * Total Issues
-     * Total number of issues
+     * Window Days
      */
-    total_issues: number;
-    /**
-     * Pending
-     * Pending issues
-     */
-    pending: number;
-    /**
-     * Running
-     * Running issues
-     */
-    running: number;
-    /**
-     * Pr Open
-     * Issues with open PRs
-     */
-    pr_open: number;
-    /**
-     * Pr Merged
-     * Issues with merged PRs
-     */
-    pr_merged: number;
-    /**
-     * Not Actionable
-     * Issues marked not actionable
-     */
-    not_actionable: number;
-    /**
-     * Rejected
-     * Rejected issues
-     */
-    rejected: number;
-    /**
-     * Failed
-     * Failed issues
-     */
-    failed: number;
-    /**
-     * Pr Success Rate
-     * PR success rate (merged / (merged + rejected + failed))
-     */
-    pr_success_rate: number;
+    window_days: number;
+    dashboard: DashboardStatsSection;
+    issues: IssueStatsSection;
+    pull_requests: PullRequestStatsSection;
 };
 
 /**

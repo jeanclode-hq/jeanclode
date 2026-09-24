@@ -1,18 +1,23 @@
 """Database operations for dashboard endpoints."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, case, exists, func, literal, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from api.database.organization import db_get_org_subtree_ids
-from api.models.execution_links import execution_issues, execution_pull_requests
+from api.database.repository import repo_enabled_clause
+from api.models.execution_links import (
+    execution_issues,
+    execution_pull_requests,
+    issue_pull_requests,
+)
 from api.models.executions import Execution, ExecutionStatus, ExecutionWorkflow
 from api.models.identities import ProviderIdentity
 from api.models.issues import Issue, TriageResult
 from api.models.organizations import Organization
-from api.models.pull_requests import PullRequest
+from api.models.pull_requests import PRState, PullRequest
 from api.models.repositories import Repository, RepositoryMapping
 
 # Friendly execution-status filter buckets -> raw ``Execution.status`` values.
@@ -531,64 +536,165 @@ def db_get_workspace_active_executions(db: Session, workspace_id: UUID) -> list[
     )
 
 
-def db_get_workspace_stats(
-    db: Session,
-    workspace_id: UUID,
-) -> dict[str, int | float]:
-    """Get issue status counts for a workspace using computed status.
+STATS_WINDOW_DAYS = 30
+TOP_USERS_LIMIT = 2
 
-    Returns:
-        Dict with total_issues, per-status counts, and pr_success_rate.
+
+def _workspace_pr_ids(workspace_id: UUID):
+    return (
+        select(PullRequest.id)
+        .join(Repository, Repository.id == PullRequest.repository_id)
+        .join(Organization, Organization.id == Repository.org_id)
+        .where(Organization.workspace_id == workspace_id)
+    )
+
+
+def _completed_prs(workflow: ExecutionWorkflow, since: datetime | None = None):
+    """PR ids with at least one completed run of ``workflow``."""
+    conditions = [
+        Execution.workflow == workflow.value,
+        Execution.status == ExecutionStatus.COMPLETED.value,
+    ]
+    if since is not None:
+        conditions.append(Execution.created_at >= since)
+    return (
+        select(execution_pull_requests.c.pull_request_id)
+        .join(Execution, Execution.id == execution_pull_requests.c.execution_id)
+        .where(*conditions)
+    )
+
+
+def _count_workspace_prs(db: Session, workspace_id: UUID, *conditions) -> int:
+    return (
+        db.query(func.count(PullRequest.id))
+        .filter(PullRequest.id.in_(_workspace_pr_ids(workspace_id)), *conditions)
+        .scalar()
+        or 0
+    )
+
+
+def db_get_workspace_stats(db: Session, workspace_id: UUID) -> dict:
+    """Every stat card in the dashboard, issues and PR pages.
+
+    Runs, reviews and pings are counted over the last ``STATS_WINDOW_DAYS``;
+    the issue and PR page cards are snapshots, matching the tables under them.
     """
-    latest_exec = _latest_execution_subquery()
+    since = datetime.now(UTC) - timedelta(days=STATS_WINDOW_DAYS)
+    in_workspace = _execution_in_workspace(workspace_id)
 
-    computed_status = _computed_status_expression(latest_exec, PullRequest.__table__)
-
-    rows = (
+    running, queued, successful_runs = (
         db.query(
-            computed_status.label("computed_status"),
-            func.count().label("cnt"),
+            func.count().filter(Execution.status == ExecutionStatus.RUNNING.value),
+            func.count().filter(Execution.status == ExecutionStatus.QUEUED.value),
+            func.count().filter(
+                Execution.status == ExecutionStatus.COMPLETED.value,
+                Execution.created_at >= since,
+            ),
         )
-        .select_from(Issue)
-        .join(Repository, Issue.repository_id == Repository.id)
-        .join(Organization, Repository.org_id == Organization.id)
-        .outerjoin(latest_exec, latest_exec.c.issue_id == Issue.id)
-        .outerjoin(PullRequest, latest_exec.c.pull_request_id == PullRequest.id)
-        .filter(Organization.workspace_id == workspace_id)
-        .group_by(computed_status)
+        .select_from(Execution)
+        .filter(
+            or_(
+                Execution.status.in_([ExecutionStatus.RUNNING.value, ExecutionStatus.QUEUED.value]),
+                Execution.created_at >= since,
+            ),
+            in_workspace,
+        )
+        .one()
+    )
+
+    top_users = (
+        db.query(ProviderIdentity, func.count(Execution.id).label("pings"))
+        .join(Execution, Execution.triggered_by_identity_id == ProviderIdentity.id)
+        .filter(
+            Execution.workflow == ExecutionWorkflow.RESPOND.value,
+            Execution.created_at >= since,
+            in_workspace,
+        )
+        .group_by(ProviderIdentity.id)
+        .order_by(func.count(Execution.id).desc(), ProviderIdentity.username)
+        .limit(TOP_USERS_LIMIT)
         .all()
     )
 
-    status_keys = [
-        "pending",
-        "running",
-        "pr_open",
-        "pr_merged",
-        "not_actionable",
-        "rejected",
-        "failed",
-        "completed",
-    ]
-    counts: dict[str, int] = dict.fromkeys(status_keys, 0)
-    for status_val, cnt in rows:
-        if status_val in counts:
-            counts[status_val] = cnt
+    workspace_issue_ids = (
+        select(Issue.id)
+        .join(Repository, Repository.id == Issue.repository_id)
+        .join(Organization, Organization.id == Repository.org_id)
+        .where(Organization.workspace_id == workspace_id)
+    )
+    has_fix_pr = exists(
+        select(issue_pull_requests.c.issue_id).where(issue_pull_requests.c.issue_id == Issue.id)
+    )
+    issues_handled = (
+        db.query(func.count(Issue.id))
+        .filter(
+            Issue.id.in_(workspace_issue_ids),
+            or_(Issue.triage_result == TriageResult.NOT_ACTIONABLE.value, has_fix_pr),
+        )
+        .scalar()
+        or 0
+    )
+    fix_pr_ids = select(issue_pull_requests.c.pull_request_id).where(
+        issue_pull_requests.c.issue_id.in_(workspace_issue_ids)
+    )
+    fix_prs_created, fix_prs_merged = (
+        db.query(
+            func.count(PullRequest.id),
+            func.count(PullRequest.id).filter(PullRequest.state == PRState.MERGED.value),
+        )
+        .filter(PullRequest.id.in_(fix_pr_ids))
+        .one()
+    )
 
-    total = sum(counts.values())
-    pr_merged = counts["pr_merged"]
-    denominator = pr_merged + counts["rejected"] + counts["failed"]
-    pr_success_rate = (pr_merged / denominator) if denominator > 0 else 0.0
+    reviewed = _completed_prs(ExecutionWorkflow.REVIEW)
+    pending_review = (
+        db.query(func.count(PullRequest.id))
+        .join(Repository, Repository.id == PullRequest.repository_id)
+        .join(Organization, Organization.id == Repository.org_id)
+        .filter(
+            Organization.workspace_id == workspace_id,
+            PullRequest.state == PRState.OPEN.value,
+            repo_enabled_clause(),
+            PullRequest.id.notin_(reviewed),
+        )
+        .scalar()
+        or 0
+    )
 
     return {
-        "total_issues": total,
-        "pending": counts["pending"],
-        "running": counts["running"],
-        "pr_open": counts["pr_open"],
-        "pr_merged": pr_merged,
-        "not_actionable": counts["not_actionable"],
-        "rejected": counts["rejected"],
-        "failed": counts["failed"],
-        "pr_success_rate": round(pr_success_rate, 4),
+        "window_days": STATS_WINDOW_DAYS,
+        "dashboard": {
+            "running": running,
+            "queued": queued,
+            "successful_runs": successful_runs,
+            "reviewed_prs": _count_workspace_prs(
+                db,
+                workspace_id,
+                PullRequest.id.in_(_completed_prs(ExecutionWorkflow.REVIEW, since)),
+            ),
+            "top_users": [
+                {
+                    "identity_id": identity.id,
+                    "username": identity.username,
+                    "avatar_url": identity.avatar_url,
+                    "provider": identity.provider,
+                    "pings": pings,
+                }
+                for identity, pings in top_users
+            ],
+        },
+        "issues": {
+            "handled": issues_handled,
+            "prs_created": fix_prs_created,
+            "prs_merged": fix_prs_merged,
+        },
+        "pull_requests": {
+            "reviewed": _count_workspace_prs(db, workspace_id, PullRequest.id.in_(reviewed)),
+            "pending_review": pending_review,
+            "summarized": _count_workspace_prs(
+                db, workspace_id, PullRequest.id.in_(_completed_prs(ExecutionWorkflow.SUMMARY))
+            ),
+        },
     }
 
 

@@ -12,7 +12,7 @@ useHead({
   title: () => `${t('dashboard.title')} - Jeanclode`,
 })
 
-const workspaceId = computed(() => workspaceStore.currentWorkspace?.id)
+const workspaceId = useActiveWorkspaceId()
 
 // Global stats
 const { data: stats, status: statsStatus } = useWorkspaceStatsQuery(workspaceId)
@@ -42,10 +42,8 @@ function openDetail(execution: WorkspaceExecution) {
   detailModalOpen.value = true
 }
 
-const successRate = computed(() => {
-  const rate = stats.value?.pr_success_rate ?? 0
-  return `${Math.round(rate * 100)}%`
-})
+const dashboardStats = computed(() => stats.value?.dashboard)
+const windowHint = computed(() => t('dashboard.stats.window', { days: stats.value?.window_days ?? 30 }))
 
 const greeting = computed(() => {
   const name = authUser.value?.display_username
@@ -86,47 +84,41 @@ const greeting = computed(() => {
       </ClientOnly>
 
       <!-- Stat cards -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <template v-if="statsLoading">
-          <StatCardSkeleton
-            v-for="i in 4"
-            :key="i"
-          />
-        </template>
-        <template v-else>
-          <StatCard
-            icon="i-lucide-play"
-            icon-bg="bg-blue-50 dark:bg-blue-900/30"
-            icon-color="text-blue-500"
-            :value="stats?.running ?? 0"
-            :label="$t('dashboard.stats.activeAgents')"
-          />
-          <StatCard
-            icon="i-lucide-circle-dot"
-            icon-bg="bg-neutral-100 dark:bg-neutral-700"
-            icon-color="text-neutral-500 dark:text-neutral-400"
-            :value="stats?.total_issues ?? 0"
-            :label="$t('dashboard.stats.totalIssues')"
-          />
-          <StatCard
-            icon="i-lucide-git-pull-request"
-            icon-bg="bg-emerald-50 dark:bg-emerald-900/30"
-            icon-color="text-emerald-500"
-            :value="(stats?.pr_open ?? 0) + (stats?.pr_merged ?? 0)"
-            :label="$t('dashboard.stats.prsCreated')"
-          />
-          <StatCard
-            icon="i-lucide-check-circle"
-            icon-bg="bg-neutral-100 dark:bg-neutral-700"
-            icon-color="text-neutral-500 dark:text-neutral-400"
-            :value="successRate"
-            :label="$t('dashboard.stats.successRate')"
-          />
-        </template>
-      </div>
+      <StatStrip :columns="4">
+        <StatTile
+          data-guide="stats"
+          icon="i-lucide-activity"
+          :label="$t('dashboard.stats.running')"
+          :value="dashboardStats?.running"
+          :hint="dashboardStats?.queued ? $t('dashboard.stats.queued', { count: dashboardStats.queued }) : $t('dashboard.stats.nothingQueued')"
+          :live="!!dashboardStats?.running"
+          :loading="statsLoading"
+        />
+        <StatTile
+          data-guide="stats"
+          icon="i-lucide-circle-check"
+          :label="$t('dashboard.stats.successfulRuns')"
+          :value="dashboardStats?.successful_runs"
+          :hint="windowHint"
+          :loading="statsLoading"
+        />
+        <StatTile
+          data-guide="stats"
+          icon="i-lucide-git-pull-request"
+          :label="$t('dashboard.stats.reviewedPrs')"
+          :value="dashboardStats?.reviewed_prs"
+          :hint="windowHint"
+          :loading="statsLoading"
+        />
+        <TopUserTile
+          data-guide="topUsers"
+          :users="dashboardStats?.top_users ?? []"
+          :loading="statsLoading"
+        />
+      </StatStrip>
 
       <!-- Active executions -->
-      <div>
+      <div data-guide="live">
         <h2 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
           {{ $t('dashboard.activeExecutions.title') }}
         </h2>
@@ -214,18 +206,5 @@ const greeting = computed(() => {
 .exec-card-leave-to {
   opacity: 0;
   transform: scale(0.94);
-}
-
-.stat-card {
-  animation: fade-up 0.3s ease-out both;
-}
-.stat-card:nth-child(1) { animation-delay: 0ms; }
-.stat-card:nth-child(2) { animation-delay: 75ms; }
-.stat-card:nth-child(3) { animation-delay: 150ms; }
-.stat-card:nth-child(4) { animation-delay: 225ms; }
-
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 </style>

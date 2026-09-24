@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from api.database import run_in_session
 from api.database.execution import db_create_execution, db_has_active_execution
+from api.database.identity import db_get_identity_by_external_id
 from api.database.issue import db_create_issue, db_get_issue_by_sentry_id
 from api.database.organization import db_get_org_by_id, db_resolve_org_settings
 from api.database.pull_request import (
@@ -261,6 +262,11 @@ async def handle_note_event(payload: dict) -> WebhookResponse:
             return WebhookResponse(message="commenter not authorized", processed=False)
 
     def _reserve(db: Session) -> WebhookResponse | RespondDispatchPayload:
+        sender_identity = (
+            db_get_identity_by_external_id(db, "gitlab", str(normalized.sender_id))
+            if normalized.sender_id is not None
+            else None
+        )
         repository_id = gate.repo_id
         pr_id: str | None = None
         issue_id: str | None = None
@@ -305,6 +311,7 @@ async def handle_note_event(payload: dict) -> WebhookResponse:
                 status=ExecutionStatus.QUEUED.value,
                 retry_target_url=normalized.target_url,
                 prompt_text=normalized.body,
+                triggered_by_identity_id=sender_identity.id if sender_identity else None,
             )
             pr_id = str(pr.id)
         elif normalized.issue_number:
@@ -338,6 +345,7 @@ async def handle_note_event(payload: dict) -> WebhookResponse:
                 status=ExecutionStatus.QUEUED.value,
                 retry_target_url=normalized.target_url,
                 prompt_text=normalized.body,
+                triggered_by_identity_id=sender_identity.id if sender_identity else None,
             )
             issue_id = str(issue.id)
         else:

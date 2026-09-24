@@ -263,6 +263,7 @@ interface NavItem {
   to?: string
   badge?: string
   active?: boolean
+  onSelect?: () => void
 }
 
 const props = defineProps<{
@@ -321,6 +322,7 @@ const navigationItems = computed<NavigationMenuItem[][]>(() =>
       to: item.to,
       badge: item.badge,
       active: item.active,
+      onSelect: item.onSelect,
     })),
   ),
 )

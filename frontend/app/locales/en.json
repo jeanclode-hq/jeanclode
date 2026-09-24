@@ -24,7 +24,8 @@
     "pullRequests": "Pull Requests",
     "integrations": "Integrations",
     "settings": "Settings",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "guide": "Guide"
   },
   "user": {
     "profile": "Profile",
@@ -34,10 +35,15 @@
     "title": "Dashboard",
     "greeting": "Welcome back",
     "stats": {
-      "activeAgents": "Running",
-      "totalIssues": "Total Issues",
-      "prsCreated": "PRs Created",
-      "successRate": "Success Rate"
+      "running": "Running now",
+      "queued": "{count} queued",
+      "successfulRuns": "Successful runs",
+      "reviewedPrs": "PRs reviewed",
+      "window": "Last {days} days",
+      "topUsers": "Top requesters",
+      "mentions": "no mentions | {count} mention | {count} mentions",
+      "noMentions": "No {'@'}jeanclode-bot mentions yet",
+      "nothingQueued": "Nothing queued"
     },
     "activeExecutions": {
       "title": "Active Executions",
@@ -63,6 +69,15 @@
     "description": "All issues across connected sources.",
     "empty": "No issues yet",
     "emptyDescription": "Issues will appear here when connected sources report errors.",
+    "stats": {
+      "handled": "Issues handled",
+      "handledHint": "Triaged not actionable, or fixed with a PR",
+      "prsOpened": "PRs opened",
+      "prsOpenedHint": "By Jeanclode, for Sentry and git issues",
+      "prsMerged": "PRs merged",
+      "mergeRate": "{rate}% of opened",
+      "noneOpened": "None opened yet"
+    },
     "columns": {
       "source": "Source",
       "status": "Status",
@@ -106,6 +121,14 @@
     "description": "Pull requests created by agents.",
     "empty": "No pull requests yet",
     "emptyDescription": "Pull requests will appear here when agents fix issues.",
+    "stats": {
+      "reviewed": "Reviewed",
+      "reviewedHint": "PRs with a completed review",
+      "awaiting": "Awaiting review",
+      "awaitingHint": "Open, never reviewed",
+      "summarized": "Summarized",
+      "summarizedHint": "PRs with a written summary"
+    },
     "columns": {
       "status": "Status",
       "title": "Title",
@@ -278,7 +301,7 @@
       "backfillHints": {
         "none": "Nothing is imported now. Existing errors stay invisible until they recur — you can import them later from the integration settings.",
         "7d": "Only issues seen in the last week. A small starting batch for a large backlog.",
-        "30d": "Issues seen in the last month. A good default for most teams.",
+        "30d": "Issues seen in the last month.",
         "all": "Every unresolved issue, however old. On a large org this can take days to work through."
       },
       "backfillNow": "Import now",
@@ -503,5 +526,163 @@
     "genericMessage": "An unexpected error interrupted this page. It's on us, not you — try again in a moment.",
     "backToDashboard": "Back to dashboard",
     "tryAgain": "Try again"
+  },
+  "guide": {
+    "title": "Guide",
+    "progress": "Step {current} of {total}",
+    "back": "Back",
+    "next": "Next",
+    "close": "Close",
+    "finish": "Done",
+    "chapters": {
+      "home": "Home",
+      "pullRequests": "Pull requests",
+      "issues": "Issues",
+      "gitOrg": "GitHub and GitLab settings",
+      "sentry": "Sentry settings",
+      "settings": "Account and team"
+    },
+    "steps": {
+      "welcome": {
+        "title": "Welcome to Jeanclode",
+        "hint": "",
+        "body": "Jeanclode works on your code by itself. It fixes Sentry errors, reviews pull requests, and solves GitHub and GitLab issues. This guide shows you each page and explains every setting."
+      },
+      "stats": {
+        "title": "Your numbers",
+        "hint": "A quick look at what Jeanclode is doing.",
+        "body": "Running now is how many tasks Jeanclode is working on at this moment. Successful runs and PRs reviewed show what it finished in the last 30 days."
+      },
+      "topUsers": {
+        "title": "Most active teammate",
+        "hint": "Who asked Jeanclode for help the most.",
+        "body": "Every time someone writes `{'@'}jeanclode-bot` in a comment, it counts. This card shows who does it the most."
+      },
+      "live": {
+        "title": "Tasks in progress",
+        "hint": "What Jeanclode is working on right now.",
+        "body": "Each card is one task: fixing an error, reviewing a PR, or solving an issue. Click a card to see the details. You can stop a task while it's running."
+      },
+      "prList": {
+        "title": "All your pull requests",
+        "hint": "Pull requests from all your repos.",
+        "body": "You see every pull request from your connected repos here, whether Jeanclode or your team opened it. The Status column shows what Jeanclode last did on each one."
+      },
+      "prReview": {
+        "title": "Get a review",
+        "hint": "Click Review to get feedback on your PR.",
+        "body": "Jeanclode reads the code and leaves comments on the PR, like a teammate would. Click Review on one of your PRs, or add the `jeanclode:review` label to any PR on GitHub or GitLab. The `jeanclode:summary` label writes the PR description for you."
+      },
+      "prLoop": {
+        "title": "It fixes its own comments",
+        "hint": "Jeanclode keeps going until the PR is clean.",
+        "body": "On a PR that Jeanclode opened, it doesn't stop at comments. It fixes what it found, pushes the change, and reviews again. When nothing is left to fix, it tells your team the PR is ready."
+      },
+      "prFilters": {
+        "title": "Find a PR",
+        "hint": "Filter by status, date or repo.",
+        "body": "By default you see open PRs from the last 7 days. Change the filters to find older, merged or closed PRs."
+      },
+      "issueSources": {
+        "title": "All your issues",
+        "hint": "Errors and issues, grouped by where they come from.",
+        "body": "This page lists Sentry errors and GitHub or GitLab issues together. Use the tabs to see one source at a time."
+      },
+      "issueList": {
+        "title": "Where each issue stands",
+        "hint": "The status shows what happened to each issue.",
+        "body": "Pending means nothing has started yet. After that, the status shows whether Jeanclode is working on it, finished, or failed. Click an issue to see what Jeanclode did."
+      },
+      "issueFix": {
+        "title": "Fix an issue now",
+        "hint": "Click Fix or Resolve to start right away.",
+        "body": "Fix is for a Sentry error. Resolve is for a GitHub or GitLab issue. You can also start it from GitHub or GitLab: add the `jeanclode:resolve` label, or comment \"{'@'}jeanclode-bot take care of this\"."
+      },
+      "issueMapped": {
+        "title": "Only issues Jeanclode can fix",
+        "hint": "Hide errors that aren't linked to a repo yet.",
+        "body": "Jeanclode can only fix a Sentry error once it knows which repo holds the code. Turn this on to hide the errors that aren't linked yet. You link them in the Sentry settings."
+      },
+      "gitRepos": {
+        "title": "Choose your repos",
+        "hint": "Jeanclode only works on repos that are turned on.",
+        "body": "Find this in Integrations, on your GitHub or GitLab page. When a repo is off, Jeanclode ignores it completely: no reviews, no fixes, no replies."
+      },
+      "gitRelated": {
+        "title": "Link repos that work together",
+        "hint": "Let a fix in one repo also change the other.",
+        "body": "Some bugs span two repos, like a website and its API. Link them, and a fix in one repo can also read and change the other."
+      },
+      "gitAlwaysInclude": {
+        "title": "Repos every fix can see",
+        "hint": "Added to every fix, whatever the repo.",
+        "body": "Useful for a shared library, or when bugs are reported in one repo but the code lives in another. Jeanclode opens these repos every time it fixes an issue or a Sentry error."
+      },
+      "gitTrigger": {
+        "title": "Who can call Jeanclode",
+        "hint": "Who is allowed to use {'@'}jeanclode-bot.",
+        "body": "Developers only: only people who can push to the repo can call the bot. Anyone: everyone who can comment can call it, including people outside your team on public repos."
+      },
+      "gitNotify": {
+        "title": "Who hears when a PR is ready",
+        "hint": "These people get tagged when a PR is ready.",
+        "body": "When Jeanclode finishes a PR it opened, it tags these people in a comment so they can check it and merge it. It never does this on PRs your team opened."
+      },
+      "gitSubgroup": {
+        "title": "Nearby repos (GitLab)",
+        "hint": "Let a fix see the other repos in the same folder.",
+        "body": "In GitLab, repos are grouped in folders called subgroups. With this on, a fix can also look at the other repos in its subgroup. Very large subgroups are skipped because they would slow the fix down."
+      },
+      "gitWebhooks": {
+        "title": "Project webhooks (GitLab Free)",
+        "hint": "Only needed on GitLab Free.",
+        "body": "Jeanclode normally listens to your whole GitLab group at once. GitLab Free can't do that, so turn this on and Jeanclode connects to each project one by one. This needs a token with Maintainer access."
+      },
+      "gitTools": {
+        "title": "Extra tools",
+        "hint": "Give Jeanclode access to your other tools.",
+        "body": "Connect tools like your docs or your ticket tracker. Jeanclode can then look things up in them while it works, just like a teammate would."
+      },
+      "sentryMapping": {
+        "title": "Link Sentry to your code",
+        "hint": "Tell Jeanclode which repo each Sentry project belongs to.",
+        "body": "Find this in Integrations, on your Sentry page. Each Sentry project needs a repo, or Jeanclode can't fix its errors. Click Auto-resolve to link them for you, then correct any that are wrong."
+      },
+      "sentryAutofix": {
+        "title": "Fix errors automatically",
+        "hint": "Automatic fixes new errors without waiting for you.",
+        "body": "Manual only: errors wait on the Issues page until you click Fix. Automatic: Jeanclode fixes new errors on its own. The next settings only apply in Automatic mode."
+      },
+      "sentryBatch": {
+        "title": "When and how many",
+        "hint": "How long to wait, and how many errors per fix.",
+        "body": "Jeanclode waits a little before it starts, so related errors end up in the same PR. Batch window is how long it waits. Batch size is the most errors it handles in one go."
+      },
+      "sentryGate": {
+        "title": "Don't pile up PRs",
+        "hint": "Wait until your team has handled the last PRs.",
+        "body": "With this on, Jeanclode won't start new fixes until every PR from the last round is merged or closed. Your team never gets flooded with PRs."
+      },
+      "sentryImport": {
+        "title": "Bring in older errors",
+        "hint": "Also bring in errors that were already in Sentry.",
+        "body": "New errors always come in. Choose how far back to also bring in older ones, so they show up on the Issues page. Click Import now to do it right away."
+      },
+      "settingsAccounts": {
+        "title": "Your accounts",
+        "hint": "Connect your GitHub and GitLab accounts.",
+        "body": "Find this in Settings. Connecting your accounts tells Jeanclode which PRs and issues are yours, for example for the My PRs filter. You need at least one connected to sign in."
+      },
+      "settingsMembers": {
+        "title": "Your team",
+        "hint": "Everyone in this workspace.",
+        "body": "Everyone here sees the same issues, PRs and settings. The icons show which accounts each person has connected."
+      },
+      "done": {
+        "title": "You're all set",
+        "hint": "",
+        "body": "Jeanclode now works in the background. You can come back to this guide anytime: click Guide in the sidebar."
+      }
+    }
   }
 }

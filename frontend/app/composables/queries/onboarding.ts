@@ -54,7 +54,7 @@ export function useLinkSentrySourceMutation() {
           client_secret: vars.clientSecret,
           base_url: vars.baseUrl,
           // Omitted means "leave the stored scope alone" — the backend
-          // defaults new orgs to the last 30 days.
+          // defaults new orgs to importing nothing.
           backfill_scope: vars.backfillScope ?? null,
         },
       }))

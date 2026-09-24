@@ -385,7 +385,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </div>
 
     <!-- Repositories -->
-    <section>
+    <section data-guide="gitRepos">
       <div class="flex items-center justify-between mb-3">
         <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
           Repositories
@@ -480,7 +480,10 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </section>
 
     <!-- Who can trigger @jeanclode-bot -->
-    <section v-if="settings">
+    <section
+      v-if="settings"
+      data-guide="gitTrigger"
+    >
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Who can trigger
       </h4>
@@ -510,7 +513,10 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </section>
 
     <!-- Notifications -->
-    <section v-if="settings">
+    <section
+      v-if="settings"
+      data-guide="gitNotify"
+    >
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Notifications
       </h4>
@@ -567,7 +573,10 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
         Workspace repositories
       </h4>
       <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden divide-y divide-neutral-200 dark:divide-neutral-700">
-        <div class="px-4 py-3.5 space-y-2">
+        <div
+          data-guide="gitAlwaysInclude"
+          class="px-4 py-3.5 space-y-2"
+        >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm text-neutral-900 dark:text-neutral-100">
@@ -615,7 +624,10 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
           </div>
         </div>
 
-        <div class="px-4 py-3.5 space-y-2">
+        <div
+          data-guide="gitSubgroup"
+          class="px-4 py-3.5 space-y-2"
+        >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm text-neutral-900 dark:text-neutral-100">
@@ -639,6 +651,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
 
         <div
           v-if="packSubgroup"
+          data-guide="gitSubgroup"
           class="px-4 py-3.5 space-y-2"
         >
           <div class="flex items-start justify-between gap-3">
@@ -678,7 +691,10 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </section>
 
     <!-- Webhooks (GitLab Free — no group webhooks) -->
-    <section v-if="settings && org.provider === 'gitlab'">
+    <section
+      v-if="settings && org.provider === 'gitlab'"
+      data-guide="gitWebhooks"
+    >
       <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
         Webhooks
       </h4>
@@ -704,10 +720,16 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </section>
 
     <!-- Plugins (third-party Claude Code plugins installed for this org) -->
-    <PluginsSection :org-id="org.id" />
+    <PluginsSection
+      data-guide="gitTools"
+      :org-id="org.id"
+    />
 
     <!-- MCP servers (org-registered remote MCP connectors, client-only) -->
-    <McpServersSection :org-id="org.id" />
+    <McpServersSection
+      data-guide="gitTools"
+      :org-id="org.id"
+    />
 
     <DangerZone
       title="Disconnect organization"

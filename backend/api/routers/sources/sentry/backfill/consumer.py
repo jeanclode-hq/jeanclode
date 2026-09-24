@@ -30,8 +30,9 @@ logger = logging.getLogger(__name__)
 
 router = RedisRouter()
 
-# Scope applied when an org has no stored preference (pre-existing orgs)
-DEFAULT_BACKFILL_SCOPE = BackfillScope.DAYS_30
+# Scope applied when an org's stored settings can't be read — import nothing
+# rather than guess at a window the tenant never picked.
+DEFAULT_BACKFILL_SCOPE = BackfillScope.NONE
 
 
 def _is_recent(issue: SentryIssue, cutoff: datetime | None) -> bool:

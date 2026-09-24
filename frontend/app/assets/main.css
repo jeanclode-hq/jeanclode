@@ -269,7 +269,7 @@ textarea:focus-visible {
 }
 
 /* Center icons when sidebar is collapsed */
-[data-collapsed="true"] [data-orientation="vertical"] a {
+[data-collapsed="true"] [data-orientation="vertical"] [data-slot="link"] {
   justify-content: center;
   padding-inline: 0;
 }

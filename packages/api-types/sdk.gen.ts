@@ -1223,7 +1223,7 @@ export const getWorkspaceSources = <ThrowOnError extends boolean = false>(option
 
 /**
  * Get Stats
- * Get issue statistics for a workspace.
+ * Stat cards for the dashboard, issues and PR pages.
  */
 export const getWorkspaceStats = <ThrowOnError extends boolean = false>(options: Options<GetWorkspaceStatsData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).get<GetWorkspaceStatsResponses, GetWorkspaceStatsErrors, ThrowOnError>({

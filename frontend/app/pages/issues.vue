@@ -5,15 +5,19 @@ import type { Issue, IssueFilters } from '~/types/api'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const workspaceStore = useWorkspaceStore()
 
 useHead({ title: () => `${t('issues.title')} - Jeanclode` })
 
 const { user: authUser } = useAuth()
-const workspaceId = computed(() => workspaceStore.currentWorkspace?.id)
+const workspaceId = useActiveWorkspaceId()
 const { data: stats, status: statsStatus } = useWorkspaceStatsQuery(workspaceId)
 const { data: sources } = useWorkspaceSourcesQuery(workspaceId)
 const statsLoading = computed(() => statsStatus.value === 'pending')
+const mergeRateHint = computed(() => {
+  const created = stats.value?.issues.prs_created ?? 0
+  if (!created) return t('issues.stats.noneOpened')
+  return t('issues.stats.mergeRate', { rate: Math.round(((stats.value?.issues.prs_merged ?? 0) / created) * 100) })
+})
 
 // ---------------------------------------------------------------------------
 // URL-synced filters
@@ -178,6 +182,10 @@ function isProcessing(issue: Issue): boolean {
   return s === 'queued' || s === 'running'
 }
 
+function outcomeStatus(issue: Issue): string {
+  return isProcessing(issue) ? displayStatus(issue) : issue.result
+}
+
 const detailModalOpen = ref(false)
 const selectedIssue = ref<Issue | null>(null)
 
@@ -199,41 +207,34 @@ function handleLimitChange(newLimit: number) {
   <div class="flex flex-col h-[calc(100vh-3.5rem-3rem)]">
     <div class="shrink-0 space-y-4 pb-4">
       <!-- Stats -->
-      <div class="grid grid-cols-3 gap-3">
-        <template v-if="statsLoading">
-          <StatCardSkeleton
-            v-for="i in 3"
-            :key="i"
-          />
-        </template>
-        <template v-else>
-          <StatCard
-            icon="i-lucide-circle-dot"
-            icon-bg="bg-neutral-100 dark:bg-neutral-700"
-            icon-color="text-neutral-500 dark:text-neutral-400"
-            :value="stats?.total_issues ?? 0"
-            label="Total"
-          />
-          <StatCard
-            icon="i-lucide-clock"
-            icon-bg="bg-amber-50 dark:bg-amber-900/30"
-            icon-color="text-amber-500"
-            :value="stats?.pending ?? 0"
-            label="Pending"
-          />
-          <StatCard
-            icon="i-lucide-check-circle"
-            icon-bg="bg-emerald-50 dark:bg-emerald-900/30"
-            icon-color="text-emerald-500"
-            :value="(stats?.pr_open ?? 0) + (stats?.pr_merged ?? 0)"
-            label="Fix Created"
-          />
-        </template>
-      </div>
+      <StatStrip :columns="3">
+        <StatTile
+          icon="i-lucide-circle-check"
+          :label="$t('issues.stats.handled')"
+          :value="stats?.issues.handled"
+          :hint="$t('issues.stats.handledHint')"
+          :loading="statsLoading"
+        />
+        <StatTile
+          icon="i-lucide-git-pull-request"
+          :label="$t('issues.stats.prsOpened')"
+          :value="stats?.issues.prs_created"
+          :hint="$t('issues.stats.prsOpenedHint')"
+          :loading="statsLoading"
+        />
+        <StatTile
+          icon="i-lucide-git-merge"
+          :label="$t('issues.stats.prsMerged')"
+          :value="stats?.issues.prs_merged"
+          :hint="mergeRateHint"
+          :loading="statsLoading"
+        />
+      </StatStrip>
 
       <!-- Source tabs -->
       <SourceTabs
         v-model="selectedOrgId"
+        data-guide="issueSources"
         :sources="connectedSources"
       />
 
@@ -255,7 +256,10 @@ function handleLimitChange(newLimit: number) {
               :class="authorFilter === 'all' ? 'text-neutral-900 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'"
             >{{ $t('issues.filters.allIssues') }}</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div
+            data-guide="issueMapped"
+            class="flex items-center gap-2"
+          >
             <span class="text-xs font-medium text-neutral-500 dark:text-neutral-400">{{ $t('issues.filters.mappedReposOnly') }}</span>
             <USwitch
               v-model="mappedOnlyFilter"
@@ -322,6 +326,7 @@ function handleLimitChange(newLimit: number) {
         <!-- Desktop -->
         <div
           v-if="issues.length > 0 || loading"
+          data-guide="issueList"
           class="hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0 overflow-hidden"
         >
           <UTable
@@ -374,7 +379,8 @@ function handleLimitChange(newLimit: number) {
             </template>
             <template #execution_status-cell="{ row }">
               <ExecutionBadge
-                :status="displayStatus(row.original)"
+                data-guide="issueList"
+                :status="outcomeStatus(row.original)"
                 :workflow="row.original.workflow ?? undefined"
               />
             </template>
@@ -383,6 +389,7 @@ function handleLimitChange(newLimit: number) {
             </template>
             <template #actions-cell="{ row }">
               <div
+                data-guide="issueFix"
                 class="text-right"
                 @click.stop
               >
@@ -482,7 +489,7 @@ function handleLimitChange(newLimit: number) {
             <div class="flex items-center justify-between mt-2">
               <div class="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
                 <ExecutionBadge
-                  :status="displayStatus(issue)"
+                  :status="outcomeStatus(issue)"
                   :workflow="issue.workflow ?? undefined"
                 />
                 <span>{{ timeAgo(issue.first_seen) }}</span>
