@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.3.1...v1.3.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **backend:** give the multi-credential migration its own revision id ([#40](https://github.com/jeanclode-hq/jeanclode/issues/40)) ([74c7b5b](https://github.com/jeanclode-hq/jeanclode/commit/74c7b5bddc23d16af5018bfd988398ac2c9a40ee))
+
 ## [1.3.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.3.0...v1.3.1) (2026-09-24)
 
 

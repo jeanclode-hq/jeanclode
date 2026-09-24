@@ -206,8 +206,8 @@ plugins:
       reconcile_interval: 60
     docker:
       socket: !ENV ${DOCKER_HOST:-tcp://docker-proxy:2375}
-      image: !ENV ${WORKER_IMAGE:-ghcr.io/jeanclode-hq/cli:1.3.1} # x-release-please-version
-      security_proxy_image: !ENV ${SECURITY_PROXY_IMAGE:-ghcr.io/jeanclode-hq/security-proxy:1.3.1} # x-release-please-version
+      image: !ENV ${WORKER_IMAGE:-ghcr.io/jeanclode-hq/cli:1.3.2} # x-release-please-version
+      security_proxy_image: !ENV ${SECURITY_PROXY_IMAGE:-ghcr.io/jeanclode-hq/security-proxy:1.3.2} # x-release-please-version
       network: jeanclode_jeanclode-network
       memory_limit: 2g
       cpu_limit: 2.0
