@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.3.0...v1.3.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **backend:** build the image from uv.lock instead of floating deps ([#38](https://github.com/jeanclode-hq/jeanclode/issues/38)) ([2018a30](https://github.com/jeanclode-hq/jeanclode/commit/2018a30bd49d9073cf3d2473c31545d9aa558b71))
+
 ## [1.3.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.2.0...v1.3.0) (2026-09-24)
 
 
