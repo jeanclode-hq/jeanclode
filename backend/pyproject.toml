@@ -1,6 +1,6 @@
 [project]
 name = "jeanclode"
-version = "1.2.0" # x-release-please-version
+version = "1.3.0" # x-release-please-version
 description = "Autonomous bot that listens to Sentry errors, triages them, and opens PRs to fix code bugs"
 authors = [{ name = "Jeanclode Contributors" }]
 readme = "README.md"
