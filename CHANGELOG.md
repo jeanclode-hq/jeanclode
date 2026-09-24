@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.4...v1.2.0) (2026-09-24)
+
+
+### Features
+
+* add better stats and ui and a guide ([a121b9a](https://github.com/jeanclode-hq/jeanclode/commit/a121b9afe41724eff1bd83914c7dbf24b16b99a1))
+
 ## [1.1.4](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.3...v1.1.4) (2026-09-17)
 
 
