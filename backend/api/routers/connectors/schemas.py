@@ -38,7 +38,7 @@ class McpServerResponse(BaseModel):
     org_id: uuid.UUID
     name: str
     host: str
-    has_credential: bool = False
+    credential_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -72,12 +72,28 @@ class ApiKeySettings(BaseModel):
 
 
 class BasicAuthSecret(BaseModel):
+    name: str | None = Field(
+        default=None,
+        description="Optional env var a skill checks for; set to a placeholder, "
+        "the proxy injects the real header",
+    )
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
 
 
 class BasicAuthSettings(BaseModel):
     host: str | None = Field(default=None, description="See ApiKeySettings.host")
+
+
+class NoneSecret(BaseModel):
+    """``none`` stores no secret — the host is only allowlisted."""
+
+
+class NoneSettings(BaseModel):
+    host: str = Field(
+        min_length=1,
+        description="Host reachable from the sandbox with nothing injected (see ApiKeySettings.host)",
+    )
 
 
 class OAuth2Secret(BaseModel):
@@ -117,6 +133,7 @@ _SECRET_MODELS: dict[AuthType, type[BaseModel]] = {
     AuthType.JWT: ApiKeySecret,
     AuthType.BASIC_AUTH: BasicAuthSecret,
     AuthType.OAUTH2: OAuth2Secret,
+    AuthType.NONE: NoneSecret,
 }
 
 _SETTINGS_MODELS: dict[AuthType, type[BaseModel]] = {
@@ -124,6 +141,7 @@ _SETTINGS_MODELS: dict[AuthType, type[BaseModel]] = {
     AuthType.JWT: ApiKeySettings,
     AuthType.BASIC_AUTH: BasicAuthSettings,
     AuthType.OAUTH2: OAuth2Settings,
+    AuthType.NONE: NoneSettings,
 }
 
 
@@ -152,8 +170,11 @@ class WriteCredentialRequest(BaseModel):
     org_id: uuid.UUID
     subject_type: SubjectType
     subject_id: uuid.UUID
+    credential_id: uuid.UUID | None = Field(
+        default=None, description="Credential to replace; omitted, a new one is added"
+    )
     auth_type: AuthType
-    secret: dict
+    secret: dict = Field(default_factory=dict)
     settings: dict = Field(default_factory=dict)
 
 

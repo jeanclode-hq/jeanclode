@@ -113,7 +113,7 @@ export type AppConfig = {
  * AuthType
  * Shape of the stored secret and how the proxy injects it.
  */
-export type AuthType = 'api_key' | 'basic_auth' | 'jwt' | 'oauth2';
+export type AuthType = 'api_key' | 'basic_auth' | 'jwt' | 'oauth2' | 'none';
 
 /**
  * BackfillRequest
@@ -705,9 +705,10 @@ export type InstalledPlugin = {
         [key: string]: unknown;
     };
     /**
-     * This install's stored auth, if any — inlined so the plugin list needs one request rather than one per installed plugin
+     * Credentials
+     * This install's stored auths — inlined so the plugin list needs one request rather than one per installed plugin
      */
-    credential?: CredentialStatus | null;
+    credentials?: Array<CredentialStatus>;
 };
 
 /**
@@ -1340,9 +1341,9 @@ export type McpServerResponse = {
      */
     host: string;
     /**
-     * Has Credential
+     * Credential Count
      */
-    has_credential?: boolean;
+    credential_count?: number;
 };
 
 /**
@@ -2988,11 +2989,16 @@ export type WriteCredentialRequest = {
      * Subject Id
      */
     subject_id: string;
+    /**
+     * Credential Id
+     * Credential to replace; omitted, a new one is added
+     */
+    credential_id?: string | null;
     auth_type: AuthType;
     /**
      * Secret
      */
-    secret: {
+    secret?: {
         [key: string]: unknown;
     };
     /**
@@ -3636,10 +3642,15 @@ export type UpdateMcpServerResponses = {
 
 export type UpdateMcpServerResponse = UpdateMcpServerResponses[keyof UpdateMcpServerResponses];
 
-export type DeleteCredentialData = {
+export type ListCredentialsData = {
     body?: never;
     path?: never;
     query: {
+        /**
+         * Org Id
+         * Organization ID
+         */
+        org_id: string;
         subject_type: SubjectType;
         /**
          * Subject Id
@@ -3649,55 +3660,24 @@ export type DeleteCredentialData = {
     url: '/credentials';
 };
 
-export type DeleteCredentialErrors = {
+export type ListCredentialsErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type DeleteCredentialError = DeleteCredentialErrors[keyof DeleteCredentialErrors];
+export type ListCredentialsError = ListCredentialsErrors[keyof ListCredentialsErrors];
 
-export type DeleteCredentialResponses = {
+export type ListCredentialsResponses = {
     /**
+     * Response List Credentials
      * Successful Response
      */
-    204: void;
+    200: Array<CredentialStatus>;
 };
 
-export type DeleteCredentialResponse = DeleteCredentialResponses[keyof DeleteCredentialResponses];
-
-export type GetCredentialData = {
-    body?: never;
-    path?: never;
-    query: {
-        subject_type: SubjectType;
-        /**
-         * Subject Id
-         */
-        subject_id: string;
-    };
-    url: '/credentials';
-};
-
-export type GetCredentialErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetCredentialError = GetCredentialErrors[keyof GetCredentialErrors];
-
-export type GetCredentialResponses = {
-    /**
-     * Response Get Credential
-     * Successful Response
-     */
-    200: CredentialStatus | null;
-};
-
-export type GetCredentialResponse = GetCredentialResponses[keyof GetCredentialResponses];
+export type ListCredentialsResponse = ListCredentialsResponses[keyof ListCredentialsResponses];
 
 export type WriteCredentialData = {
     body: WriteCredentialRequest;
@@ -3723,6 +3703,36 @@ export type WriteCredentialResponses = {
 };
 
 export type WriteCredentialResponse = WriteCredentialResponses[keyof WriteCredentialResponses];
+
+export type DeleteCredentialData = {
+    body?: never;
+    path: {
+        /**
+         * Credential Id
+         */
+        credential_id: string;
+    };
+    query?: never;
+    url: '/credentials/{credential_id}';
+};
+
+export type DeleteCredentialErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteCredentialError = DeleteCredentialErrors[keyof DeleteCredentialErrors];
+
+export type DeleteCredentialResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteCredentialResponse = DeleteCredentialResponses[keyof DeleteCredentialResponses];
 
 export type CancelExecutionData = {
     body?: never;

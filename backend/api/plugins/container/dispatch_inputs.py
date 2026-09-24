@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+from collections import defaultdict
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -24,7 +25,7 @@ from api.context import get_current_app
 from api.database.connectors import db_get_credentials_by_org, db_get_mcp_servers_by_org
 from api.database.llm_credentials import LLMCredentialAvailability, db_select_llm_credential
 from api.database.plugins import db_get_installations_by_org
-from api.models.connectors import AuthType, SubjectType
+from api.models.connectors import AuthType, Credential, SubjectType
 from api.models.llm_credentials import LLMCredential
 from api.plugins.container.security_proxy import CredentialKey, OAuthUpstream, UpstreamCredential
 from api.services.llm_credentials import decrypt_secret
@@ -1103,11 +1104,11 @@ async def add_connectors_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) 
     the wire for a matched upstream); the CLI needs no per-server env var,
     only ``auth_scheme`` to format a plausible-looking header.
 
-    ``basic_auth``/``oauth2`` credentials attached to a *skill* (as
-    opposed to an MCP server) are skipped with a warning — there's no home
-    yet for an env var name on those two secret shapes (see the issue's
-    open questions); only ``api_key``/``jwt`` skill credentials are wired
-    today.
+    A subject can hold several credentials, one per host. ``none`` rows only
+    allowlist their host. On a skill, ``basic_auth`` takes an optional env
+    var name and ``oauth2`` is skipped with a warning (not wired for skills
+    yet); on an MCP server, a credential for a host other than the server's
+    own is wired to that host, for the server's tools to call.
     """
     app = get_current_app()
     db_plugin = app.database
@@ -1127,7 +1128,9 @@ async def add_connectors_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) 
     if not mcp_servers and not credentials:
         return
 
-    creds_by_subject = {(c.subject_type, c.subject_id): c for c in credentials}
+    creds_by_subject: dict[tuple[str, UUID], list[Credential]] = defaultdict(list)
+    for c in credentials:
+        creds_by_subject[(c.subject_type, c.subject_id)].append(c)
 
     # Only pay for the installations lookup when a credential actually
     # targets a skill — the common case (org has MCP servers or only
@@ -1140,28 +1143,37 @@ async def add_connectors_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) 
     mcp_payload: list[dict[str, object]] = []
     for idx, server in enumerate(mcp_servers):
         entry: dict[str, object] = {"name": server.name, "url": server.host}
-        cred = creds_by_subject.get((SubjectType.MCP_SERVER.value, server.id))
-        if cred is not None:
+        server_host = host_or(server.host, server.host)
+        for n, cred in enumerate(
+            creds_by_subject.get((SubjectType.MCP_SERVER.value, server.id), [])
+        ):
+            settings = cred.settings or {}
+            host = host_or(server_host, settings.get("host"))
+            if cred.auth_type == AuthType.NONE.value:
+                inputs.extra_hosts.append(host)
+                continue
             try:
                 secret = json.loads(db_plugin.decrypt(cred.secret_encrypted))
             except Exception:
-                logger.exception("Failed to decrypt credential for mcp_server %s", server.id)
-                mcp_payload.append(entry)
+                logger.exception(
+                    "Failed to decrypt credential %s for mcp_server %s", cred.id, server.id
+                )
                 continue
-            settings = cred.settings or {}
-            host = host_or(server.host, server.host)
+            # A credential on the server's own host is the one the MCP client
+            # sends; any other is for a host the server's tools call out to.
+            primary = host == server_host
+            if primary:
+                if cred.auth_type in (AuthType.API_KEY.value, AuthType.JWT.value):
+                    entry["header"] = settings.get("header", "Authorization")
+                else:
+                    entry["header"] = "Authorization"
+                entry["auth_scheme"] = _mcp_auth_scheme(cred, settings)
             # server.host is a full URL — two servers can share a host and
-            # differ only by path (e.g. one gateway fronting multiple
-            # tools). host_or() above discards the path when resolving the
-            # allowlist host, so path_prefix is how the proxy keeps their
-            # credentials from colliding on that shared host.
-            path_prefix = _url_path_prefix(server.host)
-            secret_key = f"MCP_{idx}"
-            if cred.auth_type in (AuthType.API_KEY.value, AuthType.JWT.value):
-                entry["header"] = settings.get("header", "Authorization")
-            else:
-                entry["header"] = "Authorization"
-            entry["auth_scheme"] = _mcp_auth_scheme(cred, settings)
+            # differ only by path (e.g. one gateway fronting multiple tools).
+            # host_or() discards the path when resolving the allowlist host,
+            # so path_prefix is how the proxy keeps their credentials apart.
+            path_prefix = _url_path_prefix(server.host) if primary else None
+            secret_key = f"MCP_{idx}" if n == 0 else f"MCP_{idx}_{n}"
             if cred.auth_type == AuthType.OAUTH2.value:
                 _wire_oauth_credential(
                     inputs,
@@ -1187,39 +1199,58 @@ async def add_connectors_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) 
         inputs.public_env["JEANCLODE_MCP_SERVERS"] = json.dumps(mcp_payload)
 
     for install in installations:
-        cred = creds_by_subject.get((SubjectType.PLUGIN_INSTALLATION.value, install.id))
-        if cred is None:
-            continue
-        if cred.auth_type in (AuthType.BASIC_AUTH.value, AuthType.OAUTH2.value):
-            logger.warning(
-                "Skipping %s credential for skill %s — no env var name field for this "
-                "auth_type on a skill subject yet (see issue #191)",
-                cred.auth_type,
-                install.id,
-            )
-            continue
-        try:
-            secret = json.loads(db_plugin.decrypt(cred.secret_encrypted))
-        except Exception:
-            logger.exception("Failed to decrypt credential for plugin_installation %s", install.id)
-            continue
-        settings = cred.settings or {}
-        settings_host = settings.get("host")
-        if not settings_host:
-            logger.warning("Skipping credential for skill %s — settings.host missing", install.id)
-            continue
-        env_var_name = secret.get("name")
-        if not env_var_name:
-            logger.warning("Skipping credential for skill %s — secret.name missing", install.id)
-            continue
-        _wire_static_credential(
-            inputs,
-            secret_key=env_var_name,
-            host=host_or(settings_host, settings_host),
-            auth_type=cred.auth_type,
-            secret=secret,
-            settings=settings,
+        for cred in creds_by_subject.get((SubjectType.PLUGIN_INSTALLATION.value, install.id), []):
+            _wire_skill_credential(inputs, cred, install_id=install.id, db_plugin=db_plugin)
+
+
+def _wire_skill_credential(
+    inputs: DispatchInputs, cred: Credential, *, install_id: UUID, db_plugin: Any
+) -> None:
+    settings = cred.settings or {}
+    settings_host = settings.get("host")
+    if not settings_host:
+        logger.warning(
+            "Skipping credential %s for skill %s — settings.host missing", cred.id, install_id
         )
+        return
+    host = host_or(settings_host, settings_host)
+    if cred.auth_type == AuthType.NONE.value:
+        inputs.extra_hosts.append(host)
+        return
+    if cred.auth_type == AuthType.OAUTH2.value:
+        logger.warning(
+            "Skipping oauth2 credential %s for skill %s — not wired for skills yet",
+            cred.id,
+            install_id,
+        )
+        return
+    try:
+        secret = json.loads(db_plugin.decrypt(cred.secret_encrypted))
+    except Exception:
+        logger.exception(
+            "Failed to decrypt credential %s for plugin_installation %s", cred.id, install_id
+        )
+        return
+    # The env var name doubles as the sidecar secret_key, so the agent gets a
+    # placeholder under that name for free (kubernetes.py). Basic auth's name
+    # is optional — the proxy injects the header whether or not a skill checks
+    # for a variable.
+    env_var_name = secret.get("name")
+    if not env_var_name and cred.auth_type == AuthType.BASIC_AUTH.value:
+        env_var_name = f"SKILL_AUTH_{cred.id.hex[:8].upper()}"
+    if not env_var_name:
+        logger.warning(
+            "Skipping credential %s for skill %s — secret.name missing", cred.id, install_id
+        )
+        return
+    _wire_static_credential(
+        inputs,
+        secret_key=env_var_name,
+        host=host,
+        auth_type=cred.auth_type,
+        secret=secret,
+        settings=settings,
+    )
 
 
 async def resolve_memory_workspace_id(org_id: UUID | None) -> UUID | None:

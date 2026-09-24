@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import NamedTuple
 
@@ -160,7 +161,7 @@ async def _fetch_manifest(git_url: str, *, auth_token: str | None = None) -> Mar
 
 
 def _install_to_response(
-    inst: PluginInstallation, credential: CredentialStatus | None = None
+    inst: PluginInstallation, credentials: list[CredentialStatus] | None = None
 ) -> InstalledPlugin:
     return InstalledPlugin(
         id=inst.id,
@@ -172,17 +173,17 @@ def _install_to_response(
         pinned_ref=inst.pinned_ref,
         enabled_workflows=inst.enabled_workflows,
         project_overrides=inst.project_overrides or {},
-        credential=credential,
+        credentials=credentials or [],
     )
 
 
-def _plugin_credentials(db: Session, org_id: uuid.UUID) -> dict[uuid.UUID, CredentialStatus]:
-    """Every plugin-install credential in the org, keyed by install id."""
-    return {
-        c.subject_id: credential_to_status(c)
-        for c in db_get_credentials_by_org(db, org_id)
-        if c.subject_type == SubjectType.PLUGIN_INSTALLATION.value
-    }
+def _plugin_credentials(db: Session, org_id: uuid.UUID) -> dict[uuid.UUID, list[CredentialStatus]]:
+    """Every plugin-install credential in the org, grouped by install id."""
+    grouped: dict[uuid.UUID, list[CredentialStatus]] = defaultdict(list)
+    for c in db_get_credentials_by_org(db, org_id):
+        if c.subject_type == SubjectType.PLUGIN_INSTALLATION.value:
+            grouped[c.subject_id].append(credential_to_status(c))
+    return grouped
 
 
 def _marketplace_entry(
@@ -258,7 +259,7 @@ async def get_plugins_overview(
             [m.id for m in marketplaces],
             [m.git_url for m in marketplaces],
             read_org_git_auth(db, org_id),
-            [_install_to_response(i, credentials.get(i.id)) for i in installs],
+            [_install_to_response(i, credentials.get(i.id, [])) for i in installs],
             installed_by_market,
         )
 

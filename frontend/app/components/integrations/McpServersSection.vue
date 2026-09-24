@@ -144,10 +144,6 @@ function toggleAuthForm(id: string) {
                 class="size-3.5 text-neutral-400 shrink-0"
               />
               <span class="text-sm truncate text-neutral-700 dark:text-neutral-300">{{ server.name }}</span>
-              <span
-                v-if="server.has_credential"
-                class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200 font-medium"
-              >{{ t('connectors.authConfigured') }}</span>
             </div>
             <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate font-mono">
               {{ server.host }}
@@ -155,7 +151,16 @@ function toggleAuthForm(id: string) {
           </div>
           <div class="flex items-center gap-1 shrink-0">
             <UButton
-              :label="server.has_credential ? t('connectors.editAuth') : t('connectors.addAuth')"
+              v-if="server.credential_count"
+              :label="t('connectors.authConfigured', server.credential_count)"
+              color="success"
+              variant="subtle"
+              size="xs"
+              @click="toggleAuthForm(server.id)"
+            />
+            <UButton
+              v-else
+              :label="t('connectors.addAuth')"
               size="xs"
               variant="soft"
               @click="toggleAuthForm(server.id)"
@@ -178,6 +183,7 @@ function toggleAuthForm(id: string) {
             :org-id="orgId"
             subject-type="mcp_server"
             :subject-id="server.id"
+            :default-host="server.host"
             @close="authFormOpenFor = null"
           />
         </div>

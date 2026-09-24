@@ -3,9 +3,10 @@
 * ``GET/POST/PATCH/DELETE /mcp-servers`` — CRUD for an org's registered
   remote MCP servers. Client-only: ``host`` is always a URL to connect to,
   never a process to spawn.
-* ``GET/PUT/DELETE /credentials`` — auth for a subject (an MCP server or an
-  installed skill). ``GET`` never returns the secret; ``PUT`` is the only
-  way to set/replace it (token in, nothing back).
+* ``GET/PUT /credentials``, ``DELETE /credentials/{id}`` — the auths of a
+  subject (an MCP server or an installed skill), one per target host.
+  ``GET`` never returns a secret; ``PUT`` is the only way to add or replace
+  one (token in, nothing back).
 
 See https://github.com/jeanclode-hq/jeanclode/issues/14 for the full design.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
@@ -22,16 +24,19 @@ from sqlalchemy.orm import Session
 
 from api.context import get_current_app
 from api.database import (
+    db_count_credentials_by_subjects,
+    db_create_credential,
     db_create_mcp_server,
-    db_delete_credential_by_subject,
+    db_delete_credential,
     db_delete_mcp_server,
-    db_get_credential_by_subject,
+    db_get_credential_by_id,
+    db_get_credentials_by_subject,
     db_get_installation_by_id,
     db_get_mcp_server_by_id,
     db_get_mcp_servers_by_org,
     db_get_org_by_id,
+    db_replace_credential,
     db_update_mcp_server,
-    db_upsert_credential,
     get_session,
 )
 from api.models import Credential, McpServer, User
@@ -66,19 +71,30 @@ def _reject_reserved_mcp_server_name(name: str | None) -> None:
         raise HTTPException(status_code=422, detail=f"'{name}' is a reserved MCP server name")
 
 
-def _mcp_server_to_response(server: McpServer, has_credential: bool) -> McpServerResponse:
+def _mcp_server_to_response(server: McpServer, credential_count: int) -> McpServerResponse:
     return McpServerResponse(
         id=server.id,
         org_id=server.org_id,
         name=server.name,
         host=server.host,
-        has_credential=has_credential,
+        credential_count=credential_count,
     )
+
+
+def _hostname(value: str) -> str:
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    return (parsed.hostname or value).lower()
+
+
+def _target_host(cred_settings: dict, server: McpServer | None) -> str | None:
+    """The host a credential applies to — an MCP server's own when unset."""
+    host = cred_settings.get("host") or (server.host if server else None)
+    return _hostname(host) if host else None
 
 
 def _verify_subject(
     db: Session, *, subject_type: SubjectType, subject_id: uuid.UUID, org_id: uuid.UUID
-) -> None:
+) -> McpServer | None:
     """Confirm the subject exists and belongs to the claimed org.
 
     Without this, a caller could attach a credential to a subject_id
@@ -89,10 +105,11 @@ def _verify_subject(
         server = db_get_mcp_server_by_id(db, subject_id)
         if not server or server.org_id != org_id:
             raise HTTPException(status_code=404, detail="MCP server not found")
-        return
+        return server
     install = db_get_installation_by_id(db, subject_id)
     if not install or install.org_id != org_id:
         raise HTTPException(status_code=404, detail="Plugin installation not found")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -113,20 +130,10 @@ def list_mcp_servers(
     verify_org_access_from_body(db, current_user, org_id)
 
     servers = db_get_mcp_servers_by_org(db, org_id)
-    server_ids = {s.id for s in servers}
-    credentialed = (
-        {
-            c.subject_id
-            for c in db.query(Credential).filter(
-                Credential.subject_type == SubjectType.MCP_SERVER.value,
-                Credential.subject_id.in_(server_ids),
-            )
-        }
-        if server_ids
-        else set()
+    counts = db_count_credentials_by_subjects(
+        db, subject_type=SubjectType.MCP_SERVER.value, subject_ids={s.id for s in servers}
     )
-
-    return [_mcp_server_to_response(s, s.id in credentialed) for s in servers]
+    return [_mcp_server_to_response(s, counts.get(s.id, 0)) for s in servers]
 
 
 @router.post(
@@ -157,7 +164,7 @@ def create_mcp_server(
     _reject_reserved_mcp_server_name(request.name)
 
     server = db_create_mcp_server(db, org_id=request.org_id, name=request.name, host=request.host)
-    return _mcp_server_to_response(server, has_credential=False)
+    return _mcp_server_to_response(server, credential_count=0)
 
 
 @router.patch(
@@ -181,13 +188,12 @@ def update_mcp_server(
     if updates:
         server = db_update_mcp_server(db, server, **updates)
 
-    has_credential = (
-        db_get_credential_by_subject(
+    count = len(
+        db_get_credentials_by_subject(
             db, subject_type=SubjectType.MCP_SERVER.value, subject_id=server.id
         )
-        is not None
     )
-    return _mcp_server_to_response(server, has_credential)
+    return _mcp_server_to_response(server, count)
 
 
 @router.delete(
@@ -214,21 +220,23 @@ def delete_mcp_server(
 
 @router.get(
     "/credentials",
-    operation_id="get_credential",
-    response_model=CredentialStatus | None,
+    operation_id="list_credentials",
+    response_model=list[CredentialStatus],
 )
-def get_credential(
+def list_credentials(
+    org_id: uuid.UUID = Query(..., description="Organization ID"),
     subject_type: SubjectType = Query(...),
     subject_id: uuid.UUID = Query(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
-) -> CredentialStatus | None:
-    """Status only — the secret itself is never returned."""
-    cred = db_get_credential_by_subject(db, subject_type=subject_type.value, subject_id=subject_id)
-    if not cred:
-        return None
-    verify_org_access_from_body(db, current_user, cred.org_id)
-    return credential_to_status(cred)
+) -> list[CredentialStatus]:
+    """A subject's auths, oldest first. Status only — secrets are never returned."""
+    verify_org_access_from_body(db, current_user, org_id)
+    _verify_subject(db, subject_type=subject_type, subject_id=subject_id, org_id=org_id)
+    creds = db_get_credentials_by_subject(
+        db, subject_type=subject_type.value, subject_id=subject_id
+    )
+    return [credential_to_status(c) for c in creds]
 
 
 @router.put(
@@ -241,14 +249,15 @@ def write_credential(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> CredentialStatus:
-    """Set or replace the credential for a subject. Token in, nothing back.
+    """Add an auth to a subject, or replace one by ``credential_id``. Token in,
+    nothing back.
 
     Full-replace by design — the frontend never has the previous secret to
     merge against (``GET`` omits it), so a partial update would silently
     have to guess at missing fields.
     """
     verify_org_access_from_body(db, current_user, request.org_id)
-    _verify_subject(
+    server = _verify_subject(
         db, subject_type=request.subject_type, subject_id=request.subject_id, org_id=request.org_id
     )
 
@@ -287,37 +296,63 @@ def write_credential(
                 detail="secret.refresh_token is required for the refresh_token grant",
             )
 
+    existing = db_get_credentials_by_subject(
+        db, subject_type=request.subject_type.value, subject_id=request.subject_id
+    )
+    target: Credential | None = None
+    if request.credential_id is not None:
+        target = next((c for c in existing if c.id == request.credential_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Credential not found")
+
+    # The proxy injects one header set per host, so two auths of one subject
+    # on the same host would silently overwrite each other.
+    host = _target_host(validated_settings.model_dump(), server)
+    if any(c is not target and _target_host(c.settings or {}, server) == host for c in existing):
+        raise HTTPException(
+            status_code=409,
+            detail=f"This {request.subject_type.value} already has an auth for {host}",
+        )
+
     app = get_current_app()
     if not app.database:
         raise HTTPException(status_code=503, detail="Database not available")
 
     secret_encrypted = app.database.encrypt(json.dumps(validated_secret.model_dump()))
 
-    cred = db_upsert_credential(
-        db,
-        org_id=request.org_id,
-        subject_type=request.subject_type.value,
-        subject_id=request.subject_id,
-        auth_type=request.auth_type.value,
-        settings=validated_settings.model_dump(),
-        secret_encrypted=secret_encrypted,
-    )
+    if target is not None:
+        cred = db_replace_credential(
+            db,
+            target,
+            auth_type=request.auth_type.value,
+            settings=validated_settings.model_dump(),
+            secret_encrypted=secret_encrypted,
+        )
+    else:
+        cred = db_create_credential(
+            db,
+            org_id=request.org_id,
+            subject_type=request.subject_type.value,
+            subject_id=request.subject_id,
+            auth_type=request.auth_type.value,
+            settings=validated_settings.model_dump(),
+            secret_encrypted=secret_encrypted,
+        )
     return credential_to_status(cred)
 
 
 @router.delete(
-    "/credentials",
+    "/credentials/{credential_id}",
     operation_id="delete_credential",
     status_code=204,
 )
 def delete_credential(
-    subject_type: SubjectType = Query(...),
-    subject_id: uuid.UUID = Query(...),
+    credential_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> None:
-    cred = db_get_credential_by_subject(db, subject_type=subject_type.value, subject_id=subject_id)
+    cred = db_get_credential_by_id(db, credential_id)
     if not cred:
         raise HTTPException(status_code=404, detail="Credential not found")
     verify_org_access_from_body(db, current_user, cred.org_id)
-    db_delete_credential_by_subject(db, subject_type=subject_type.value, subject_id=subject_id)
+    db_delete_credential(db, cred)

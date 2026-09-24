@@ -456,21 +456,21 @@
     "addServer": "Add server",
     "namePlaceholder": "Name",
     "urlPlaceholder": "https://mcp.example.com/sse",
-    "authConfigured": "Auth configured",
+    "authConfigured": "{count} auth configured | {count} auths configured",
     "addAuth": "Add auth",
-    "editAuth": "Edit auth",
     "remove": "Remove",
     "save": "Save",
     "authType": {
       "apiKey": "API key",
       "jwt": "JWT",
       "basicAuth": "Basic auth",
-      "oauth2": "OAuth2"
+      "oauth2": "OAuth2",
+      "none": "No auth (allowlist only)"
     },
     "form": {
       "authType": "Auth type",
-      "authTypeHelp": "API key / JWT: one static token sent in a header on every request. Basic auth: a username/password pair, sent Base64-encoded. OAuth2: Jeanclode mints and refreshes an access token itself from a client_id/client_secret — nothing to rotate by hand.",
-      "skillAuthTypesNote": "Skills currently support API key and JWT credentials only — Basic auth and OAuth2 have no way yet to wire their secret into a skill's env, so they're only offered for MCP servers.",
+      "authTypeHelp": "API key / JWT: one static token sent in a header on every request. Basic auth: a username/password pair, sent Base64-encoded. OAuth2: Jeanclode mints and refreshes an access token itself from a client_id/client_secret — nothing to rotate by hand. No auth: the host is only made reachable from the sandbox, with nothing injected — for public endpoints (a package registry, a CDN a skill downloads from).",
+      "skillAuthTypesNote": "Skills support API key, JWT, Basic auth and No auth. Add one auth per host the skill calls.",
       "editingNote": "Editing an existing credential. The secret isn't shown back for editing — re-enter it below to save any change.",
       "envVarName": "Env var name",
       "envVarNameHelp": "The environment variable the skill's script reads this value as — check the skill's own instructions for the name it expects (e.g. OUTLINE_API_KEY).",
@@ -506,7 +506,13 @@
       "refreshToken": "Refresh token",
       "refreshTokenHelp": "A refresh token already issued by the provider (outside Jeanclode). Exchanged for a fresh access token on every mint — if the provider rotates refresh tokens on use, this won't keep working past the first exchange, since there's no interactive flow here to capture the new one.",
       "host": "Target host",
-      "hostHelp": "All outbound traffic from the agent goes through a security proxy that only forwards requests to hosts it knows about. A skill has no declared host of its own (unlike an MCP server), so this tells the proxy which host to allow through and to inject this credential into — e.g. wiki.example.com for a wiki API key. It should match the host the skill's own instructions call out to. If an API is split across subdomains (e.g. api.example.com, www.example.com), use a wildcard like *.example.com to cover all of them — it matches any subdomain but not the bare example.com itself."
+      "hostHelp": "All outbound traffic from the agent goes through a security proxy that only forwards requests to hosts it knows about. A skill has no declared host of its own (unlike an MCP server), so this tells the proxy which host to allow through and to inject this credential into — e.g. wiki.example.com for a wiki API key. It should match the host the skill's own instructions call out to. If an API is split across subdomains (e.g. api.example.com, www.example.com), use a wildcard like *.example.com to cover all of them — it matches any subdomain but not the bare example.com itself.",
+      "newAuth": "New auth",
+      "addThisAuth": "Add auth",
+      "noneNote": "Nothing is injected: requests to this host are just allowed out of the sandbox.",
+      "envVarNameOptional": "Env var name (optional)",
+      "envVarNameBasicHelp": "Only if the skill checks that a variable is set before calling the host. It gets a placeholder value — the real header is added on the wire.",
+      "hostHelpMcp": "Leave blank to authenticate the MCP server itself. Set another host to authenticate an API the server's tools call."
     },
     "toast": {
       "serverAdded": "MCP server added",

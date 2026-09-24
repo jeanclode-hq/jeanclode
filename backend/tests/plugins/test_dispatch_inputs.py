@@ -971,6 +971,7 @@ def _make_credential(
     secret: dict,
 ) -> MagicMock:
     cred = MagicMock()
+    cred.id = uuid4()
     cred.subject_type = subject_type
     cred.subject_id = subject_id
     cred.auth_type = auth_type
@@ -1193,12 +1194,22 @@ async def test_add_connectors_skill_api_key_uses_secret_name_as_sidecar_key() ->
     assert upstream.bearer is True
 
 
+async def _connectors(creds: list, *, installs: list | None = None, servers: list | None = None):
+    app = _make_connectors_app()
+    with (
+        patch("api.plugins.container.dispatch_inputs.get_current_app", return_value=app),
+        patch(_MCP_SERVERS_BY_ORG, return_value=servers or []),
+        patch(_CREDS_BY_ORG, return_value=creds),
+        patch(_INSTALLS_BY_ORG, return_value=installs or []),
+    ):
+        inputs = DispatchInputs()
+        await add_connectors_to_inputs(inputs, git_org_id=uuid4())
+    return inputs
+
+
 @pytest.mark.asyncio
-async def test_add_connectors_skill_basic_auth_is_skipped_with_no_home_for_env_name() -> None:
-    """basic_auth/oauth2 on a skill subject: no env var name field exists yet
-    (see issue #191 open questions) — skipped, not wired incorrectly."""
-    org_id = uuid4()
-    install = _make_install(org_id=org_id)
+async def test_add_connectors_skill_basic_auth_without_name_gets_a_generated_key() -> None:
+    install = _make_install()
     cred = _make_credential(
         subject_type="plugin_installation",
         subject_id=install.id,
@@ -1206,19 +1217,106 @@ async def test_add_connectors_skill_basic_auth_is_skipped_with_no_home_for_env_n
         settings={"host": "api.internal"},
         secret={"username": "u", "password": "p"},
     )
-    app = _make_connectors_app()
 
-    with (
-        patch("api.plugins.container.dispatch_inputs.get_current_app", return_value=app),
-        patch(_MCP_SERVERS_BY_ORG, return_value=[]),
-        patch(_CREDS_BY_ORG, return_value=[cred]),
-        patch(_INSTALLS_BY_ORG, return_value=[install]),
-    ):
-        inputs = DispatchInputs()
-        await add_connectors_to_inputs(inputs, git_org_id=org_id)
+    inputs = await _connectors([cred], installs=[install])
 
+    (key,) = inputs.secrets
+    assert key.startswith("SKILL_AUTH_")
+    assert inputs.secrets[key] == "Basic dTpw"
+    assert inputs.upstreams[0].host == "api.internal"
+    assert inputs.upstreams[0].secret_key == key
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_basic_auth_uses_its_name_when_given() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="basic_auth",
+        settings={"host": "api.internal"},
+        secret={"name": "ZONING_AUTH", "username": "u", "password": "p"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    assert list(inputs.secrets) == ["ZONING_AUTH"]
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_none_only_allowlists_the_host() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="none",
+        settings={"host": "*.s3.us-west-2.amazonaws.com"},
+        secret={},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    assert inputs.extra_hosts == ["*.s3.us-west-2.amazonaws.com"]
     assert inputs.secrets == {}
     assert inputs.upstreams == []
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_with_several_auths_wires_each_one() -> None:
+    install = _make_install()
+    creds = [
+        _make_credential(
+            subject_type="plugin_installation",
+            subject_id=install.id,
+            auth_type="api_key",
+            settings={"host": "api.figma.com", "header": "X-Figma-Token", "value_prefix": None},
+            secret={"name": "FIGMA_API_TOKEN", "key": "figd_1"},
+        ),
+        _make_credential(
+            subject_type="plugin_installation",
+            subject_id=install.id,
+            auth_type="none",
+            settings={"host": "figma-alpha-api.s3.us-west-2.amazonaws.com"},
+            secret={},
+        ),
+    ]
+
+    inputs = await _connectors(creds, installs=[install])
+
+    assert inputs.secrets == {"FIGMA_API_TOKEN": "figd_1"}
+    assert [u.host for u in inputs.upstreams] == ["api.figma.com"]
+    assert inputs.extra_hosts == ["figma-alpha-api.s3.us-west-2.amazonaws.com"]
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_mcp_server_extra_auth_targets_its_own_host() -> None:
+    server = _make_mcp_server()
+    creds = [
+        _make_credential(
+            subject_type="mcp_server",
+            subject_id=server.id,
+            auth_type="api_key",
+            settings={"header": "Authorization", "value_prefix": "Bearer "},
+            secret={"name": "x", "key": "sk-server"},
+        ),
+        _make_credential(
+            subject_type="mcp_server",
+            subject_id=server.id,
+            auth_type="api_key",
+            settings={"host": "api.tools.example", "header": "X-Key", "value_prefix": None},
+            secret={"name": "y", "key": "sk-tools"},
+        ),
+    ]
+
+    inputs = await _connectors(creds, servers=[server])
+
+    by_host = {u.host: u for u in inputs.upstreams}
+    assert by_host["mcp.outline.com"].path_prefix == "/sse"
+    assert by_host["api.tools.example"].path_prefix is None
+    assert by_host["api.tools.example"].header == "X-Key"
+    assert inputs.secrets == {"MCP_0": "sk-server", "MCP_0_1": "sk-tools"}
+    payload = json.loads(inputs.public_env["JEANCLODE_MCP_SERVERS"])
+    assert payload[0]["header"] == "Authorization"
 
 
 @pytest.mark.asyncio

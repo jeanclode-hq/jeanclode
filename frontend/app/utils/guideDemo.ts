@@ -299,7 +299,7 @@ const sentryProjects: SentryProjectResponse[] = [
 const plugins: PluginsOverview = { marketplaces: [], installed: [] }
 
 const mcpServers: McpServerResponse[] = [
-  { id: `${MARKER}-mcp-1`, org_id: gitOrgId, name: 'linear', host: 'mcp.linear.app', has_credential: true },
+  { id: `${MARKER}-mcp-1`, org_id: gitOrgId, name: 'linear', host: 'mcp.linear.app', credential_count: 1 },
 ]
 
 const ROUTES: [RegExp, (url: URL) => unknown][] = [

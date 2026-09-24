@@ -2,7 +2,7 @@ import {
   createMcpServer,
   deleteCredential,
   deleteMcpServer,
-  getCredential,
+  listCredentials,
   listMcpServers,
   updateMcpServer,
   writeCredential,
@@ -10,7 +10,7 @@ import {
 import type { AuthType, SubjectType, WriteCredentialRequest } from '@jeanclode/api-types'
 
 const mcpServersKey = (orgId: string) => ['mcp-servers', orgId] as const
-const credentialKey = (subjectType: SubjectType, subjectId: string) => ['credential', subjectType, subjectId] as const
+const credentialsKey = (subjectType: SubjectType, subjectId: string) => ['credentials', subjectType, subjectId] as const
 
 // -- MCP servers --
 
@@ -55,7 +55,7 @@ export function useDeleteMcpServerMutation() {
     },
     onSuccess(_data, vars) {
       queryCache.invalidateQueries({ key: mcpServersKey(vars.orgId) })
-      queryCache.invalidateQueries({ key: credentialKey('mcp_server', vars.mcpServerId) })
+      queryCache.invalidateQueries({ key: credentialsKey('mcp_server', vars.mcpServerId) })
     },
   })
 }
@@ -81,21 +81,39 @@ export function useUpdateMcpServerMutation() {
 
 // -- Credentials --
 // Shared by both mcp_server and plugin_installation subjects — one
-// generic "add auth" mechanism for both, per issue #191.
+// generic "add auth" mechanism for both, per issue #191. A subject holds
+// one credential per target host.
 
-export function useCredentialQuery(subjectType: SubjectType, subjectId: MaybeRefOrGetter<string>) {
+function invalidateSubject(
+  queryCache: ReturnType<typeof useQueryCache>,
+  vars: { orgId: string, subjectType: SubjectType, subjectId: string },
+) {
+  queryCache.invalidateQueries({ key: credentialsKey(vars.subjectType, vars.subjectId) })
+  if (vars.subjectType === 'mcp_server') {
+    queryCache.invalidateQueries({ key: mcpServersKey(vars.orgId) })
+  } else {
+    // the plugins overview inlines each install's credentials
+    queryCache.invalidateQueries({ key: pluginsOverviewKey(vars.orgId) })
+  }
+}
+
+export function useCredentialsQuery(
+  orgId: MaybeRefOrGetter<string>,
+  subjectType: SubjectType,
+  subjectId: MaybeRefOrGetter<string>,
+) {
   const client = useApi()
 
   return useQuery({
-    key: () => credentialKey(subjectType, toValue(subjectId)),
+    key: () => credentialsKey(subjectType, toValue(subjectId)),
     query: async () => {
-      const { data } = await getCredential({
+      const { data } = await listCredentials({
         client,
-        query: { subject_type: subjectType, subject_id: toValue(subjectId) },
+        query: { org_id: toValue(orgId), subject_type: subjectType, subject_id: toValue(subjectId) },
       })
-      return data ?? null
+      return data ?? []
     },
-    enabled: () => !!toValue(subjectId),
+    enabled: () => !!toValue(subjectId) && !!toValue(orgId),
   })
 }
 
@@ -108,6 +126,7 @@ export function useWriteCredentialMutation() {
       orgId: string
       subjectType: SubjectType
       subjectId: string
+      credentialId?: string
       authType: AuthType
       secret: WriteCredentialRequest['secret']
       settings: WriteCredentialRequest['settings']
@@ -118,6 +137,7 @@ export function useWriteCredentialMutation() {
           org_id: vars.orgId,
           subject_type: vars.subjectType,
           subject_id: vars.subjectId,
+          credential_id: vars.credentialId ?? null,
           auth_type: vars.authType,
           secret: vars.secret,
           settings: vars.settings,
@@ -126,13 +146,7 @@ export function useWriteCredentialMutation() {
       return data!
     },
     onSuccess(_data, vars) {
-      queryCache.invalidateQueries({ key: credentialKey(vars.subjectType, vars.subjectId) })
-      if (vars.subjectType === 'mcp_server') {
-        queryCache.invalidateQueries({ key: mcpServersKey(vars.orgId) })
-      } else {
-        // the plugins overview inlines each install's credential
-        queryCache.invalidateQueries({ key: pluginsOverviewKey(vars.orgId) })
-      }
+      invalidateSubject(queryCache, vars)
     },
   })
 }
@@ -142,19 +156,11 @@ export function useDeleteCredentialMutation() {
   const queryCache = useQueryCache()
 
   return useMutation({
-    mutation: async (vars: { orgId: string, subjectType: SubjectType, subjectId: string }) => {
-      await deleteCredential({
-        client,
-        query: { subject_type: vars.subjectType, subject_id: vars.subjectId },
-      })
+    mutation: async (vars: { orgId: string, subjectType: SubjectType, subjectId: string, credentialId: string }) => {
+      await deleteCredential({ client, path: { credential_id: vars.credentialId } })
     },
     onSuccess(_data, vars) {
-      queryCache.invalidateQueries({ key: credentialKey(vars.subjectType, vars.subjectId) })
-      if (vars.subjectType === 'mcp_server') {
-        queryCache.invalidateQueries({ key: mcpServersKey(vars.orgId) })
-      } else {
-        queryCache.invalidateQueries({ key: pluginsOverviewKey(vars.orgId) })
-      }
+      invalidateSubject(queryCache, vars)
     },
   })
 }
