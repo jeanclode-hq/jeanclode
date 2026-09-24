@@ -42,3 +42,13 @@ def test_leaves_unmatched_path_alone(tmp_path: Path) -> None:
 def test_no_cwd_returns_raw_path() -> None:
     summary = tool_summary(_block("Read", file_path="/tmp/x.py"))
     assert summary == "/tmp/x.py"
+
+
+def test_tool_search_summary_is_its_query() -> None:
+    assert tool_summary(_block("ToolSearch", query="select:mcp__memory__view")) == (
+        "select:mcp__memory__view"
+    )
+
+
+def test_skill_summary_is_the_skill_name() -> None:
+    assert tool_summary(_block("Skill", skill="figma-context")) == "figma-context"

@@ -133,7 +133,11 @@ async def _run_workflow(
         if thirdparty_roots:
             skills = skills + load_skills(thirdparty_roots)
         if skills:
-            logger.info("loaded %d third-party skill(s)", len(skills))
+            logger.info(
+                "loaded %d third-party skill(s): %s",
+                len(skills),
+                ", ".join(f"{s.name} ({s.plugin_path})" for s in skills),
+            )
         mcp_servers = load_mcp_servers_from_env()
         if mcp_servers:
             logger.info("loaded %d org MCP server(s)", len(mcp_servers))
