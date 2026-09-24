@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.2.0...v1.3.0) (2026-09-24)
+
+
+### Features
+
+* **cli:** log what each agent session loaded, raise fixer max turns to 250 ([#37](https://github.com/jeanclode-hq/jeanclode/issues/37)) ([991c55e](https://github.com/jeanclode-hq/jeanclode/commit/991c55ed67bef103b244b9067776eb49abad8f01))
+* several auths per skill or MCP server, plus a host-only "no auth" type ([#36](https://github.com/jeanclode-hq/jeanclode/issues/36)) ([2f07777](https://github.com/jeanclode-hq/jeanclode/commit/2f077770c2e1e7d94b70d2b52d30ed0fa6c0ce74))
+
+
+### Bug Fixes
+
+* **backend:** exclude GitLab bot accounts from top users ([#34](https://github.com/jeanclode-hq/jeanclode/issues/34)) ([1b88e95](https://github.com/jeanclode-hq/jeanclode/commit/1b88e950149c2210772b55b60b1b3fce0b96addd))
+
 ## [1.2.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.1.4...v1.2.0) (2026-09-24)
 
 
