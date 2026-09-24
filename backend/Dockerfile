@@ -23,8 +23,10 @@ WORKDIR /app
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies
-RUN uv pip install --system --no-cache -e .
+# Install exactly what uv.lock pins; `uv pip install` ignores the lockfile and floats
+# (SQLAlchemy 2.1 switched the default postgresql:// driver to psycopg v3).
+RUN uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+    && uv pip install --system --no-cache -r /tmp/requirements.txt
 
 # ===========================
 # Stage 2: Runtime
