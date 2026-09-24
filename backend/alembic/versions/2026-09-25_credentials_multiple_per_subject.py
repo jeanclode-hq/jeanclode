@@ -3,7 +3,7 @@
 A skill or MCP server can now hold one credential per target host, so the
 one-per-subject unique constraint becomes a plain lookup index.
 
-Revision ID: d5e6f7a8b9c0
+Revision ID: 67e90faaeb78
 Revises: c4d5e6f7a8b9
 Create Date: 2026-09-25 00:00:00.000000
 
@@ -15,7 +15,7 @@ from typing import Union
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "d5e6f7a8b9c0"
+revision: str = "67e90faaeb78"
 down_revision: Union[str, Sequence[str], None] = "c4d5e6f7a8b9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
