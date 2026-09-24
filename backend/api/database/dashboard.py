@@ -537,6 +537,8 @@ def db_get_workspace_active_executions(db: Session, workspace_id: UUID) -> list[
 
 
 STATS_WINDOW_DAYS = 30
+# GitLab group/project access-token bots post the bot's own follow-up sweeps.
+_GITLAB_BOT_USERNAME_PATTERNS = (r"group\_%\_bot\_%", r"project\_%\_bot\_%")
 TOP_USERS_LIMIT = 2
 
 
@@ -609,6 +611,15 @@ def db_get_workspace_stats(db: Session, workspace_id: UUID) -> dict:
             Execution.workflow == ExecutionWorkflow.RESPOND.value,
             Execution.created_at >= since,
             in_workspace,
+            or_(
+                ProviderIdentity.username.is_(None),
+                and_(
+                    *(
+                        ProviderIdentity.username.notlike(p, escape="\\")
+                        for p in _GITLAB_BOT_USERNAME_PATTERNS
+                    )
+                ),
+            ),
         )
         .group_by(ProviderIdentity.id)
         .order_by(func.count(Execution.id).desc(), ProviderIdentity.username)

@@ -111,6 +111,9 @@ def test_dashboard_and_pull_request_cards(auth_client, app, mock_auth):
         _run(db, review_failed, RESPOND, COMPLETED, identity=bob, days_ago=45)
         _run(db, review_failed, RESPOND, COMPLETED, identity=bob, days_ago=45)
         _run(db, review_failed, RESPOND, COMPLETED)
+        for bot in ("group_40_bot_6f11260438", "project_7_bot_ab12"):
+            for _ in range(5):
+                _run(db, review_failed, RESPOND, COMPLETED, identity=_identity(db, bot))
 
         _other_ws, other_repo = _workspace(db)
         other_pr = _pr(db, other_repo, 1)
@@ -124,8 +127,8 @@ def test_dashboard_and_pull_request_cards(auth_client, app, mock_auth):
 
     dashboard = data["dashboard"]
     assert (dashboard["running"], dashboard["queued"]) == (1, 1)
-    # 2 reviews + 1 summary + 3 alice + 1 carol + 1 bob + 1 anonymous ping; old and failed runs aren't.
-    assert dashboard["successful_runs"] == 9
+    # 2 reviews + 1 summary + 3 alice + 1 carol + 1 bob + 1 anonymous ping + 10 bot pings; old and failed runs aren't.
+    assert dashboard["successful_runs"] == 19
     assert dashboard["reviewed_prs"] == 1
     assert [(u["username"], u["pings"]) for u in dashboard["top_users"]] == [
         ("alice", 3),
