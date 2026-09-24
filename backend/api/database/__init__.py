@@ -2,15 +2,19 @@
 
 from api.database.base import get_session, run_in_session
 from api.database.connectors import (
+    db_count_credentials_by_subjects,
+    db_create_credential,
     db_create_mcp_server,
-    db_delete_credential_by_subject,
+    db_delete_credential,
+    db_delete_credentials_by_subject,
     db_delete_mcp_server,
-    db_get_credential_by_subject,
+    db_get_credential_by_id,
     db_get_credentials_by_org,
+    db_get_credentials_by_subject,
     db_get_mcp_server_by_id,
     db_get_mcp_servers_by_org,
+    db_replace_credential,
     db_update_mcp_server,
-    db_upsert_credential,
 )
 from api.database.dashboard import (
     compute_display_status,
@@ -205,14 +209,18 @@ __all__ = [
     "db_update_issue",
     # MCP server + credential functions
     "db_create_mcp_server",
-    "db_delete_credential_by_subject",
+    "db_count_credentials_by_subjects",
+    "db_create_credential",
+    "db_delete_credential",
+    "db_delete_credentials_by_subject",
     "db_delete_mcp_server",
-    "db_get_credential_by_subject",
+    "db_get_credential_by_id",
+    "db_get_credentials_by_subject",
     "db_get_credentials_by_org",
     "db_get_mcp_server_by_id",
     "db_get_mcp_servers_by_org",
     "db_update_mcp_server",
-    "db_upsert_credential",
+    "db_replace_credential",
     # Plugin marketplace + installation functions
     "db_create_marketplace",
     "db_create_marketplace_install",

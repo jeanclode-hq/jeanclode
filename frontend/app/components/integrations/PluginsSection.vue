@@ -8,17 +8,8 @@ const props = defineProps<{
 const { t } = useI18n()
 const toast = useToast()
 
-const authTypeLabels: Record<string, string> = {
-  api_key: t('connectors.authType.apiKey'),
-  jwt: t('connectors.authType.jwt'),
-  basic_auth: t('connectors.authType.basicAuth'),
-  oauth2: t('connectors.authType.oauth2'),
-}
-
-function authBadgeTooltip(credential: CredentialStatus): string {
-  const label = authTypeLabels[credential.auth_type] ?? credential.auth_type
-  const host = credential.settings && typeof credential.settings.host === 'string' ? credential.settings.host : null
-  return host ? `${label} · ${host}` : label
+function authBadgeTooltip(credentials: CredentialStatus[]): string {
+  return credentials.map((c) => credentialLabel(t, c)).join('\n')
 }
 
 // Queries + mutations
@@ -52,19 +43,17 @@ const installIdMap = computed(() => {
   return map
 })
 
-// Each install carries its own stored auth, so the manifest list reads it off
-// the overview it already has instead of one credential request per plugin.
-const credentialByInstall = computed(() => {
-  const map = new Map<string, CredentialStatus>()
-  for (const i of installed.value) {
-    if (i.credential) map.set(i.id, i.credential)
-  }
+// Each install carries its own stored auths, so the manifest list reads them
+// off the overview it already has instead of one request per plugin.
+const credentialsByInstall = computed(() => {
+  const map = new Map<string, CredentialStatus[]>()
+  for (const i of installed.value) map.set(i.id, i.credentials ?? [])
   return map
 })
 
-function credentialFor(marketId: string, pluginName: string): CredentialStatus | undefined {
+function credentialsFor(marketId: string, pluginName: string): CredentialStatus[] {
   const installId = installIdMap.value.get(`${marketId}:${pluginName}`)
-  return installId ? credentialByInstall.value.get(installId) : undefined
+  return (installId && credentialsByInstall.value.get(installId)) || []
 }
 
 function installedCount(market: MarketplaceEntry): number {
@@ -364,18 +353,20 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
                 <div class="flex items-center gap-1.5 shrink-0">
                   <template v-if="plugin.installed">
                     <UTooltip
-                      v-if="credentialFor(market.id, plugin.name)"
-                      :text="authBadgeTooltip(credentialFor(market.id, plugin.name)!)"
+                      v-if="credentialsFor(market.id, plugin.name).length"
+                      :text="authBadgeTooltip(credentialsFor(market.id, plugin.name))"
                     >
-                      <UBadge
-                        :label="t('connectors.authConfigured')"
+                      <UButton
+                        :label="t('connectors.authConfigured', credentialsFor(market.id, plugin.name).length)"
                         color="success"
                         variant="subtle"
                         size="xs"
+                        @click="toggleAuthForm(installIdMap.get(`${market.id}:${plugin.name}`)!)"
                       />
                     </UTooltip>
                     <UButton
-                      :label="credentialFor(market.id, plugin.name) ? t('connectors.editAuth') : t('plugins.addAuth')"
+                      v-else
+                      :label="t('plugins.addAuth')"
                       size="xs"
                       variant="soft"
                       @click="toggleAuthForm(installIdMap.get(`${market.id}:${plugin.name}`)!)"

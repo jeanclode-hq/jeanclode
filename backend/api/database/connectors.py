@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.models.connectors import Credential, McpServer
@@ -50,21 +51,45 @@ def db_delete_mcp_server(db: Session, server: McpServer) -> None:
 # ---------------------------------------------------------------------------
 
 
-def db_get_credential_by_subject(
+def db_get_credentials_by_subject(
     db: Session, *, subject_type: str, subject_id: UUID
-) -> Credential | None:
+) -> list[Credential]:
     return (
         db.query(Credential)
         .filter(Credential.subject_type == subject_type, Credential.subject_id == subject_id)
-        .first()
+        .order_by(Credential.created_at, Credential.id)
+        .all()
     )
 
 
+def db_get_credential_by_id(db: Session, credential_id: UUID) -> Credential | None:
+    return db.query(Credential).filter(Credential.id == credential_id).first()
+
+
 def db_get_credentials_by_org(db: Session, org_id: UUID) -> list[Credential]:
-    return db.query(Credential).filter(Credential.org_id == org_id).all()
+    return (
+        db.query(Credential)
+        .filter(Credential.org_id == org_id)
+        .order_by(Credential.created_at, Credential.id)
+        .all()
+    )
 
 
-def db_upsert_credential(
+def db_count_credentials_by_subjects(
+    db: Session, *, subject_type: str, subject_ids: set[UUID]
+) -> dict[UUID, int]:
+    if not subject_ids:
+        return {}
+    rows = (
+        db.query(Credential.subject_id, func.count(Credential.id))
+        .filter(Credential.subject_type == subject_type, Credential.subject_id.in_(subject_ids))
+        .group_by(Credential.subject_id)
+        .all()
+    )
+    return dict(rows)
+
+
+def db_create_credential(
     db: Session,
     *,
     org_id: UUID,
@@ -74,23 +99,6 @@ def db_upsert_credential(
     settings: dict,
     secret_encrypted: str,
 ) -> Credential:
-    """Create or fully replace the credential for a subject.
-
-    Full-replace, not a merge — the write route (unlike the org-settings
-    ``PATCH``) always carries a complete secret payload, so there's no
-    "leave the old secret if the field is missing" ambiguity to worry
-    about; every call here is a deliberate set-or-overwrite of the whole
-    credential for that subject.
-    """
-    existing = db_get_credential_by_subject(db, subject_type=subject_type, subject_id=subject_id)
-    if existing:
-        existing.auth_type = auth_type
-        existing.settings = settings
-        existing.secret_encrypted = secret_encrypted
-        db.commit()
-        db.refresh(existing)
-        return existing
-
     credential = Credential(
         org_id=org_id,
         subject_type=subject_type,
@@ -105,7 +113,25 @@ def db_upsert_credential(
     return credential
 
 
-def db_delete_credential_by_subject(db: Session, *, subject_type: str, subject_id: UUID) -> None:
+def db_replace_credential(
+    db: Session, credential: Credential, *, auth_type: str, settings: dict, secret_encrypted: str
+) -> Credential:
+    """Full replace — the write route always carries a complete secret, since
+    the frontend never has the old one to merge against."""
+    credential.auth_type = auth_type
+    credential.settings = settings
+    credential.secret_encrypted = secret_encrypted
+    db.commit()
+    db.refresh(credential)
+    return credential
+
+
+def db_delete_credential(db: Session, credential: Credential) -> None:
+    db.delete(credential)
+    db.commit()
+
+
+def db_delete_credentials_by_subject(db: Session, *, subject_type: str, subject_id: UUID) -> None:
     db.query(Credential).filter(
         Credential.subject_type == subject_type, Credential.subject_id == subject_id
     ).delete()

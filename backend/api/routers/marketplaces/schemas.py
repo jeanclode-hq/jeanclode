@@ -127,9 +127,9 @@ class InstalledPlugin(BaseModel):
     pinned_ref: str | None = None
     enabled_workflows: list[str] | None = None
     project_overrides: dict = Field(default_factory=dict)
-    credential: CredentialStatus | None = Field(
-        default=None,
-        description="This install's stored auth, if any — inlined so the plugin "
+    credentials: list[CredentialStatus] = Field(
+        default_factory=list,
+        description="This install's stored auths — inlined so the plugin "
         "list needs one request rather than one per installed plugin",
     )
 

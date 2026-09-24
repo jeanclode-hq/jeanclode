@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { AuthType, SubjectType } from '@jeanclode/api-types'
+import type { AuthType, CredentialStatus, SubjectType } from '@jeanclode/api-types'
 
 const props = defineProps<{
   orgId: string
   subjectType: SubjectType
   subjectId: string
+  // An MCP server's own host, shown for its auths that don't name another
+  defaultHost?: string
 }>()
 
 const emit = defineEmits<{
@@ -14,41 +16,60 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 
-const { data: credential } = useCredentialQuery(props.subjectType, computed(() => props.subjectId))
+const { data: credentials } = useCredentialsQuery(() => props.orgId, props.subjectType, () => props.subjectId)
 const writeMutation = useWriteCredentialMutation()
 const deleteMutation = useDeleteCredentialMutation()
 
 const isSkill = computed(() => props.subjectType === 'plugin_installation')
 
-// A skill has no home yet for a basic_auth/oauth2 secret's env var name
-// (backend/api/plugins/container/dispatch_inputs.py:add_connectors_to_inputs
-// skips those two with a warning) — only offer types that are actually
-// wired end-to-end for a skill credential, so saving one never silently
-// no-ops at dispatch time.
-const allAuthTypes: { value: AuthType, label: string }[] = [
-  { value: 'api_key', label: t('connectors.authType.apiKey') },
-  { value: 'jwt', label: t('connectors.authType.jwt') },
-  { value: 'basic_auth', label: t('connectors.authType.basicAuth') },
-  { value: 'oauth2', label: t('connectors.authType.oauth2') },
-]
+// One tab per stored auth (a subject holds one per target host), plus one
+// to add another.
+const NEW_TAB = 'new'
+const selected = ref<string>(NEW_TAB)
+// Set once the user edits the new-auth tab, so a late credentials load
+// doesn't pull them onto an existing auth mid-typing.
+const touched = ref(false)
+// A just-saved auth the refetched list may not contain yet.
+const justSaved = ref<string | null>(null)
+const current = computed<CredentialStatus | null>(
+  () => credentials.value?.find((c) => c.id === selected.value) ?? null,
+)
+const tabs = computed(() => [
+  ...(credentials.value ?? []).map((c) => ({ label: credentialLabel(t, c, props.defaultHost), value: c.id })),
+  { label: t('connectors.form.newAuth'), icon: 'i-lucide-plus', value: NEW_TAB },
+])
+
+watch(
+  credentials,
+  (list) => {
+    if (!list) return
+    if (justSaved.value && list.some((c) => c.id === justSaved.value)) justSaved.value = null
+    if (selected.value === justSaved.value) return
+    if (selected.value === NEW_TAB && current.value === null && !touched.value && list.length) {
+      selected.value = list[0]!.id
+    } else if (selected.value !== NEW_TAB && !list.some((c) => c.id === selected.value)) {
+      selected.value = list[0]?.id ?? NEW_TAB
+    }
+  },
+  { immediate: true },
+)
+
+// oauth2 isn't wired for skills at dispatch time
+// (backend/api/plugins/container/dispatch_inputs.py:_wire_skill_credential),
+// so it's only offered for MCP servers — kept selectable on an existing
+// skill credential that already has it, rather than showing a value the
+// dropdown can't display.
 const authTypes = computed(() => {
-  if (!isSkill.value) return allAuthTypes
-  const wired = allAuthTypes.filter((a) => a.value === 'api_key' || a.value === 'jwt')
-  // A pre-existing credential saved before this restriction (or via a
-  // direct API call) could still be basic_auth/oauth2 — keep it
-  // selectable so the dropdown doesn't silently show a value it can't
-  // display, rather than forcing a confusing reset on open.
-  const existingType = credential.value?.auth_type
-  if (existingType && !wired.some((a) => a.value === existingType)) {
-    const existing = allAuthTypes.find((a) => a.value === existingType)
-    if (existing) wired.push(existing)
-  }
-  return wired
+  const all: AuthType[] = ['api_key', 'jwt', 'basic_auth', 'oauth2', 'none']
+  const offered = isSkill.value && current.value?.auth_type !== 'oauth2'
+    ? all.filter((a) => a !== 'oauth2')
+    : all
+  return offered.map((value) => ({ value, label: authTypeLabel(t, value) }))
 })
 
-const authType = ref<AuthType>(credential.value?.auth_type ?? 'api_key')
+const authType = ref<AuthType>('api_key')
 
-// api_key / jwt
+// api_key / jwt, and basic_auth's optional env var name on a skill
 const name = ref('')
 const key = ref('')
 const showAdvanced = ref(false)
@@ -80,32 +101,42 @@ const oauthPassword = ref('')
 // oauth2 refresh_token grant
 const refreshToken = ref('')
 
-// skill credentials need an explicit target host (no McpServer.host to fall back on)
+// Required on a skill (no McpServer.host to fall back on) and for `none`;
+// optional on an MCP server, where it targets a host the server's tools call.
 const host = ref('')
+const hostRequired = computed(() => isSkill.value || authType.value === 'none')
 
-// Prefill everything the GET response actually carries (auth_type + the
-// non-secret settings) when editing an existing credential. The secret
-// itself (key/password/client_secret/...) is never returned — PUT is a
-// full replace by design (see write_credential's docstring) — so those
-// fields always start blank and must be re-entered to save any change.
+// Prefill what the list carries (auth_type + the non-secret settings) for
+// the selected auth. Secrets are never returned — PUT is a full replace
+// (see write_credential's docstring) — so those always start blank.
 watch(
-  credential,
+  current,
   (c) => {
-    if (!c) return
-    authType.value = c.auth_type
-    const s = (c.settings ?? {}) as Record<string, unknown>
-    if (typeof s.header === 'string') header.value = s.header
-    if (typeof s.value_prefix === 'string') valuePrefix.value = s.value_prefix
-    if (typeof s.host === 'string') host.value = s.host
-    if (typeof s.token_url === 'string') tokenUrl.value = s.token_url
-    if (typeof s.grant_type === 'string') grantType.value = s.grant_type
-    if (typeof s.scope === 'string') scope.value = s.scope
+    name.value = ''
+    key.value = ''
+    username.value = ''
+    password.value = ''
+    clientId.value = ''
+    clientSecret.value = ''
+    oauthUsername.value = ''
+    oauthPassword.value = ''
+    refreshToken.value = ''
+    showAdvanced.value = false
+    const s = (c?.settings ?? {}) as Record<string, unknown>
+    authType.value = c?.auth_type ?? 'api_key'
+    header.value = typeof s.header === 'string' ? s.header : 'Authorization'
+    valuePrefix.value = typeof s.value_prefix === 'string' ? s.value_prefix : 'Bearer '
+    host.value = typeof s.host === 'string' ? s.host : ''
+    tokenUrl.value = typeof s.token_url === 'string' ? s.token_url : ''
+    grantType.value = typeof s.grant_type === 'string' ? s.grant_type : 'client_credentials'
+    scope.value = typeof s.scope === 'string' ? s.scope : ''
   },
   { immediate: true },
 )
 
 const isValid = computed(() => {
-  if (isSkill.value && !host.value.trim()) return false
+  if (hostRequired.value && !host.value.trim()) return false
+  if (authType.value === 'none') return true
   if (authType.value === 'api_key' || authType.value === 'jwt') {
     if (isSkill.value && !name.value.trim()) return false
     return !!key.value.trim()
@@ -120,8 +151,8 @@ const isValid = computed(() => {
 })
 
 async function submit() {
-  let secret: Record<string, unknown>
-  let settings: Record<string, unknown>
+  let secret: Record<string, unknown> = {}
+  let settings: Record<string, unknown> = {}
 
   if (authType.value === 'api_key' || authType.value === 'jwt') {
     // ApiKeySecret.name is required by the backend regardless of subject
@@ -133,8 +164,8 @@ async function submit() {
     settings = { header: header.value, value_prefix: valuePrefix.value }
   } else if (authType.value === 'basic_auth') {
     secret = { username: username.value, password: password.value }
-    settings = {}
-  } else {
+    if (isSkill.value && name.value.trim()) secret.name = name.value.trim()
+  } else if (authType.value === 'oauth2') {
     secret = { client_id: clientId.value, client_secret: clientSecret.value }
     if (grantType.value === 'password') {
       secret.username = oauthUsername.value
@@ -144,33 +175,37 @@ async function submit() {
     }
     settings = { token_url: tokenUrl.value, grant_type: grantType.value, scope: scope.value || null }
   }
-  if (isSkill.value) settings.host = host.value
+  if (host.value.trim()) settings.host = host.value.trim()
 
   try {
-    await writeMutation.mutateAsync({
+    const saved = await writeMutation.mutateAsync({
       orgId: props.orgId,
       subjectType: props.subjectType,
       subjectId: props.subjectId,
+      credentialId: current.value?.id,
       authType: authType.value,
       secret,
       settings,
     })
     toast.add({ title: t('connectors.toast.credentialSaved'), color: 'success' })
-    emit('close')
+    touched.value = false
+    justSaved.value = saved.id
+    selected.value = saved.id
   } catch (e) {
     toast.add({ title: t('connectors.toast.credentialSaveFailed'), description: extractApiError(e, t('connectors.toast.credentialSaveFailed')), color: 'error' })
   }
 }
 
 async function remove() {
+  if (!current.value) return
   try {
     await deleteMutation.mutateAsync({
       orgId: props.orgId,
       subjectType: props.subjectType,
       subjectId: props.subjectId,
+      credentialId: current.value.id,
     })
     toast.add({ title: t('connectors.toast.credentialRemoved'), color: 'success' })
-    emit('close')
   } catch (e) {
     toast.add({ title: t('connectors.toast.credentialRemoveFailed'), description: extractApiError(e, t('connectors.toast.credentialRemoveFailed')), color: 'error' })
   }
@@ -178,28 +213,21 @@ async function remove() {
 </script>
 
 <template>
-  <div class="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-4 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none">
-    <div class="flex items-center justify-between gap-2">
-      <UFormField class="w-56">
-        <template #label>
-          <span class="inline-flex items-center gap-1">
-            {{ t('connectors.form.authType') }}
-            <UTooltip :text="t('connectors.form.authTypeHelp')">
-              <UIcon
-                name="i-lucide-info"
-                class="size-3.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-help transition-colors"
-              />
-            </UTooltip>
-          </span>
-        </template>
-        <USelect
-          v-model="authType"
-          :items="authTypes"
-          value-key="value"
-          size="xs"
-          class="w-full"
-        />
-      </UFormField>
+  <div
+    class="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-4 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none"
+    @input="touched = selected === NEW_TAB"
+  >
+    <div class="flex items-start justify-between gap-2">
+      <UTabs
+        v-if="credentials?.length"
+        v-model="selected"
+        :items="tabs"
+        :content="false"
+        variant="link"
+        size="xs"
+        class="min-w-0 flex-1"
+      />
+      <div v-else />
       <UButton
         icon="i-lucide-x"
         size="xs"
@@ -209,6 +237,27 @@ async function remove() {
       />
     </div>
 
+    <UFormField class="w-56">
+      <template #label>
+        <span class="inline-flex items-center gap-1">
+          {{ t('connectors.form.authType') }}
+          <UTooltip :text="t('connectors.form.authTypeHelp')">
+            <UIcon
+              name="i-lucide-info"
+              class="size-3.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-help transition-colors"
+            />
+          </UTooltip>
+        </span>
+      </template>
+      <USelect
+        v-model="authType"
+        :items="authTypes"
+        value-key="value"
+        size="xs"
+        class="w-full"
+      />
+    </UFormField>
+
     <p
       v-if="isSkill"
       class="text-xs text-neutral-500 dark:text-neutral-400 -mt-2"
@@ -216,13 +265,20 @@ async function remove() {
       {{ t('connectors.form.skillAuthTypesNote') }}
     </p>
     <p
-      v-if="credential"
+      v-if="current && authType !== 'none'"
       class="text-xs text-neutral-500 dark:text-neutral-400 -mt-2"
     >
       {{ t('connectors.form.editingNote') }}
     </p>
 
-    <template v-if="authType === 'api_key' || authType === 'jwt'">
+    <p
+      v-if="authType === 'none'"
+      class="text-xs text-neutral-500 dark:text-neutral-400"
+    >
+      {{ t('connectors.form.noneNote') }}
+    </p>
+
+    <template v-else-if="authType === 'api_key' || authType === 'jwt'">
       <UFormField
         v-if="isSkill"
         :label="t('connectors.form.envVarName')"
@@ -295,6 +351,18 @@ async function remove() {
     </template>
 
     <template v-else-if="authType === 'basic_auth'">
+      <UFormField
+        v-if="isSkill"
+        :label="t('connectors.form.envVarNameOptional')"
+        :help="t('connectors.form.envVarNameBasicHelp')"
+      >
+        <UInput
+          v-model="name"
+          size="xs"
+          class="w-full"
+          placeholder="WIKI_AUTH"
+        />
+      </UFormField>
       <UFormField
         :label="t('connectors.form.username')"
         :help="t('connectors.form.usernameHelp')"
@@ -430,23 +498,22 @@ async function remove() {
     </template>
 
     <UFormField
-      v-if="isSkill"
       :label="t('connectors.form.host')"
-      :help="t('connectors.form.hostHelp')"
-      required
+      :help="isSkill ? t('connectors.form.hostHelp') : t('connectors.form.hostHelpMcp')"
+      :required="hostRequired"
       class="pt-3 border-t border-neutral-200 dark:border-neutral-700"
     >
       <UInput
         v-model="host"
         size="xs"
         class="w-full"
-        placeholder="wiki.example.com"
+        placeholder="api.example.com"
       />
     </UFormField>
 
     <div class="flex items-center justify-between gap-2 pt-1">
       <UButton
-        v-if="credential"
+        v-if="current"
         :label="t('connectors.remove')"
         size="xs"
         color="error"
@@ -456,7 +523,7 @@ async function remove() {
       />
       <div v-else />
       <UButton
-        :label="t('connectors.save')"
+        :label="current ? t('connectors.save') : t('connectors.form.addThisAuth')"
         size="xs"
         :disabled="!isValid"
         :loading="writeMutation.isLoading.value"

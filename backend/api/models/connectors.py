@@ -8,8 +8,9 @@ Two tables:
   CRUD mirrors the existing plugin-installation routes.
 - ``credentials`` — the generic auth store shared by MCP servers *and*
   installed skills (``PluginInstallation``). ``subject_type``/``subject_id``
-  point at whichever row the credential authenticates; ``UniqueConstraint``
-  enforces zero-or-one credential per subject. Non-secret config
+  point at whichever row the credential authenticates. A subject can hold
+  several credentials, one per target host (a skill may call two APIs, or
+  need an extra host reachable with no auth at all). Non-secret config
   (header name, token endpoint, …) lives in ``settings`` (JSONB); the
   actual secret value(s) live in ``secret_encrypted``, an AES-256-GCM
   blob (via ``DatabasePlugin.encrypt``/``decrypt``) holding a JSON object
@@ -24,7 +25,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +46,8 @@ class AuthType(StrEnum):
     BASIC_AUTH = "basic_auth"
     JWT = "jwt"
     OAUTH2 = "oauth2"
+    # Host allowlisted with nothing injected, for public endpoints a skill needs.
+    NONE = "none"
 
 
 class McpServer(Base):
@@ -70,7 +73,7 @@ class McpServer(Base):
 
 
 class Credential(Base):
-    """Auth for one subject (an installed plugin or an MCP server).
+    """One auth of a subject (an installed plugin or an MCP server).
 
     ``subject_id`` is a polymorphic reference (no FK — the two subject
     tables are unrelated); callers must delete the matching ``Credential``
@@ -78,7 +81,7 @@ class Credential(Base):
     """
 
     __tablename__ = "credentials"
-    __table_args__ = (UniqueConstraint("subject_type", "subject_id", name="uq_credential_subject"),)
+    __table_args__ = (Index("ix_credentials_subject", "subject_type", "subject_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
