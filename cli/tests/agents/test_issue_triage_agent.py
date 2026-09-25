@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from src.agents.issue import (
     IssueFixerAgent,
+    IssueFixerInput,
     TriageAgent,
     TriageInput,
     TriageOutput,
@@ -102,6 +103,21 @@ def test_fixer_agent_resolves_prompt_path() -> None:
     agent = IssueFixerAgent()
     assert agent._prompts_dir() == expected
     assert (expected / "fixer.md").is_file()
+
+
+def test_fixer_renders_the_answer_prompt_without_a_code_change() -> None:
+    agent = IssueFixerAgent()
+    answer = agent._render(
+        IssueFixerInput(code_change=False, issue_body="Top 30 IPs by registrations")
+    )
+    fix = agent._render(IssueFixerInput(branch="jeanclode/issue-1"))
+    assert "Top 30 IPs by registrations" in answer
+    assert "no pull/merge request" in answer
+    assert "git push -f origin jeanclode/issue-1" in fix
+
+
+def test_triage_output_defaults_to_a_code_change() -> None:
+    assert TriageOutput(kind="proceed").code_change is True
 
 
 # ── TriageAgent invoke tests ───────────────────────────────────────────────

@@ -195,6 +195,13 @@ is pushed:
   writing it just means the retry budget runs its course before the PR
   gets labeled anyway. There's no failure mode left where the judgment
   (or the lack of one) costs the run its PR.
+- **Answer-only issue-resolve runs are outside the gate.** When triage
+  sets `code_change=false` (the issue asks for information, not code), the
+  runner creates no worktree or branch and attaches neither the push hook
+  nor the CI hook, so there is no commit, PR or CI to verify. Triage makes
+  that call, never the fixer: a fixer allowed to skip the push itself could
+  answer its way out of a fix it's stuck on, which is exactly what
+  `require_pushed_fix_hook` exists to stop.
 - **Pagination**: every list-returning call requests `per_page=100` (both
   providers' max). Verified against a live 25-job GitLab pipeline where the
   unpaginated default (`per_page=20`) silently dropped the one

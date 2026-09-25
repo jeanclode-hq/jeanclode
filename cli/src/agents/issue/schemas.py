@@ -56,6 +56,10 @@ class TriageOutput(BaseModel):
     # already did this investigation to reach its "proceed" decision — this
     # captures it instead of throwing it away and re-deriving it later.
     findings: str = ""
+    # Populated only for "proceed". False when the issue asks for an answer
+    # (data, a KPI, an explanation) rather than code: the fixer then runs
+    # without a branch, push gate or PR and replies in a comment.
+    code_change: bool = True
     # Which LLM the fixer runs on (#43). Only meaningful when the run offers
     # a choice; the defaults keep the run's own credential and model.
     fixer_llm_credential: str = ""
@@ -71,6 +75,10 @@ class IssueFixerInput(BaseModel):
     issue_url: str = ""
     branch: str = ""
     findings: str = ""
+    # Rendered only by the answer prompt, where the exact ask matters.
+    issue_title: str = ""
+    issue_body: str = ""
+    comments: str = ""
     # Every repo the fixer has a worktree for — always at least one entry,
     # but not necessarily the primary (a fix that lives entirely in a
     # related repo has only that repo here). When there's exactly one,
@@ -78,6 +86,7 @@ class IssueFixerInput(BaseModel):
     # parent and each entry's "path" is where that repo's worktree
     # actually lives.
     repos: list[dict[str, str]] = Field(default_factory=list)
+    code_change: bool = True
 
 
 class IssueFixerOutput(BaseModel):
@@ -87,3 +96,5 @@ class IssueFixerOutput(BaseModel):
 
     changes_summary: str = ""
     static_check_passed: bool = False
+    # Posted on the issue when set: the answer the issue asked for.
+    comment_body: str = ""

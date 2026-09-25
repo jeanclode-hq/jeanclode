@@ -216,6 +216,9 @@ building it is logged and never costs the run its default credential. The
 run's result reports what the fixer ran on (`fixer_llm`), and
 `persist_issue_resolve_result` stores it on the execution
 (`fixer_llm_credential` / `_model` / `_reason`) for the issue detail view.
+An answer-only run (triage's `code_change=false`: the fixer replied in an
+issue comment, no PR) reports `triage_result: "not_actionable"` and no
+`pr_urls`, so nothing is linked and the merge gate isn't involved.
 
 ## Container Execution
 

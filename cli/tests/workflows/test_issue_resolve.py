@@ -12,7 +12,7 @@ import pytest
 from src.activities.ci_watch import CiWatchResult
 from src.activities.issue.schemas import IssueContext
 from src.activities.sentry import PRRef, WorktreePath
-from src.agents.issue.schemas import TriageOutput
+from src.agents.issue.schemas import IssueFixerOutput, TriageOutput
 from src.agents.schemas import AgentResult
 from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
@@ -59,6 +59,7 @@ def _triage(
     comment: str = "",
     target_repos: list[str] | None = None,
     findings: str = "",
+    code_change: bool = True,
 ) -> AgentResult:
     return AgentResult(
         text="",
@@ -68,6 +69,7 @@ def _triage(
             comment_body=comment,
             target_repos=target_repos or [],
             findings=findings,
+            code_change=code_change,
         ).model_dump(),
     )
 
@@ -257,6 +259,88 @@ async def test_non_proceed_emits_triage_panel(ctx: RunContext) -> None:
     triage_panel = next((p for p in seen if p.title == "Triage Results"), None)
     assert triage_panel is not None
     assert "duplicate" in triage_panel.content
+
+
+# ── proceed without a code change (answer on the issue) ────────────────────
+
+
+def _fixer(comment: str = "") -> AgentResult:
+    return AgentResult(text="", structured=IssueFixerOutput(comment_body=comment).model_dump())
+
+
+async def test_answer_path_posts_the_fixer_answer_without_a_branch(ctx: RunContext) -> None:
+    fixer_mock = AsyncMock(return_value=_fixer("| ip | count |"))
+    with (
+        _patch_workflow(triage=_triage(kind="proceed", code_change=False, findings="top 30 IPs")),
+        patch(
+            "src.workflows.issue_resolve.runner.IssueFixerAgent",
+            return_value=MagicMock(invoke=fixer_mock),
+        ),
+        patch("src.workflows.issue_resolve.runner.post_issue_comment") as post_mock,
+        patch("src.workflows.issue_resolve.runner.create_worktree") as worktree_mock,
+        patch("src.workflows.issue_resolve.runner.push_branch") as push_mock,
+        patch("src.workflows.issue_resolve.runner.open_pr") as open_pr_mock,
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+
+    assert result.status == "success"
+    assert result.data["code_change"] is False
+    assert result.data["triage_result"] == "not_actionable"
+    assert result.data["pr_urls"] == []
+    assert "fixer_llm" in result.data
+    post_mock.assert_called_once()
+    assert post_mock.call_args.args[0] == "| ip | count |"
+    worktree_mock.assert_not_called()
+    push_mock.assert_not_called()
+    open_pr_mock.assert_not_called()
+    fixer_input = fixer_mock.call_args.args[0]
+    assert fixer_input.code_change is False
+    assert fixer_input.findings == "top 30 IPs"
+    assert fixer_input.issue_body == "The widget crashes."
+    assert "extra_hooks" not in fixer_mock.call_args.kwargs
+
+
+async def test_answer_path_errors_without_an_answer(ctx: RunContext) -> None:
+    with (
+        _patch_workflow(triage=_triage(kind="proceed", code_change=False), fixer=_fixer()),
+        patch("src.workflows.issue_resolve.runner.post_issue_comment") as post_mock,
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+    assert result.status == "error"
+    assert "without an answer" in result.summary
+    post_mock.assert_not_called()
+
+
+async def test_answer_path_errors_when_the_comment_fails(ctx: RunContext) -> None:
+    with _patch_workflow(
+        triage=_triage(kind="proceed", code_change=False),
+        fixer=_fixer("42"),
+        post_comment_raises=True,
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+    assert result.status == "error"
+    assert "failed to post" in result.summary
+
+
+async def test_fix_with_an_answer_opens_the_pr_and_posts_the_comment(ctx: RunContext) -> None:
+    with (
+        _patch_workflow(triage=_triage(kind="proceed"), fixer=_fixer("p95 was 1.2s")),
+        patch("src.workflows.issue_resolve.runner.post_issue_comment") as post_mock,
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+    assert result.status == "success"
+    assert result.data["pr_urls"] == [f"https://github.com/org/repo/pull/{_BRANCH_SLUG}"]
+    post_mock.assert_called_once()
+    assert post_mock.call_args.args[0] == "p95 was 1.2s"
+
+
+async def test_fix_without_an_answer_posts_nothing(ctx: RunContext) -> None:
+    with (
+        _patch_workflow(triage=_triage(kind="proceed"), fixer=_fixer()),
+        patch("src.workflows.issue_resolve.runner.post_issue_comment") as post_mock,
+    ):
+        await IssueResolveWorkflow().run(ctx)
+    post_mock.assert_not_called()
 
 
 # ── proceed path (single repo) ─────────────────────────────────────────────

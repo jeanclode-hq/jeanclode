@@ -68,7 +68,7 @@ env vars that platform's tools need.
 |---|---|
 | `sentry_fix` | fetch → parallel triage (triage *is* the planner) → deterministic filter/route → synthesis when several issues are actionable → per group: worktree + PR per target repo, one fixer session across them |
 | `code_review` | IssueExplorer → 2× Analyzer (parallel) → Synthesizer → Deduplicator → FactChecker → Guardrail → Styler → post inline comments |
-| `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit |
+| `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit; with `code_change=False` the fixer answers in an issue comment instead |
 | `pr_summary` | Summarizer → Parser, File Summarizer started 3s after the Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
 | `jeanclode_respond` | one planner agent acting via Bash, plus two deterministic post-turn checks against provider state |
 | `_smoke/echo` | internal smoke test, no external calls |
@@ -118,6 +118,18 @@ workspace, related repos, dry-run, notify list, memory flag, LLM options),
 the event bus and event types, bot-account detection, org MCP connectors,
 and the ready-notice marker.
 
+### Answers without a code change
+
+Triage's `code_change` (default `true`) says whether a `proceed` issue needs
+a repo change. `false` is for issues whose deliverable is information (a
+KPI, data, an explanation): the runner skips worktrees, `push_branch`, both
+push/CI hooks and `open_pr`, and runs the same `IssueFixerAgent` in the
+clone with `fixer_answer.md` (picked by `IssueFixerInput.code_change`). Its
+`comment_body` is posted on the issue; no answer is a run error. In the
+normal fix path a non-empty `comment_body` is posted too, for issues that
+want both. The push decision stays with triage, never the fixer, so
+`require_pushed_fix_hook` keeps guarding real fixes.
+
 ### Fixer LLM choice
 
 `JEANCLODE_LLM_OPTIONS` (see `src/runtime/llm_options.py`) lists the
@@ -149,7 +161,8 @@ cd cli && uv run pytest -v
 
 `tests/eval/` holds LLM-judged agent evals; they are slower and hit the
 API, so they're separate from the unit suite (`make eval`).
-`tests/eval/agents/test_triage_fixer_llm.py` covers the fixer LLM choice.
+`tests/eval/agents/test_triage_fixer_llm.py` covers the fixer LLM choice,
+`tests/eval/agents/test_triage_code_change.py` the `code_change` decision.
 
 ## Guidelines
 
