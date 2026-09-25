@@ -409,6 +409,21 @@ export type ExecutionSummary = {
      */
     created_at: string;
     /**
+     * Fixer Llm Credential
+     * LLM credential the issue-resolve fixer ran on
+     */
+    fixer_llm_credential?: string | null;
+    /**
+     * Fixer Llm Model
+     * Model the issue-resolve fixer ran on
+     */
+    fixer_llm_model?: string | null;
+    /**
+     * Fixer Llm Reason
+     * Why triage picked that credential or model
+     */
+    fixer_llm_reason?: string | null;
+    /**
      * Pull Requests
      * Pull/merge requests opened by this execution
      */

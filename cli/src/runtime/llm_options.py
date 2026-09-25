@@ -54,6 +54,19 @@ class FixerLLMChoice(BaseModel):
         model = self.option.model_heavy if self.tier == "heavy" else self.option.model_high
         return f"{self.option.name} ({model or 'default model'})"
 
+    def report(self, default_model: str | None) -> dict[str, str]:
+        """What the fixer ran on, for the run result the backend persists."""
+        option = self.option
+        model = ""
+        if option is not None:
+            model = option.model_heavy if self.tier == "heavy" else option.model_high
+        return {
+            "credential": option.name if option else "",
+            "model": model or default_model or "",
+            "tier": self.tier,
+            "reason": self.note,
+        }
+
     @property
     def summary(self) -> str:
         """One line for run output and the PR body; empty when nothing is worth saying."""

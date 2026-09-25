@@ -28,6 +28,15 @@ class ExecutionSummary(BaseModel):
     error_type: str | None = Field(description="Error type if failed")
     error_detail: str | None = Field(description="Error detail if failed")
     created_at: datetime = Field(description="Execution created timestamp")
+    fixer_llm_credential: str | None = Field(
+        default=None, description="LLM credential the issue-resolve fixer ran on"
+    )
+    fixer_llm_model: str | None = Field(
+        default=None, description="Model the issue-resolve fixer ran on"
+    )
+    fixer_llm_reason: str | None = Field(
+        default=None, description="Why triage picked that credential or model"
+    )
     pull_requests: list[PullRequestSummary] = Field(
         default_factory=list, description="Pull/merge requests opened by this execution"
     )

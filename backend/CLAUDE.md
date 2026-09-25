@@ -212,7 +212,10 @@ credential per host, so same-host rows collapse to the first) under its own
 secrets referenced by name only). It's emitted only when there's a real
 choice: a second host, or a `model_heavy` on the default. Triage uses it to
 move the fixer to another credential or the heavy tier (#43); a failure
-building it is logged and never costs the run its default credential.
+building it is logged and never costs the run its default credential. The
+run's result reports what the fixer ran on (`fixer_llm`), and
+`persist_issue_resolve_result` stores it on the execution
+(`fixer_llm_credential` / `_model` / `_reason`) for the issue detail view.
 
 ## Container Execution
 

@@ -342,7 +342,12 @@ class IssueResolveWorkflow:
                 return WorkflowResult(
                     status="error",
                     summary="fixer agent finished without pushing a real change to any repo",
-                    data={"kind": "proceed", "triage_result": "actionable", "pr_urls": []},
+                    data={
+                        "kind": "proceed",
+                        "triage_result": "actionable",
+                        "pr_urls": [],
+                        "fixer_llm": fixer_llm.report(ctx.model),
+                    },
                 )
 
             return WorkflowResult(
@@ -353,7 +358,7 @@ class IssueResolveWorkflow:
                     "triage_result": "actionable",
                     "pr_urls": pr_urls,
                     "repos": repo_results,
-                    "fixer_llm": fixer_llm.summary,
+                    "fixer_llm": fixer_llm.report(ctx.model),
                 },
             )
         except Exception as exc:
@@ -367,6 +372,7 @@ class IssueResolveWorkflow:
                     "kind": "proceed",
                     "triage_result": "actionable",
                     "pr_urls": [pr.url for pr in prs.values()],
+                    "fixer_llm": fixer_llm.report(ctx.model),
                     "error": str(exc),
                 },
             )

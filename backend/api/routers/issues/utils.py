@@ -79,6 +79,9 @@ def issue_to_detail(
                     error_type=exc.error_type,
                     error_detail=exc.error_detail,
                     created_at=exc.created_at,
+                    fixer_llm_credential=exc.fixer_llm_credential,
+                    fixer_llm_model=exc.fixer_llm_model,
+                    fixer_llm_reason=exc.fixer_llm_reason,
                     pull_requests=[
                         PullRequestSummary(
                             id=pr.id,

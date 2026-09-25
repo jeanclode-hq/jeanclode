@@ -146,3 +146,20 @@ async def test_failed_session_carries_its_credential(tmp_path: Path) -> None:
     with patch("src.agents.base.query", side_effect=boom), pytest.raises(ResultError) as info:
         await _chooser(tmp_path)().invoke(_Input(message="hi"), ctx)
     assert info.value.llm_credential_id == "c2"  # type: ignore[attr-defined]
+
+
+def test_report_names_the_credential_model_and_reason() -> None:
+    choice = resolve_fixer_llm(OPTIONS, "self-hosted", "high", "the issue asks for it")
+    assert choice.report("sonnet") == {
+        "credential": "self-hosted",
+        "model": "qwen-coder",
+        "tier": "high",
+        "reason": "the issue asks for it",
+    }
+    assert resolve_fixer_llm(OPTIONS, "", "heavy").report("sonnet")["model"] == "opus"
+    assert resolve_fixer_llm([], "", "high").report("sonnet") == {
+        "credential": "",
+        "model": "sonnet",
+        "tier": "high",
+        "reason": "",
+    }

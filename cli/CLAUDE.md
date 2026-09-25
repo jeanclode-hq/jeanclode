@@ -128,7 +128,9 @@ listing them, and fill `fixer_llm_credential` /
 configured option (unknown names keep the default, with a note);
 `apply_fixer_llm` retargets only
 the fixer's `RunContext` (model, env, credential id). Every other agent
-keeps the default. When unset, nothing about a run changes.
+keeps the default. When unset, nothing about a run changes. The
+issue-resolve result carries `fixer_llm` (credential, model, tier, reason),
+which the backend stores on the execution for the dashboard.
 
 Issue triage loads the org's skills like the fixer does, but its prompt
 treats them as documentation: it reads them to decide, names the ones that
