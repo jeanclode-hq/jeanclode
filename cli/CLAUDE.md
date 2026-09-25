@@ -130,6 +130,11 @@ configured option (unknown names keep the default, with a note);
 the fixer's `RunContext` (model, env, credential id). Every other agent
 keeps the default. When unset, nothing about a run changes.
 
+Issue triage loads the org's skills like the fixer does, but its prompt
+treats them as documentation: it reads them to decide, names the ones that
+apply in `findings`, and never carries them out. Doing the work is the
+fixer's role.
+
 A session that fails carries its `JEANCLODE_LLM_CREDENTIAL_ID` on the
 exception (`llm_credential_id`), so a 429 in a retargeted fixer stales the
 credential it actually ran on.

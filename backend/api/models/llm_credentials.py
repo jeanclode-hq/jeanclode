@@ -54,7 +54,7 @@ class LLMCredential(Base):
     # Informational only (pro | max | max_5x) — not used for admission control.
     plan_tier: Mapped[str | None] = mapped_column(String(50), nullable=True)
     secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
-    # How issues refer to this credential when steering the fixer's LLM.
+    # How skills and issues refer to this credential when steering the fixer's LLM.
     name: Mapped[str] = mapped_column(String(100), nullable=False, default="", server_default="")
     model_high: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     # Empty means triage never escalates the fixer to a heavier model.

@@ -1,7 +1,7 @@
 """Evals for the triage agents' fixer LLM choice (#43).
 
-The bar: stay on the default credential and tier unless the issue explicitly
-asks otherwise, escalate to the heavy tier only for clearly heavy
+The bar: stay on the default credential and tier unless a skill or the issue
+explicitly asks otherwise, escalate to the heavy tier only for clearly heavy
 work, and never switch on the topic of an issue alone.
 """
 
@@ -15,6 +15,7 @@ import pytest
 from src.agents.issue.schemas import TriageInput, TriageOutput
 from src.agents.issue.triage import TriageAgent
 from src.runtime.llm_options import LLMOption, resolve_fixer_llm
+from src.skills.schemas import Skill
 
 pytestmark = pytest.mark.eval
 
@@ -58,6 +59,18 @@ def _seed_repo(root: Path) -> None:
     (root / "shop" / "__init__.py").write_text("")
     (root / "shop" / "checkout.py").write_text(_CART)
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+
+
+def _skill(root: Path, name: str, description: str, body: str) -> Skill:
+    plugin = root.parent / f"{root.name}-plugin-{name}"
+    (plugin / ".claude-plugin").mkdir(parents=True)
+    (plugin / ".claude-plugin" / "plugin.json").write_text(f'{{"name": "plugin-{name}"}}')
+    skill_dir = plugin / "skills" / name
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n{body}"
+    )
+    return Skill(name=name, description=description, skill_dir=skill_dir)
 
 
 _BUG_BODY = (
@@ -158,6 +171,26 @@ async def test_issue_asking_for_the_strongest_model_goes_heavy(
     output = await _issue_triage(run_agent, tmp_path, "Checkout 500 on percentage discounts", body)
     assert output.kind == "proceed"
     assert _resolved(output) == ("claude", "heavy")
+
+
+@pytest.mark.parametrize("fake_cli_env", [{}], indirect=True)
+async def test_skill_asking_for_self_hosted_switches(run_agent, tmp_path, fake_cli_env) -> None:
+    skill = _skill(
+        tmp_path,
+        "llm-routing",
+        "Which LLM credential the fixer must use for this organisation's repositories.",
+        "Every code fix in the `shop` repositories must run on the `self-hosted` LLM "
+        "credential. Never use a cloud model for them.",
+    )
+    output = await _issue_triage(
+        run_agent,
+        tmp_path,
+        "Checkout 500 on percentage discounts",
+        _BUG_BODY,
+        skills=[skill],
+    )
+    assert output.kind == "proceed"
+    assert _resolved(output) == ("self-hosted", "high")
 
 
 # --- heavy work ---
