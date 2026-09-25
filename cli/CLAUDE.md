@@ -114,9 +114,25 @@ finalized its turn and the CLI drops it.
 ### Runtime
 
 `src/runtime/` carries the cross-cutting pieces: `RunContext` (cwd,
-workspace, related repos, dry-run, notify list, memory flag), the event
-bus and event types, bot-account detection, org MCP connectors, and the
-ready-notice marker.
+workspace, related repos, dry-run, notify list, memory flag, LLM options),
+the event bus and event types, bot-account detection, org MCP connectors,
+and the ready-notice marker.
+
+### Fixer LLM choice
+
+`JEANCLODE_LLM_OPTIONS` (see `src/runtime/llm_options.py`) lists the
+credentials the backend loaded for this run, the default first. When it's
+set, agents with `choose_fixer_llm` (both triage agents) get a prompt block
+listing them plus the loaded skills, and fill `fixer_llm_credential` /
+`fixer_llm_tier` / `fixer_llm_reason`. `resolve_fixer_llm` maps that onto a
+configured option (unknown names keep the default, with a note);
+`merge_choices` picks one per Sentry group; `apply_fixer_llm` retargets only
+the fixer's `RunContext` (model, env, credential id). Every other agent
+keeps the default. When unset, nothing about a run changes.
+
+A session that fails carries its `JEANCLODE_LLM_CREDENTIAL_ID` on the
+exception (`llm_credential_id`), so a 429 in a retargeted fixer stales the
+credential it actually ran on.
 
 ## Testing
 
@@ -125,7 +141,8 @@ cd cli && uv run pytest -v
 ```
 
 `tests/eval/` holds LLM-judged agent evals; they are slower and hit the
-API, so they're separate from the unit suite.
+API, so they're separate from the unit suite (`make eval`).
+`tests/eval/agents/test_triage_fixer_llm.py` covers the fixer LLM choice.
 
 ## Guidelines
 

@@ -70,6 +70,11 @@ class TriageOutput(BaseModel):
     target_repos: list[str] = Field(default_factory=list)
     existing_pr_url: str | None = None
     commit_sha: str | None = None
+    # Which LLM the fixer runs on (#43). Only meaningful when the run offers
+    # a choice; the defaults keep the run's own credential and model.
+    fixer_llm_credential: str = ""
+    fixer_llm_tier: Literal["high", "heavy"] = "high"
+    fixer_llm_reason: str = ""
 
     @computed_field  # type: ignore[prop-decorator]
     @property

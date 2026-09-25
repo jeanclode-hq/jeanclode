@@ -38,6 +38,7 @@ from src.agents.utils import (
 )
 from src.runtime.context import RunContext
 from src.runtime.events import AgentEnd, AgentStart, ToolCall, ToolResult
+from src.runtime.llm_options import fixer_llm_block
 from src.skills.prompt import (
     continuity_protocol_block,
     discovery_block,
@@ -80,6 +81,14 @@ class BaseAgent:
     # thread, so settled points there shouldn't be re-derived from scratch.
     use_continuity: ClassVar[bool] = False
     prefer_small_model: ClassVar[bool] = False
+    # Triage agents that pick the fixer's LLM (#43). When the run offers a
+    # choice they also see the loaded skills, since a skill may ask for one.
+    choose_fixer_llm: ClassVar[bool] = False
+
+    def _uses_skills(self, ctx: RunContext) -> bool:
+        if not ctx.skills:
+            return False
+        return self.use_third_party_skills or (self.choose_fixer_llm and bool(ctx.llm_options))
 
     def _prompts_dir(self) -> Path:
         """Resolve the directory where `prompt_file` lives.
@@ -111,8 +120,10 @@ class BaseAgent:
         extra_hooks: dict[HookEvent, list[HookMatcher]] | None = None,
     ) -> AgentResult:
         prompt = self._render(agent_input)
-        if self.use_third_party_skills and ctx.skills:
+        if self._uses_skills(ctx):
             prompt = f"{prompt}\n\n{discovery_block(ctx.skills)}"
+        if self.choose_fixer_llm and ctx.llm_options:
+            prompt = f"{prompt}\n\n{fixer_llm_block(ctx.llm_options)}"
         if ctx.related_repos:
             prompt = f"{prompt}\n\n{related_repos_block(ctx.related_repos)}"
         if self.use_memory and ctx.memory_enabled:
@@ -188,8 +199,13 @@ class BaseAgent:
             structured = self._reconcile_structured(structured, text)
             if self.output_schema is not None and structured is None:
                 self._log_missing_structured(result_message, text)
-        except BaseException:
+        except BaseException as exc:
             ok = False
+            # A 429 must stale the credential this session ran on, which
+            # for a retargeted fixer isn't the run's default (#43).
+            credential_id = ctx.env.get("JEANCLODE_LLM_CREDENTIAL_ID")
+            if credential_id and isinstance(exc, Exception):
+                exc.llm_credential_id = credential_id  # type: ignore[attr-defined]
             raise
         finally:
             ctx.emit(
@@ -398,7 +414,7 @@ class BaseAgent:
 
         tools = list(self.allowed_tools)
         mcp_servers: dict[str, Any] = {}
-        if self.use_third_party_skills and ctx.skills:
+        if self._uses_skills(ctx):
             if "Skill" not in tools:
                 tools.append("Skill")
             plugin_paths = {s.plugin_path for s in ctx.skills}

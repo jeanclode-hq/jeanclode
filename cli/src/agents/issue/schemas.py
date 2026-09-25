@@ -56,6 +56,11 @@ class TriageOutput(BaseModel):
     # already did this investigation to reach its "proceed" decision — this
     # captures it instead of throwing it away and re-deriving it later.
     findings: str = ""
+    # Which LLM the fixer runs on (#43). Only meaningful when the run offers
+    # a choice; the defaults keep the run's own credential and model.
+    fixer_llm_credential: str = ""
+    fixer_llm_tier: Literal["high", "heavy"] = "high"
+    fixer_llm_reason: str = ""
 
 
 class IssueFixerInput(BaseModel):

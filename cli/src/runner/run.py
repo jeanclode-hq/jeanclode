@@ -23,6 +23,7 @@ from src.output import (
     emit_result,
     emit_step,
     extract_retry_after,
+    rate_limited_credential,
 )
 from src.runner.display_subscriber import UsageAccumulator, subscribe_display
 from src.runner.preflight import (
@@ -35,6 +36,7 @@ from src.runner.preflight import (
 )
 from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
+from src.runtime.llm_options import load_llm_options_from_env
 from src.runtime.mcp_connectors import load_mcp_servers_from_env
 from src.runtime.notify import load_notify_users_from_env
 from src.skills.discovery import load_skills, load_skills_from_env
@@ -144,6 +146,9 @@ async def _run_workflow(
         # Set only when the workspace opted into memory — its presence is the on/off signal.
         memory_enabled = bool(os.environ.get("JEANCLODE_MEMORY_API_URL"))
         notify_users = load_notify_users_from_env()
+        llm_options = load_llm_options_from_env()
+        if llm_options:
+            logger.info("fixer LLM options: %s", ", ".join(o.name for o in llm_options))
         if notify_users:
             logger.info("notify list: %d user(s)", len(notify_users))
         ctx = RunContext(
@@ -158,6 +163,7 @@ async def _run_workflow(
             issues=issue_urls,
             related_repos=related_repos,
             notify_users=notify_users,
+            llm_options=llm_options,
             dry_run=args.dry_run,
             debug=args.debug,
             memory_enabled=memory_enabled,
@@ -206,7 +212,11 @@ async def _run_workflow(
             detail = f"{detail} ({', '.join(extras)})"
         if exc.api_error_status == 429:
             if not is_tty:
-                emit_rate_limit_error(detail, retry_after=extract_retry_after(exc))
+                emit_rate_limit_error(
+                    detail,
+                    retry_after=extract_retry_after(exc),
+                    credential_id=rate_limited_credential(exc),
+                )
         else:
             emit_error("claude_result_error", detail, is_tty=is_tty, usage=usage_acc.total)
         if tracker:

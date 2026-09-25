@@ -1006,9 +1006,17 @@ export type LlmCredentialInput = {
      */
     secret: string;
     /**
+     * Name
+     */
+    name?: string;
+    /**
      * Model High
      */
     model_high?: string;
+    /**
+     * Model Heavy
+     */
+    model_heavy?: string;
     /**
      * Model Low
      */
@@ -1054,9 +1062,17 @@ export type LlmCredentialUpdateInput = {
      */
     secret?: string | null;
     /**
+     * Name
+     */
+    name?: string | null;
+    /**
      * Model High
      */
     model_high?: string | null;
+    /**
+     * Model Heavy
+     */
+    model_heavy?: string | null;
     /**
      * Model Low
      */
@@ -1101,9 +1117,17 @@ export type LlmCredentialView = {
      */
     secret?: string | null;
     /**
+     * Name
+     */
+    name?: string;
+    /**
      * Model High
      */
     model_high: string;
+    /**
+     * Model Heavy
+     */
+    model_heavy?: string;
     /**
      * Model Low
      */

@@ -8,6 +8,7 @@
  * inputs since the model list depends on the user's endpoint. ``kind`` is
  * derived from ``provider`` rather than its own control — ``claude_code``
  * is always an OAuth subscription, everything else is an API key.
+ * ``model_heavy`` is opt-in: left empty, triage never escalates the fixer.
  */
 import type { LLMCredentialInput, LLMCredentialView } from '~/composables/useAdmin'
 
@@ -20,6 +21,8 @@ const emit = defineEmits<{
   submit: [config: LLMCredentialInput]
   cancel: []
 }>()
+
+const { t } = useI18n()
 
 type ProviderId = LLMCredentialInput['provider']
 
@@ -55,13 +58,18 @@ const providerDefaults: Record<ProviderId, { high: string, low: string }> = {
   openai_compatible: { high: '', low: '' },
 }
 
+// Reka's SelectItem rejects an empty-string value, so "no heavy model" needs a sentinel.
+const NO_HEAVY = '__none__'
+
 const initialProvider = (props.existing?.provider as ProviderId | undefined) ?? 'claude_code'
 const defaults = providerDefaults[initialProvider]
 
 const form = reactive({
   provider: initialProvider,
   secret: '',
+  name: props.existing?.name ?? '',
   model_high: props.existing?.model_high || defaults.high,
+  model_heavy: props.existing?.model_heavy ?? '',
   model_low: props.existing?.model_low || defaults.low,
   base_url: props.existing?.base_url ?? null as string | null,
   plan_tier: (props.existing?.plan_tier ?? null) as LLMCredentialInput['plan_tier'],
@@ -77,10 +85,16 @@ const modelOptions = computed(() => {
   return []
 })
 
+const heavyOptions = computed(() => [
+  { label: t('admin.llm.modelHeavyNone'), value: NO_HEAVY },
+  ...modelOptions.value,
+])
+
 watch(() => form.provider, (next) => {
   const d = providerDefaults[next]
   form.model_high = d.high
   form.model_low = d.low
+  form.model_heavy = ''
   if (next !== 'openai_compatible') {
     form.base_url = null
   }
@@ -94,7 +108,9 @@ function onSubmit() {
     kind: form.provider === 'claude_code' ? 'oauth_subscription' : 'api_key',
     provider: form.provider,
     secret: form.secret,
+    name: form.name.trim(),
     model_high: form.model_high,
+    model_heavy: form.model_heavy.trim(),
     model_low: form.model_low,
     base_url: form.provider === 'openai_compatible' ? form.base_url : null,
     plan_tier: form.provider === 'claude_code' ? form.plan_tier : null,
@@ -116,6 +132,19 @@ function onSubmit() {
       <USelect
         v-model="form.provider"
         :items="providerOptions"
+        class="w-full"
+      />
+    </UFormField>
+
+    <UFormField
+      :label="$t('admin.llm.name')"
+      name="name"
+      :help="$t('admin.llm.nameHelp')"
+    >
+      <UInput
+        v-model="form.name"
+        maxlength="100"
+        :placeholder="form.provider"
         class="w-full"
       />
     </UFormField>
@@ -167,6 +196,25 @@ function onSubmit() {
         v-model="form.model_high"
         class="w-full"
         required
+      />
+    </UFormField>
+
+    <UFormField
+      :label="$t('admin.llm.modelHeavy')"
+      name="model_heavy"
+      :help="$t('admin.llm.modelHeavyHelp')"
+    >
+      <USelect
+        v-if="!isCompatible"
+        :model-value="form.model_heavy || NO_HEAVY"
+        :items="heavyOptions"
+        class="w-full"
+        @update:model-value="form.model_heavy = $event === NO_HEAVY ? '' : ($event as string)"
+      />
+      <UInput
+        v-else
+        v-model="form.model_heavy"
+        class="w-full"
       />
     </UFormField>
 

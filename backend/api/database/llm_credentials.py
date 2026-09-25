@@ -34,7 +34,9 @@ def db_create_llm_credential(
     kind: str,
     provider: str,
     secret_encrypted: str,
+    name: str = "",
     model_high: str = "",
+    model_heavy: str = "",
     model_low: str = "",
     base_url: str | None = None,
     plan_tier: str | None = None,
@@ -48,7 +50,9 @@ def db_create_llm_credential(
         provider=provider,
         plan_tier=plan_tier,
         secret_encrypted=secret_encrypted,
+        name=name,
         model_high=model_high,
+        model_heavy=model_heavy,
         model_low=model_low,
         base_url=base_url,
         status=LLMCredentialStatus.ACTIVE.value,
@@ -124,6 +128,13 @@ class LLMCredentialAvailability(StrEnum):
     ALL_STALE = "all_stale"
 
 
+def llm_credential_is_stale(row: LLMCredential, now: datetime) -> bool:
+    """A stale row whose ``stale_until`` has elapsed is usable again."""
+    return row.status == LLMCredentialStatus.STALE.value and (
+        row.stale_until is not None and row.stale_until > now
+    )
+
+
 def db_select_llm_credential(
     db: Session,
 ) -> tuple[LLMCredentialAvailability, LLMCredential | None, datetime | None]:
@@ -144,11 +155,9 @@ def db_select_llm_credential(
     now = datetime.now(UTC)
     stale_untils: list[datetime] = []
     for row in rows:
-        is_stale = row.status == LLMCredentialStatus.STALE.value and (
-            row.stale_until is not None and row.stale_until > now
-        )
-        if not is_stale:
+        if not llm_credential_is_stale(row, now):
             return LLMCredentialAvailability.AVAILABLE, row, None
+        assert row.stale_until is not None
         stale_untils.append(row.stale_until)
 
     return LLMCredentialAvailability.ALL_STALE, None, min(stale_untils)

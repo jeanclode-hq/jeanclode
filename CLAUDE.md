@@ -19,6 +19,13 @@ Workflows live under `cli/src/workflows/`:
 - `jeanclode_respond/` — handles `@jeanclode-bot` mentions; planner either `route`s (defers to an existing pipeline — review/summary/resolve) or `handle`s the ask directly via Bash/git/`gh`/`glab`, judgment-governed rather than an enumerated whitelist. Two deterministic post-turn checks against provider state (never the planner's own account): the branch tip moved → re-attach `jeanclode:review`; nothing pushed but the last open thread closed → the ready notice, since that round of the loop converged with no re-review to come
 - `_smoke/` — the `echo` workflow, an internal smoke test (no external API calls)
 
+Every agent runs on the default LLM credential from the pool (ADR-010), except
+the fixer in `sentry_fix` and `issue_resolve`: when the pool offers a choice
+(a credential on another host, or a `model_heavy` tier), triage can move the
+fixer to another credential when a skill or the issue asks for it by name, or
+to the heavy tier for clearly heavy work. See "Fixer LLM choice" in
+[cli/CLAUDE.md](./cli/CLAUDE.md).
+
 Every agent that reads `.context/diff` sees noise files (lockfiles, minified bundles, assets, snapshots, generated code) as a header plus a `+/-` count stub, never their content — `prepare_diff` in `cli/src/adaptors/diffn.py` owns that list.
 
 ## Ready notice

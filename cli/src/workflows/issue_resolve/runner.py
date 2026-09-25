@@ -78,6 +78,7 @@ from src.agents.issue import (
 from src.agents.issue.schemas import TriageOutput
 from src.runtime.context import RunContext
 from src.runtime.events import Panel
+from src.runtime.llm_options import apply_fixer_llm, resolve_fixer_llm
 from src.workflows.base import register
 from src.workflows.issue_resolve.utils import (
     format_triage_panel,
@@ -222,6 +223,14 @@ class IssueResolveWorkflow:
     ) -> WorkflowResult:
         branch = issue_branch(issue_number, issue_url)
         platform = provider_to_platform(provider)
+        fixer_llm = resolve_fixer_llm(
+            ctx.llm_options,
+            triage_output.fixer_llm_credential,
+            triage_output.fixer_llm_tier,
+            triage_output.fixer_llm_reason,
+        )
+        if fixer_llm.summary:
+            ctx.emit(Panel(title="Fixer LLM", content=fixer_llm.summary, style="cyan"))
         targets = resolve_target_repos(ctx, repo_ctx, triage_output.target_repos)
         multi = len(targets) > 1
         parent_dir = ctx.workspace / "worktrees" / branch.replace("/", "_")
@@ -236,7 +245,7 @@ class IssueResolveWorkflow:
                 pr = open_pr(
                     branch,
                     pr_title(issue_ctx, name if multi else ""),
-                    pr_body(issue_url, issue_ctx, siblings),
+                    pr_body(issue_url, issue_ctx, siblings, fixer_llm=fixer_llm.summary),
                     platform,
                     ctx=pr_ctx,
                 )
@@ -262,7 +271,7 @@ class IssueResolveWorkflow:
                 push_branch(branch, ctx=ctx.with_cwd(dest))
 
             fixer_cwd = parent_dir if multi else next(iter(worktrees.values())).path
-            fixer_ctx = ctx.with_cwd(fixer_cwd)
+            fixer_ctx = apply_fixer_llm(ctx.with_cwd(fixer_cwd), fixer_llm)
 
             stop_hooks = []
             pretool_hooks = []
@@ -344,6 +353,7 @@ class IssueResolveWorkflow:
                     "triage_result": "actionable",
                     "pr_urls": pr_urls,
                     "repos": repo_results,
+                    "fixer_llm": fixer_llm.summary,
                 },
             )
         except Exception as exc:

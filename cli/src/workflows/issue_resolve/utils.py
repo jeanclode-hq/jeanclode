@@ -103,7 +103,13 @@ def pr_title(issue_ctx: IssueContext, repo_name: str = "") -> str:
     return f"fix: {cleaned}{suffix}"
 
 
-def pr_body(issue_url: str, issue_ctx: IssueContext, siblings: list[str] | None = None) -> str:
+def pr_body(
+    issue_url: str,
+    issue_ctx: IssueContext,
+    siblings: list[str] | None = None,
+    *,
+    fixer_llm: str = "",
+) -> str:
     """PR/MR body. ``siblings`` names the OTHER repos also part of this fix
     (multi-repo case) — each repo gets its own PR, this just cross-links
     them by name so a reviewer on one isn't confused why it's incomplete
@@ -116,6 +122,8 @@ def pr_body(issue_url: str, issue_ctx: IssueContext, siblings: list[str] | None 
         if siblings
         else ""
     )
+    if fixer_llm:
+        note += f"\n\n_Fixer LLM: {fixer_llm}_"
     return (
         f"Resolves {issue_url}\n\n"
         f"## Issue\n\n**{title}**{note}\n\n"

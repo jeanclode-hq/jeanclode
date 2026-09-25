@@ -4,6 +4,8 @@
 
 Accepted — implemented, tracked by [jeanclode-hq/jeanclode#16](https://github.com/jeanclode-hq/jeanclode/issues/16)
 
+Amended by [jeanclode-hq/jeanclode#43](https://github.com/jeanclode-hq/jeanclode/issues/43): the fixer can run on a credential other than the run's default. See "Amendment: fixer LLM choice" below.
+
 ## Context
 
 LLM configuration today is a single instance-level credential: one row in
@@ -415,6 +417,39 @@ warning.
   no-ops.
 - The backend's Role needs `delete` on `secrets` and `configmaps`. This is
   the only new cluster permission the retry path introduces.
+
+## Amendment: fixer LLM choice (#43)
+
+Selection above still picks one **default** credential per run, and every
+agent runs on it. Two things are added around it:
+
+- Credentials gain an optional `name` and an optional `model_heavy`.
+- After picking the default, dispatch also loads every other non-stale
+  credential that reaches a *different host*, each under its own secret
+  name, and lists them (public data only) in `JEANCLODE_LLM_OPTIONS`.
+  Same-host credentials collapse to the first usable one: the proxy injects
+  one credential per host, and they serve the same models anyway.
+
+Triage reads that list and may move the fixer, and only the fixer, to
+another credential (only when a skill or the issue explicitly asks for it by
+name) or to the heavy tier (when the credential has one and the work is
+clearly heavy, or a skill or the issue asks). Anything unconfigured keeps the
+default, and the run says so.
+
+What stays the same:
+
+- Priority order and staleness still pick the default. Failover can still
+  cross providers.
+- A stale credential is never offered as an option.
+- The 429 event carries the credential of the *session* that hit it: a
+  retargeted fixer reports its own credential id, so the watcher stales that
+  row and the retry falls back to the default. Every other session reports
+  the default, as before.
+- When there's no choice to make (one host, no `model_heavy`), nothing is
+  emitted and a run is identical to before.
+
+Per-agent choice beyond the fixer, and org-level forcing of a credential,
+are out of scope.
 
 ## Future work (explicitly out of scope here)
 
