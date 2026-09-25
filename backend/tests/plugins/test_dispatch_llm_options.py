@@ -32,7 +32,7 @@ def _cred(provider: str = "claude_code", **fields: object) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
-def _dispatch(pool: list[SimpleNamespace]) -> DispatchInputs:
+def _dispatch(pool: list[SimpleNamespace], *, fixer_options: bool = True) -> DispatchInputs:
     app = MagicMock()
     app.options.claude_code.oauth_token = None
     app.options.claude_code.api_key = None
@@ -48,7 +48,7 @@ def _dispatch(pool: list[SimpleNamespace]) -> DispatchInputs:
         patch(f"{_MOD}.db_list_llm_credentials", return_value=pool),
         patch(f"{_MOD}.decrypt_secret", side_effect=lambda c: f"secret-{c.id}"),
     ):
-        result = add_llm_to_inputs(inputs)
+        result = add_llm_to_inputs(inputs, fixer_options=fixer_options)
     assert result.available
     return inputs
 
@@ -93,6 +93,14 @@ def test_primary_wiring_is_unchanged_by_extra_options() -> None:
         == (alone.secrets[CredentialKey.CLAUDE_CODE_OAUTH_TOKEN])
     )
     assert with_extra.public_env["JEANCLODE_LLM_CREDENTIAL_ID"] == str(primary.id)
+
+
+def test_workflows_without_a_fixer_get_only_the_default() -> None:
+    pool = [_cred(model_heavy="opus"), _cred("openai_compatible", base_url="https://llm.internal")]
+    inputs = _dispatch(pool, fixer_options=False)
+    assert "JEANCLODE_LLM_OPTIONS" not in inputs.public_env
+    assert inputs.secrets.keys() == {CredentialKey.CLAUDE_CODE_OAUTH_TOKEN}
+    assert [u.host for u in inputs.upstreams] == ["api.anthropic.com"]
 
 
 def test_same_host_credentials_collapse_to_the_primary() -> None:
@@ -162,7 +170,7 @@ def test_options_failure_keeps_the_primary() -> None:
         patch(f"{_MOD}.db_list_llm_credentials", side_effect=RuntimeError("boom")),
         patch(f"{_MOD}.decrypt_secret", return_value="tok"),
     ):
-        result = add_llm_to_inputs(inputs)
+        result = add_llm_to_inputs(inputs, fixer_options=True)
     assert result.available
     assert inputs.secrets[CredentialKey.CLAUDE_CODE_OAUTH_TOKEN] == "tok"
     assert "JEANCLODE_LLM_OPTIONS" not in inputs.public_env

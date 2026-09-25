@@ -161,7 +161,7 @@ async def build_dispatch_inputs(
     """
     inputs = DispatchInputs()
     _add_sentry(inputs, org)
-    llm_selection = add_llm_to_inputs(inputs)
+    llm_selection = add_llm_to_inputs(inputs, fixer_options=True)
 
     issue = issues[0]
     repository = issue.repository

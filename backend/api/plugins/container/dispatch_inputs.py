@@ -139,7 +139,7 @@ class LLMSelectionResult(BaseModel):
         return self.availability == LLMCredentialAvailability.AVAILABLE
 
 
-def add_llm_to_inputs(inputs: DispatchInputs) -> LLMSelectionResult:
+def add_llm_to_inputs(inputs: DispatchInputs, *, fixer_options: bool = False) -> LLMSelectionResult:
     """Resolve the LLM credential — env-options first, the admin-configured
     credential pool as fallback (ADR-010).
 
@@ -153,6 +153,10 @@ def add_llm_to_inputs(inputs: DispatchInputs) -> LLMSelectionResult:
       * ``anthropic`` → ``ANTHROPIC_API_KEY`` (``x-api-key`` header)
       * ``openai`` / ``openai_compatible`` → ``OPENAI_API_KEY``; host is
         derived from ``base_url`` so self-hosted endpoints work.
+
+    ``fixer_options`` is for workflows whose triage can move the fixer to
+    another credential (sentry-fix, issue-resolve); nobody else gets the
+    extra credentials' secrets or hosts.
 
     Returns a :class:`LLMSelectionResult` so callers can distinguish real,
     temporary exhaustion (every pool row currently stale — retry later)
@@ -180,6 +184,8 @@ def add_llm_to_inputs(inputs: DispatchInputs) -> LLMSelectionResult:
         if availability != LLMCredentialAvailability.AVAILABLE or credential is None:
             return LLMSelectionResult(availability=availability, retry_at=retry_at)
         _add_llm_from_credential(inputs, credential)
+        if not fixer_options:
+            return LLMSelectionResult(availability=LLMCredentialAvailability.AVAILABLE)
         try:
             _add_llm_options(inputs, credential, db_list_llm_credentials(db))
         except Exception:

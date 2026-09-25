@@ -345,7 +345,7 @@ async def launch_issue_resolve_container(
     backend = github_plugin._watcher.backend
 
     inputs = DispatchInputs()
-    llm_selection = add_llm_to_inputs(inputs)
+    llm_selection = add_llm_to_inputs(inputs, fixer_options=True)
     if _handle_llm_unavailable(db_plugin, execution_id, llm_selection):
         return None
     await add_git_platform_to_inputs(

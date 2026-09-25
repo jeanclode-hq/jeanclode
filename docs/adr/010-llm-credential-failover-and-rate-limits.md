@@ -424,7 +424,7 @@ Selection above still picks one **default** credential per run, and every
 agent runs on it. Two things are added around it:
 
 - Credentials gain an optional `name` and an optional `model_heavy`.
-- After picking the default, dispatch also loads every other non-stale
+- For sentry-fix and issue-resolve, after picking the default, dispatch also loads every other non-stale
   credential that reaches a *different host*, each under its own secret
   name, and lists them (public data only) in `JEANCLODE_LLM_OPTIONS`.
   Same-host credentials collapse to the first usable one: the proxy injects
