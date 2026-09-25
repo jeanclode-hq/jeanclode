@@ -13,7 +13,12 @@ from api.models.execution_links import (
     execution_pull_requests,
     issue_pull_requests,
 )
-from api.models.executions import Execution, ExecutionStatus, ExecutionWorkflow
+from api.models.executions import (
+    ISSUE_STATUS_WORKFLOWS,
+    Execution,
+    ExecutionStatus,
+    ExecutionWorkflow,
+)
 from api.models.identities import ProviderIdentity
 from api.models.issues import Issue, TriageResult
 from api.models.organizations import Organization
@@ -70,7 +75,7 @@ def _has_mapping_filter():
 
 
 def _latest_execution_subquery():
-    """Subquery returning the latest execution per issue (by created_at desc).
+    """Subquery returning the latest fix/resolve execution per issue (by created_at desc).
 
     Joins ``execution_issues`` to get one row per (execution, issue) pair, then
     keeps only the newest execution per issue via DISTINCT ON. The PR side is
@@ -91,6 +96,7 @@ def _latest_execution_subquery():
             execution_pull_requests,
             execution_pull_requests.c.execution_id == Execution.id,
         )
+        .where(Execution.workflow.in_(ISSUE_STATUS_WORKFLOWS))
         .distinct(execution_issues.c.issue_id)
         .order_by(execution_issues.c.issue_id, Execution.created_at.desc())
         .subquery("latest_exec")

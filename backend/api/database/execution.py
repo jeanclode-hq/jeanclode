@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session, aliased, joinedload
 from api.database.organization import batch_window_minutes_clause, org_effective_root_id
 from api.database.repository import repo_enabled_clause
 from api.models.execution_links import execution_issues, execution_pull_requests
-from api.models.executions import Execution, ExecutionStatus, ExecutionTrigger, ExecutionWorkflow
+from api.models.executions import (
+    ISSUE_STATUS_WORKFLOWS,
+    Execution,
+    ExecutionStatus,
+    ExecutionTrigger,
+    ExecutionWorkflow,
+)
 from api.models.issues import Issue
 from api.models.organizations import Organization
 from api.models.pull_requests import PRState, PullRequest
@@ -335,11 +341,14 @@ def db_get_failed_execution_count(db: Session, issue_id: UUID) -> int:
 
 
 def db_get_latest_execution_for_issue(db: Session, issue_id: UUID) -> Execution | None:
-    """Get the most recent execution for an issue."""
+    """Get the most recent fix/resolve execution for an issue."""
     return (
         db.query(Execution)
         .join(execution_issues, execution_issues.c.execution_id == Execution.id)
-        .filter(execution_issues.c.issue_id == issue_id)
+        .filter(
+            execution_issues.c.issue_id == issue_id,
+            Execution.workflow.in_(ISSUE_STATUS_WORKFLOWS),
+        )
         .order_by(Execution.created_at.desc())
         .first()
     )
