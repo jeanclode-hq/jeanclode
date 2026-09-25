@@ -22,7 +22,7 @@ Workflows live under `cli/src/workflows/`:
 Every agent runs on the default LLM credential from the pool (ADR-010), except
 the fixer in `issue_resolve`: when the pool offers a choice
 (a credential on another host, or a `model_heavy` tier), triage can move the
-fixer to another credential when a skill or the issue asks for it by name, or
+fixer to another credential when the issue asks for it by name, or
 to the heavy tier for clearly heavy work. See "Fixer LLM choice" in
 [cli/CLAUDE.md](./cli/CLAUDE.md).
 

@@ -81,14 +81,8 @@ class BaseAgent:
     # thread, so settled points there shouldn't be re-derived from scratch.
     use_continuity: ClassVar[bool] = False
     prefer_small_model: ClassVar[bool] = False
-    # Triage agents that pick the fixer's LLM (#43). When the run offers a
-    # choice they also see the loaded skills, since a skill may ask for one.
+    # Triage that picks the fixer's LLM when the run offers a choice (#43).
     choose_fixer_llm: ClassVar[bool] = False
-
-    def _uses_skills(self, ctx: RunContext) -> bool:
-        if not ctx.skills:
-            return False
-        return self.use_third_party_skills or (self.choose_fixer_llm and bool(ctx.llm_options))
 
     def _prompts_dir(self) -> Path:
         """Resolve the directory where `prompt_file` lives.
@@ -120,7 +114,7 @@ class BaseAgent:
         extra_hooks: dict[HookEvent, list[HookMatcher]] | None = None,
     ) -> AgentResult:
         prompt = self._render(agent_input)
-        if self._uses_skills(ctx):
+        if self.use_third_party_skills and ctx.skills:
             prompt = f"{prompt}\n\n{discovery_block(ctx.skills)}"
         if self.choose_fixer_llm and ctx.llm_options:
             prompt = f"{prompt}\n\n{fixer_llm_block(ctx.llm_options)}"
@@ -414,7 +408,7 @@ class BaseAgent:
 
         tools = list(self.allowed_tools)
         mcp_servers: dict[str, Any] = {}
-        if self._uses_skills(ctx):
+        if self.use_third_party_skills and ctx.skills:
             if "Skill" not in tools:
                 tools.append("Skill")
             plugin_paths = {s.plugin_path for s in ctx.skills}

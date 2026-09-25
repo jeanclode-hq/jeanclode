@@ -431,9 +431,9 @@ agent runs on it. Two things are added around it:
   one credential per host, and they serve the same models anyway.
 
 Issue triage reads that list and may move the fixer, and only the fixer, to
-another credential (only when a skill or the issue explicitly asks for it by
+another credential (only when the issue explicitly asks for it by
 name) or to the heavy tier (when the credential has one and the work is
-clearly heavy, or a skill or the issue asks). Anything unconfigured keeps the
+clearly heavy, or the issue asks). Anything unconfigured keeps the
 default, and the run says so.
 
 What stays the same:

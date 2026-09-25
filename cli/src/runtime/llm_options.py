@@ -137,7 +137,7 @@ Available credentials (the first is the default):
 Rules:
 - Default: `fixer_llm_credential` = "" and `fixer_llm_tier` = "high". This is \
 the right answer for almost every task. Always prefer the default credential.
-- Name another credential ONLY when a loaded skill or the issue itself \
+- Name another credential ONLY when the issue (or a loaded skill, if any) \
 explicitly asks for it (e.g. "use the self-hosted model for this repo"). \
 Never switch on your own judgment, on the topic of the issue, or because a \
 credential sounds more capable or more private.

@@ -18,7 +18,7 @@ from src.runtime.llm_options import (
     load_llm_options_from_env,
     resolve_fixer_llm,
 )
-from tests.test_base_agent_skills import _capture, _Input, _make_skill
+from tests.test_base_agent_skills import _capture, _Input
 
 DEFAULT = LLMOption(
     id="c1", name="claude", provider="claude_code", model_high="sonnet", model_heavy="opus"
@@ -125,22 +125,15 @@ def _chooser(tmp_path: Path) -> type[BaseAgent]:
 
 
 async def test_triage_without_options_is_unchanged(tmp_path: Path) -> None:
-    skill = _make_skill(tmp_path, "p", "ruff", "ruff style")
-    prompt, options = await _capture(_chooser(tmp_path), _ctx(tmp_path, skills=[skill]))
+    prompt, _ = await _capture(_chooser(tmp_path), _ctx(tmp_path))
     assert "Fixer model choice" not in prompt
-    assert "User-loaded skills" not in prompt
-    assert "Skill" not in (options.allowed_tools or [])
 
 
-async def test_triage_with_options_sees_choices_and_skills(tmp_path: Path) -> None:
-    skill = _make_skill(tmp_path, "p", "ruff", "ruff style")
-    ctx = _ctx(tmp_path, skills=[skill], llm_options=OPTIONS)
-    prompt, options = await _capture(_chooser(tmp_path), ctx)
+async def test_triage_with_options_gets_the_choice(tmp_path: Path) -> None:
+    prompt, _ = await _capture(_chooser(tmp_path), _ctx(tmp_path, llm_options=OPTIONS))
     assert "Fixer model choice" in prompt
     assert "**self-hosted** (openai_compatible) — model: qwen-coder" in prompt
     assert "heavy model: opus" in prompt
-    assert "User-loaded skills" in prompt
-    assert "Skill" in options.allowed_tools
 
 
 async def test_failed_session_carries_its_credential(tmp_path: Path) -> None:

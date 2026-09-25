@@ -123,7 +123,7 @@ and the ready-notice marker.
 `JEANCLODE_LLM_OPTIONS` (see `src/runtime/llm_options.py`) lists the
 credentials the backend loaded for this run, the default first. When it's
 set, agents with `choose_fixer_llm` (the issue triage agent) get a prompt block
-listing them plus the loaded skills, and fill `fixer_llm_credential` /
+listing them, and fill `fixer_llm_credential` /
 `fixer_llm_tier` / `fixer_llm_reason`. `resolve_fixer_llm` maps that onto a
 configured option (unknown names keep the default, with a note);
 `apply_fixer_llm` retargets only
