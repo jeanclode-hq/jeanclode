@@ -27,4 +27,3 @@ class TriageAgent(SentryAgent):
     use_third_party_skills: ClassVar[bool] = True
     use_mcp_connectors: ClassVar[bool] = True
     use_memory: ClassVar[bool] = True
-    choose_fixer_llm: ClassVar[bool] = True

@@ -44,15 +44,9 @@ from src.agents.sentry import (
     TriageAgent,
     TriageInput,
 )
-from src.output import emit_rate_limit_error, extract_retry_after, rate_limited_credential
+from src.output import emit_rate_limit_error, extract_retry_after
 from src.runtime.context import RunContext
 from src.runtime.events import Panel
-from src.runtime.llm_options import (
-    FixerLLMChoice,
-    apply_fixer_llm,
-    merge_choices,
-    resolve_fixer_llm,
-)
 from src.workflows.base import register
 from src.workflows.schemas import WorkflowResult
 from src.workflows.sentry_fix.utils import (
@@ -159,7 +153,7 @@ class SentryFixWorkflow:
         )
 
         results = await asyncio.gather(
-            *[self._run_group(g, work_ctx, self._fixer_llm(g, plan, ctx)) for g in groups],
+            *[self._run_group(g, work_ctx) for g in groups],
             return_exceptions=False,
         )
 
@@ -283,26 +277,7 @@ class SentryFixWorkflow:
             return fallback_groups(plan.actionable)
         return synthesized_groups(parsed.groups, plan.actionable)
 
-    @staticmethod
-    def _fixer_llm(group: SynthesisGroup, plan: RoutingPlan, ctx: RunContext) -> FixerLLMChoice:
-        choices = [
-            resolve_fixer_llm(
-                ctx.llm_options,
-                t.triage.fixer_llm_credential,
-                t.triage.fixer_llm_tier,
-                t.triage.fixer_llm_reason,
-            )
-            for issue_id in group.issue_ids
-            if (t := plan.triages.get(issue_id)) is not None
-        ]
-        return merge_choices(choices)
-
-    async def _run_group(
-        self,
-        group: SynthesisGroup,
-        ctx: RunContext,
-        fixer_llm: FixerLLMChoice | None = None,
-    ) -> GroupResult:
+    async def _run_group(self, group: SynthesisGroup, ctx: RunContext) -> GroupResult:
         """Open a PR per target repo, then run one fixer across them.
 
         Every git and PR command for a repo runs from that repo's own
@@ -322,14 +297,11 @@ class SentryFixWorkflow:
             )
         multi = len(targets) > 1
         parent_dir = ctx.workspace / "worktrees" / branch.replace("/", "_")
-        fixer_llm = fixer_llm or FixerLLMChoice()
-        if fixer_llm.summary:
-            ctx.emit(Panel(title="Fixer LLM", content=fixer_llm.summary, style="cyan"))
 
         worktrees: dict[str, WorktreePath] = {}
         prs: dict[str, PRRef] = {}
         try:
-            gitleaks_scan(pr_body(group, fixer_llm=fixer_llm.summary), ctx=ctx)
+            gitleaks_scan(pr_body(group), ctx=ctx)
 
             for name, target_ctx in targets:
                 dest = (parent_dir / name) if multi else parent_dir
@@ -344,7 +316,7 @@ class SentryFixWorkflow:
                 prs[name] = open_pr(
                     branch,
                     pr_title(group, name if multi else ""),
-                    pr_body(group, siblings, fixer_llm=fixer_llm.summary),
+                    pr_body(group, siblings),
                     detect_platform(wt_ctx),
                     ctx=wt_ctx,
                 )
@@ -391,7 +363,7 @@ class SentryFixWorkflow:
                         for name, _ in targets
                     ],
                 ),
-                apply_fixer_llm(ctx.with_cwd(fixer_cwd), fixer_llm),
+                ctx.with_cwd(fixer_cwd),
                 extra_hooks={"Stop": stop_hooks, "PreToolUse": pretool_hooks},
             )
 
@@ -464,7 +436,6 @@ class SentryFixWorkflow:
                         retry_after=extract_retry_after(exc),
                         branch=branch,
                         pr_url=pr_url,
-                        credential_id=rate_limited_credential(exc),
                     )
             return GroupResult(
                 group=group,

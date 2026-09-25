@@ -104,20 +104,6 @@ def resolve_fixer_llm(
     return FixerLLMChoice(option=option, tier=chosen_tier, note="; ".join(notes))
 
 
-def merge_choices(choices: list[FixerLLMChoice]) -> FixerLLMChoice:
-    """One fixer serves a whole Sentry group: the first non-default credential
-    any member asked for wins, and heavy wins over high on that credential."""
-    if not choices:
-        return FixerLLMChoice()
-    picked = next((c for c in choices if c.option and not c.option.is_default), choices[0])
-    if picked.option is None:
-        return picked
-    same = [c for c in choices if c.option and c.option.id == picked.option.id]
-    tier: Tier = "heavy" if any(c.tier == "heavy" for c in same) else "high"
-    notes = dict.fromkeys(c.note for c in choices if c.note)
-    return FixerLLMChoice(option=picked.option, tier=tier, note="; ".join(notes))
-
-
 def apply_fixer_llm(ctx: RunContext, choice: FixerLLMChoice) -> RunContext:
     """Return ``ctx`` retargeted at the chosen credential and tier."""
     option = choice.option

@@ -154,9 +154,9 @@ def add_llm_to_inputs(inputs: DispatchInputs, *, fixer_options: bool = False) ->
       * ``openai`` / ``openai_compatible`` → ``OPENAI_API_KEY``; host is
         derived from ``base_url`` so self-hosted endpoints work.
 
-    ``fixer_options`` is for workflows whose triage can move the fixer to
-    another credential (sentry-fix, issue-resolve); nobody else gets the
-    extra credentials' secrets or hosts.
+    ``fixer_options`` is for issue-resolve, whose triage can move the fixer
+    to another credential; nobody else gets the extra credentials' secrets
+    or hosts.
 
     Returns a :class:`LLMSelectionResult` so callers can distinguish real,
     temporary exhaustion (every pool row currently stale — retry later)

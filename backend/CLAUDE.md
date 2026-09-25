@@ -203,7 +203,7 @@ When every credential is stale, the two dispatch paths diverge:
 An empty pool is misconfiguration, not exhaustion: the execution fails
 immediately with `error_type="no_llm_credentials_configured"`.
 
-For sentry-fix and issue-resolve only (`fixer_options=True`), once the default
+For issue-resolve only (`fixer_options=True`), once the default
 credential is picked, `_add_llm_options` also loads every
 other non-stale credential on a *different host* (the proxy injects one
 credential per host, so same-host rows collapse to the first) under its own

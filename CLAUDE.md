@@ -20,7 +20,7 @@ Workflows live under `cli/src/workflows/`:
 - `_smoke/` — the `echo` workflow, an internal smoke test (no external API calls)
 
 Every agent runs on the default LLM credential from the pool (ADR-010), except
-the fixer in `sentry_fix` and `issue_resolve`: when the pool offers a choice
+the fixer in `issue_resolve`: when the pool offers a choice
 (a credential on another host, or a `model_heavy` tier), triage can move the
 fixer to another credential when a skill or the issue asks for it by name, or
 to the heavy tier for clearly heavy work. See "Fixer LLM choice" in

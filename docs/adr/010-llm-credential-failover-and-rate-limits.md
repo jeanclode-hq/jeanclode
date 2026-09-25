@@ -424,13 +424,13 @@ Selection above still picks one **default** credential per run, and every
 agent runs on it. Two things are added around it:
 
 - Credentials gain an optional `name` and an optional `model_heavy`.
-- For sentry-fix and issue-resolve, after picking the default, dispatch also loads every other non-stale
+- For issue-resolve, after picking the default, dispatch also loads every other non-stale
   credential that reaches a *different host*, each under its own secret
   name, and lists them (public data only) in `JEANCLODE_LLM_OPTIONS`.
   Same-host credentials collapse to the first usable one: the proxy injects
   one credential per host, and they serve the same models anyway.
 
-Triage reads that list and may move the fixer, and only the fixer, to
+Issue triage reads that list and may move the fixer, and only the fixer, to
 another credential (only when a skill or the issue explicitly asks for it by
 name) or to the heavy tier (when the credential has one and the work is
 clearly heavy, or a skill or the issue asks). Anything unconfigured keeps the
@@ -448,8 +448,8 @@ What stays the same:
 - When there's no choice to make (one host, no `model_heavy`), nothing is
   emitted and a run is identical to before.
 
-Per-agent choice beyond the fixer, and org-level forcing of a credential,
-are out of scope.
+Per-agent choice beyond the fixer, sentry-fix, and org-level forcing of a
+credential are out of scope.
 
 ## Future work (explicitly out of scope here)
 

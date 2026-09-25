@@ -13,11 +13,9 @@ from src.agents.base import BaseAgent
 from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
 from src.runtime.llm_options import (
-    FixerLLMChoice,
     LLMOption,
     apply_fixer_llm,
     load_llm_options_from_env,
-    merge_choices,
     resolve_fixer_llm,
 )
 from tests.test_base_agent_skills import _capture, _Input, _make_skill
@@ -110,25 +108,6 @@ def test_heavy_without_heavy_model_falls_back_to_high() -> None:
     choice = resolve_fixer_llm(OPTIONS, "self-hosted", "heavy")
     assert choice.tier == "high"
     assert "no heavy model" in choice.note
-
-
-def test_group_prefers_a_non_default_request_and_heavy() -> None:
-    merged = merge_choices(
-        [
-            resolve_fixer_llm(OPTIONS, "", "high"),
-            resolve_fixer_llm(OPTIONS, "claude", "heavy"),
-        ]
-    )
-    assert (merged.option, merged.tier) == (DEFAULT, "heavy")
-
-    merged = merge_choices(
-        [
-            resolve_fixer_llm(OPTIONS, "claude", "heavy"),
-            resolve_fixer_llm(OPTIONS, "self-hosted", "high"),
-        ]
-    )
-    assert (merged.option, merged.tier) == (SELF_HOSTED, "high")
-    assert merge_choices([]) == FixerLLMChoice()
 
 
 def _chooser(tmp_path: Path) -> type[BaseAgent]:

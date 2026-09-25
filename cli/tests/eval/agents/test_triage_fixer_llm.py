@@ -12,11 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from src.activities.sentry.schemas import TriageOutput as SentryTriageOutput
 from src.agents.issue.schemas import TriageInput, TriageOutput
 from src.agents.issue.triage import TriageAgent
-from src.agents.sentry import TriageAgent as SentryTriageAgent
-from src.agents.sentry.triage import TriageInput as SentryTriageInput
 from src.runtime.llm_options import LLMOption, resolve_fixer_llm
 from src.skills.schemas import Skill
 
@@ -102,7 +99,7 @@ async def _issue_triage(run_agent, tmp_path: Path, title: str, body: str, **ctx)
     return TriageOutput.model_validate(raw or {})
 
 
-def _resolved(output: TriageOutput | SentryTriageOutput) -> tuple[str, str]:
+def _resolved(output: TriageOutput) -> tuple[str, str]:
     choice = resolve_fixer_llm(
         OPTIONS, output.fixer_llm_credential, output.fixer_llm_tier, output.fixer_llm_reason
     )
@@ -213,56 +210,3 @@ async def test_large_refactor_goes_heavy(run_agent, tmp_path, fake_cli_env) -> N
     )
     assert output.kind == "proceed"
     assert _resolved(output) == ("claude", "heavy")
-
-
-# --- sentry triage ---
-
-
-_SENTRY_EVENT = """\
-KeyError: 'amount'
-  File "shop/checkout.py", line 8, in checkout
-    total -= cart["discount"]["amount"]
-
-Tags: environment=production, release=2026.09.1
-Context: discount={"code": "TEN", "percent": 10}
-"""
-
-
-async def test_sentry_skill_asking_for_self_hosted_switches(run_agent, tmp_path) -> None:
-    _seed_repo(tmp_path)
-    skill = _skill(
-        tmp_path,
-        "llm-routing",
-        "Which LLM credential the fixer must use for this organisation's repositories.",
-        "Every code fix in the `shop` repositories must run on the `self-hosted` LLM "
-        "credential. Never use a cloud model for them.",
-    )
-    raw = await run_agent(
-        SentryTriageAgent,
-        SentryTriageInput(
-            issue_id="4242",
-            sentry_url="https://sentry.local/issues/4242",
-            formatted=_SENTRY_EVENT,
-        ),
-        llm_options=OPTIONS,
-        skills=[skill],
-    )
-    output = SentryTriageOutput.model_validate(raw or {})
-    assert output.kind == "proceed"
-    assert _resolved(output) == ("self-hosted", "high")
-
-
-async def test_sentry_plain_bug_keeps_the_default(run_agent, tmp_path) -> None:
-    _seed_repo(tmp_path)
-    raw = await run_agent(
-        SentryTriageAgent,
-        SentryTriageInput(
-            issue_id="4243",
-            sentry_url="https://sentry.local/issues/4243",
-            formatted=_SENTRY_EVENT,
-        ),
-        llm_options=OPTIONS,
-    )
-    output = SentryTriageOutput.model_validate(raw or {})
-    assert output.kind == "proceed"
-    assert _resolved(output) == ("claude", "high")

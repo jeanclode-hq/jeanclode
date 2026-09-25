@@ -37,7 +37,7 @@ def detect_platform(ctx: RunContext) -> Literal["github", "gitlab"]:
             text=True,
             check=True,
         )
-    except subprocess.CalledProcessError, FileNotFoundError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return "github"
     return "gitlab" if "gitlab" in proc.stdout else "github"
 
@@ -71,9 +71,7 @@ def pr_title(group: SynthesisGroup, repo_name: str = "") -> str:
     return f"fix: {cleaned}{suffix}"
 
 
-def pr_body(
-    group: SynthesisGroup, siblings: list[str] | None = None, *, fixer_llm: str = ""
-) -> str:
+def pr_body(group: SynthesisGroup, siblings: list[str] | None = None) -> str:
     """PR/MR body. ``siblings`` names the OTHER repos this same fix touches
     (multi-repo case) — each repo gets its own PR, this just cross-links
     them by name so a reviewer on one isn't confused why it's incomplete on
@@ -93,8 +91,8 @@ def pr_body(
         f"## Triage\n\n"
         f"- **Category:** {group.category or 'bug'}\n"
         f"- **Confidence:** {group.confidence}\n"
-        f"- **Files:** {files}\n" + (f"- **Fixer LLM:** {fixer_llm}\n" if fixer_llm else "") + "\n"
-        "---\n*Opened by Jeanclode. Code changes incoming.*"
+        f"- **Files:** {files}\n\n"
+        f"---\n*Opened by Jeanclode. Code changes incoming.*"
     )
 
 
