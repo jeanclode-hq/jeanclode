@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.3.2...v1.4.0) (2026-09-25)
+
+
+### Features
+
+* let triage choose the fixer's LLM credential and model tier ([#44](https://github.com/jeanclode-hq/jeanclode/issues/44)) ([3a2291a](https://github.com/jeanclode-hq/jeanclode/commit/3a2291a886818ea10feef8a1a8b7359208cd5edb))
+
+
+### Bug Fixes
+
+* **backend:** only fix/resolve runs drive an issue's status ([#45](https://github.com/jeanclode-hq/jeanclode/issues/45)) ([8f14a9a](https://github.com/jeanclode-hq/jeanclode/commit/8f14a9a9f43ce814be3b308d2c2b056e9f1282da))
+
 ## [1.3.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.3.1...v1.3.2) (2026-09-24)
 
 
