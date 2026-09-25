@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from api.database import db_get_issue_by_id
 from api.models import User
+from api.models.executions import ISSUE_STATUS_WORKFLOWS
 from api.models.organizations import Organization
 from api.models.repositories import Repository
 from api.models.settings import RepoSettings
@@ -68,7 +69,8 @@ def issue_to_detail(
 
     executions = []
     if hasattr(issue, "executions") and issue.executions:
-        for exc in sorted(issue.executions, key=lambda e: e.created_at, reverse=True):
+        own_runs = [e for e in issue.executions if e.workflow in ISSUE_STATUS_WORKFLOWS]
+        for exc in sorted(own_runs, key=lambda e: e.created_at, reverse=True):
             executions.append(
                 ExecutionSummary(
                     id=exc.id,

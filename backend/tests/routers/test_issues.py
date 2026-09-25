@@ -293,6 +293,40 @@ def test_list_issues_response_includes_execution_id(auth_client, app, mock_auth)
     assert item["execution_status"] == "running"
 
 
+def test_issue_status_ignores_respond_runs(auth_client, app, mock_auth):
+    """A respond run on the issue must not surface as its status, list or detail."""
+    with app.database.session() as db:
+        _ws, _, _, issues = _setup_workspace_with_issues(db, mock_auth, issue_count=1)
+        ws_id, issue_id = str(_ws.id), str(issues[0].id)
+        fix = db_create_execution(
+            db,
+            provider="sentry",
+            issues=[issues[0]],
+            workflow=ExecutionWorkflow.FIX.value,
+            status=ExecutionStatus.COMPLETED.value,
+        )
+        respond = db_create_execution(
+            db,
+            provider="sentry",
+            issues=[issues[0]],
+            workflow=ExecutionWorkflow.RESPOND.value,
+            status=ExecutionStatus.RUNNING.value,
+        )
+        respond.created_at = fix.created_at + timedelta(minutes=1)
+        db.commit()
+        fix_id = str(fix.id)
+
+    item = auth_client.get(f"/issues?workspace_id={ws_id}").json()["objects"][0]
+    assert item["execution_status"] == "completed"
+    assert item["execution_id"] == fix_id
+    assert item["workflow"] == ExecutionWorkflow.FIX.value
+
+    detail = auth_client.get(f"/issues/{issue_id}").json()
+    assert detail["execution_status"] == "completed"
+    assert detail["workflow"] == ExecutionWorkflow.FIX.value
+    assert [e["id"] for e in detail["executions"]] == [fix_id]
+
+
 # =============================================================================
 # GET /issues/{issue_id} — detail
 # =============================================================================

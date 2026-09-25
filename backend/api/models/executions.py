@@ -56,6 +56,11 @@ class ExecutionWorkflow(StrEnum):
     ISSUE_RESOLVE = "issue_resolve"
 
 
+# Workflows whose state is an issue's status. A RESPOND run also links the issue
+# it was mentioned on, but it's a side conversation, not progress on the fix.
+ISSUE_STATUS_WORKFLOWS = (ExecutionWorkflow.FIX.value, ExecutionWorkflow.ISSUE_RESOLVE.value)
+
+
 class Execution(Base):
     """A single agent workflow run.
 
