@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.runtime.bus import EventBus
 from src.runtime.events import Event
+from src.runtime.llm_options import LLMOption
 from src.runtime.mcp_connectors import McpServerSpec
 from src.skills.schemas import Skill
 
@@ -37,6 +38,8 @@ class RunContext(BaseModel):
     # Provider handles to @-mention once a bot-opened PR/MR is ready, from
     # JEANCLODE_NOTIFY_USERS. Empty is the off switch — see src.runtime.notify.
     notify_users: list[str] = Field(default_factory=list)
+    # From JEANCLODE_LLM_OPTIONS; empty unless triage has a fixer LLM to pick.
+    llm_options: list[LLMOption] = Field(default_factory=list)
     dry_run: bool = False
     debug: bool = False
     memory_enabled: bool = False

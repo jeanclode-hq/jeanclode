@@ -12,7 +12,10 @@ Flow:
      one of them — e.g. a fix spanning a frontend and backend repo, or one
      that lives entirely in a related repo while the primary sits untouched
      (see resolve_target_repos).
-  5. If outcome != proceed: post a comment on the issue and stop.
+  5. If outcome != proceed: post a comment on the issue and stop. If
+     proceed with code_change=False (the issue asks for an answer, not
+     code): the fixer runs in the clone with no worktree, branch, push gate
+     or PR, and its comment_body is posted on the issue.
   6. If proceed: one worktree per resolved repo (siblings under one parent
      when there's more than one), a single FixerAgent session spanning all
      of them, implementing straight from triage's findings.
@@ -78,10 +81,12 @@ from src.agents.issue import (
 from src.agents.issue.schemas import TriageOutput
 from src.runtime.context import RunContext
 from src.runtime.events import Panel
+from src.runtime.llm_options import FixerLLMChoice, apply_fixer_llm, resolve_fixer_llm
 from src.workflows.base import register
 from src.workflows.issue_resolve.utils import (
     format_triage_panel,
     issue_branch,
+    parse_fixer_output,
     parse_issue_url_info,
     parse_triage_output,
     pr_body,
@@ -183,18 +188,7 @@ class IssueResolveWorkflow:
 
         if output.kind != "proceed":
             if output.comment_body:
-                try:
-                    post_issue_comment(
-                        output.comment_body,
-                        provider,
-                        repo,
-                        issue_number,
-                        ctx=ctx,
-                    )
-                except Exception:
-                    logger.warning(
-                        "Failed to post triage comment on issue %s", issue_url, exc_info=True
-                    )
+                _post_comment(output.comment_body, issue_url, provider, repo, issue_number, ctx)
             return WorkflowResult(
                 status="success",
                 summary=f"triage: {output.kind}",
@@ -205,20 +199,87 @@ class IssueResolveWorkflow:
                 },
             )
 
+        fixer_llm = resolve_fixer_llm(
+            ctx.llm_options,
+            output.fixer_llm_credential,
+            output.fixer_llm_tier,
+            output.fixer_llm_reason,
+        )
+        if fixer_llm.summary:
+            ctx.emit(Panel(title="Fixer LLM", content=fixer_llm.summary, style="cyan"))
+
+        if not output.code_change:
+            return await self._run_answer(
+                issue_url, issue_number, provider, repo, repo_ctx, issue_ctx, ctx, output, fixer_llm
+            )
+
         # proceed → fix + PR, straight from triage's findings
         return await self._run_fix(
-            issue_url, issue_number, provider, repo_ctx, issue_ctx, ctx, output
+            issue_url, issue_number, provider, repo, repo_ctx, issue_ctx, ctx, output, fixer_llm
         )
+
+    async def _run_answer(
+        self,
+        issue_url: str,
+        issue_number: str,
+        provider: str,
+        repo: str,
+        repo_ctx: RunContext,
+        issue_ctx: IssueContext,
+        ctx: RunContext,
+        triage_output: TriageOutput,
+        fixer_llm: FixerLLMChoice,
+    ) -> WorkflowResult:
+        # No worktree, branch or push gate: nothing here can open a PR.
+        data = {
+            "kind": "proceed",
+            "code_change": False,
+            "triage_result": "not_actionable",
+            "pr_urls": [],
+            "fixer_llm": fixer_llm.report(ctx.model),
+        }
+        try:
+            result = await IssueFixerAgent().invoke(
+                IssueFixerInput(
+                    issue_url=issue_url,
+                    findings=triage_output.findings,
+                    code_change=False,
+                    issue_title=issue_ctx.issue_title,
+                    issue_body=issue_ctx.issue_body,
+                    comments=issue_ctx.comments,
+                ),
+                apply_fixer_llm(repo_ctx, fixer_llm),
+            )
+        except Exception as exc:
+            logger.warning("issue_resolve answer failed for %s: %s", issue_url, exc, exc_info=True)
+            return WorkflowResult(
+                status="error", summary=f"answer failed: {exc}", data={**data, "error": str(exc)}
+            )
+
+        fixer_output = parse_fixer_output(result)
+        answer = fixer_output.comment_body if fixer_output else ""
+        if not answer:
+            return WorkflowResult(
+                status="error", summary="fixer agent finished without an answer", data=data
+            )
+        posted = _post_comment(answer, issue_url, provider, repo, issue_number, ctx)
+        if not posted:
+            return WorkflowResult(
+                status="error", summary="failed to post the answer on the issue", data=data
+            )
+        return WorkflowResult(status="success", summary="answered on the issue", data=data)
 
     async def _run_fix(
         self,
         issue_url: str,
         issue_number: str,
         provider: str,
+        repo: str,
         repo_ctx: RunContext,
         issue_ctx: IssueContext,
         ctx: RunContext,
         triage_output: TriageOutput,
+        fixer_llm: FixerLLMChoice,
     ) -> WorkflowResult:
         branch = issue_branch(issue_number, issue_url)
         platform = provider_to_platform(provider)
@@ -236,7 +297,7 @@ class IssueResolveWorkflow:
                 pr = open_pr(
                     branch,
                     pr_title(issue_ctx, name if multi else ""),
-                    pr_body(issue_url, issue_ctx, siblings),
+                    pr_body(issue_url, issue_ctx, siblings, fixer_llm=fixer_llm.summary),
                     platform,
                     ctx=pr_ctx,
                 )
@@ -262,7 +323,7 @@ class IssueResolveWorkflow:
                 push_branch(branch, ctx=ctx.with_cwd(dest))
 
             fixer_cwd = parent_dir if multi else next(iter(worktrees.values())).path
-            fixer_ctx = ctx.with_cwd(fixer_cwd)
+            fixer_ctx = apply_fixer_llm(ctx.with_cwd(fixer_cwd), fixer_llm)
 
             stop_hooks = []
             pretool_hooks = []
@@ -284,7 +345,7 @@ class IssueResolveWorkflow:
                     )
                 )
 
-            await IssueFixerAgent().invoke(
+            fixer_result = await IssueFixerAgent().invoke(
                 IssueFixerInput(
                     issue_url=issue_url,
                     branch=branch,
@@ -301,6 +362,16 @@ class IssueResolveWorkflow:
                 fixer_ctx,
                 extra_hooks={"Stop": stop_hooks, "PreToolUse": pretool_hooks},
             )
+            fixer_output = parse_fixer_output(fixer_result)
+            if fixer_output and fixer_output.comment_body:
+                _post_comment(
+                    fixer_output.comment_body,
+                    issue_url,
+                    provider,
+                    repo,
+                    issue_number,
+                    ctx,
+                )
 
             # Per repo: a real pushed commit always gets its PR opened (or
             # reused) and labeled for review, whether or not CI ended up
@@ -333,7 +404,12 @@ class IssueResolveWorkflow:
                 return WorkflowResult(
                     status="error",
                     summary="fixer agent finished without pushing a real change to any repo",
-                    data={"kind": "proceed", "triage_result": "actionable", "pr_urls": []},
+                    data={
+                        "kind": "proceed",
+                        "triage_result": "actionable",
+                        "pr_urls": [],
+                        "fixer_llm": fixer_llm.report(ctx.model),
+                    },
                 )
 
             return WorkflowResult(
@@ -344,6 +420,7 @@ class IssueResolveWorkflow:
                     "triage_result": "actionable",
                     "pr_urls": pr_urls,
                     "repos": repo_results,
+                    "fixer_llm": fixer_llm.report(ctx.model),
                 },
             )
         except Exception as exc:
@@ -357,6 +434,18 @@ class IssueResolveWorkflow:
                     "kind": "proceed",
                     "triage_result": "actionable",
                     "pr_urls": [pr.url for pr in prs.values()],
+                    "fixer_llm": fixer_llm.report(ctx.model),
                     "error": str(exc),
                 },
             )
+
+
+def _post_comment(
+    body: str, issue_url: str, provider: str, repo: str, issue_number: str, ctx: RunContext
+) -> bool:
+    try:
+        post_issue_comment(body, provider, repo, issue_number, ctx=ctx)
+    except Exception:
+        logger.warning("Failed to post comment on issue %s", issue_url, exc_info=True)
+        return False
+    return True

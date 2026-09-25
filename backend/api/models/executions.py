@@ -102,6 +102,10 @@ class Execution(Base):
     # The @jeanclode-bot mention/comment body that triggered a RESPOND
     # execution, surfaced read-only in the dashboard detail modal.
     prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # What the issue-resolve fixer ran on (#43), from the run's result.
+    fixer_llm_credential: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fixer_llm_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fixer_llm_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # Who @-mentioned the bot (RESPOND), when their provider identity is synced.
     triggered_by_identity_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("provider_identities.id", ondelete="SET NULL"), nullable=True

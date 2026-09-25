@@ -1,4 +1,5 @@
-"""Persist what an ``issue_resolve`` run reports: the triage verdict and the PRs it opened.
+"""Persist what an ``issue_resolve`` run reports: the triage verdict, the PRs it
+opened, and the LLM its fixer ran on.
 
 Links go through ``execution_pull_requests`` / ``issue_pull_requests`` like
 Sentry fixes do, but under the ISSUE_RESOLVE workflow — the Sentry merge gate
@@ -52,6 +53,16 @@ def match_repo_by_url(pr_url: str, candidates: list[Repository]) -> Repository |
     return None
 
 
+def _record_fixer_llm(execution: Execution, fixer_llm: dict[str, Any]) -> None:
+    def text(key: str, limit: int) -> str | None:
+        value = fixer_llm.get(key)
+        return value[:limit] if isinstance(value, str) and value else None
+
+    execution.fixer_llm_credential = text("credential", 100)
+    execution.fixer_llm_model = text("model", 255)
+    execution.fixer_llm_reason = text("reason", 2000)
+
+
 def persist_issue_resolve_result(
     db: Session, execution_id: uuid.UUID, result: dict[str, Any]
 ) -> None:
@@ -59,7 +70,8 @@ def persist_issue_resolve_result(
     data = (result or {}).get("data") or {}
     triage_value = data.get("triage_result")
     pr_urls = [url for url in data.get("pr_urls") or [] if url]
-    if not triage_value and not pr_urls:
+    fixer_llm = data.get("fixer_llm")
+    if not triage_value and not pr_urls and not isinstance(fixer_llm, dict):
         return
 
     execution = (
@@ -74,6 +86,9 @@ def persist_issue_resolve_result(
     )
     if execution is None or execution.workflow != ExecutionWorkflow.ISSUE_RESOLVE.value:
         return
+    if isinstance(fixer_llm, dict):
+        _record_fixer_llm(execution, fixer_llm)
+        db.commit()
     if len(execution.issues) != 1:
         return
     issue = execution.issues[0]

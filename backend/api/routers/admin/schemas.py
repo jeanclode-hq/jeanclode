@@ -96,7 +96,9 @@ class LLMCredentialInput(BaseModel):
     kind: Literal["api_key", "oauth_subscription"]
     provider: Literal["claude_code", "anthropic", "openai", "openai_compatible"]
     secret: str  # OAuth token when provider is "claude_code"
+    name: str = Field(default="", max_length=100)
     model_high: str = ""
+    model_heavy: str = ""
     model_low: str = ""
     base_url: str | None = None
     plan_tier: Literal["pro", "max", "max_5x"] | None = None
@@ -119,7 +121,9 @@ class LLMCredentialUpdateInput(BaseModel):
     kind: Literal["api_key", "oauth_subscription"] | None = None
     provider: Literal["claude_code", "anthropic", "openai", "openai_compatible"] | None = None
     secret: str | None = None
+    name: str | None = Field(default=None, max_length=100)
     model_high: str | None = None
+    model_heavy: str | None = None
     model_low: str | None = None
     base_url: str | None = None
     plan_tier: Literal["pro", "max", "max_5x"] | None = None
@@ -134,7 +138,9 @@ class LLMCredentialView(BaseModel):
     provider: str
     plan_tier: str | None = None
     secret: str | None = None  # "****" when present
+    name: str = ""
     model_high: str
+    model_heavy: str = ""
     model_low: str
     base_url: str | None = None
     status: str

@@ -48,7 +48,9 @@ export interface LLMCredentialInput {
   kind: 'api_key' | 'oauth_subscription'
   provider: 'claude_code' | 'anthropic' | 'openai' | 'openai_compatible'
   secret: string
+  name?: string
   model_high: string
+  model_heavy?: string
   model_low: string
   base_url?: string | null
   plan_tier?: 'pro' | 'max' | 'max_5x' | null
@@ -61,7 +63,9 @@ export interface LLMCredentialView {
   provider: string
   plan_tier?: string | null
   secret?: string | null
+  name?: string
   model_high: string
+  model_heavy?: string
   model_low: string
   base_url?: string | null
   status: string

@@ -38,6 +38,7 @@ from src.agents.utils import (
 )
 from src.runtime.context import RunContext
 from src.runtime.events import AgentEnd, AgentStart, ToolCall, ToolResult
+from src.runtime.llm_options import fixer_llm_block
 from src.skills.prompt import (
     continuity_protocol_block,
     discovery_block,
@@ -80,6 +81,8 @@ class BaseAgent:
     # thread, so settled points there shouldn't be re-derived from scratch.
     use_continuity: ClassVar[bool] = False
     prefer_small_model: ClassVar[bool] = False
+    # Triage that picks the fixer's LLM when the run offers a choice (#43).
+    choose_fixer_llm: ClassVar[bool] = False
 
     def _prompts_dir(self) -> Path:
         """Resolve the directory where `prompt_file` lives.
@@ -113,6 +116,8 @@ class BaseAgent:
         prompt = self._render(agent_input)
         if self.use_third_party_skills and ctx.skills:
             prompt = f"{prompt}\n\n{discovery_block(ctx.skills)}"
+        if self.choose_fixer_llm and ctx.llm_options:
+            prompt = f"{prompt}\n\n{fixer_llm_block(ctx.llm_options)}"
         if ctx.related_repos:
             prompt = f"{prompt}\n\n{related_repos_block(ctx.related_repos)}"
         if self.use_memory and ctx.memory_enabled:
@@ -188,8 +193,13 @@ class BaseAgent:
             structured = self._reconcile_structured(structured, text)
             if self.output_schema is not None and structured is None:
                 self._log_missing_structured(result_message, text)
-        except BaseException:
+        except BaseException as exc:
             ok = False
+            # A 429 must stale the credential this session ran on, which
+            # for a retargeted fixer isn't the run's default (#43).
+            credential_id = ctx.env.get("JEANCLODE_LLM_CREDENTIAL_ID")
+            if credential_id and isinstance(exc, Exception):
+                exc.llm_credential_id = credential_id  # type: ignore[attr-defined]
             raise
         finally:
             ctx.emit(

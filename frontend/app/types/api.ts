@@ -76,6 +76,9 @@ export interface ExecutionSummary {
   error_type: string | null
   error_detail: string | null
   created_at: string
+  fixer_llm_credential?: string | null
+  fixer_llm_model?: string | null
+  fixer_llm_reason?: string | null
   pull_requests: PullRequestSummary[]
 }
 

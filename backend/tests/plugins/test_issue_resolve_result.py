@@ -183,3 +183,36 @@ def test_open_issue_resolve_pr_does_not_hold_the_sentry_merge_gate(db_session):
 
     assert db_session.query(PullRequest).one().state == "open"
     assert db_git_org_has_open_fix_pr(db_session, org.id) is False
+
+
+def test_records_the_llm_the_fixer_ran_on(db_session):
+    _org, _repo, issue = _setup(db_session)
+    execution = _execution(db_session, issue)
+    result = _proceed()
+    result["data"]["fixer_llm"] = {
+        "credential": "self-hosted",
+        "model": "qwen3-coder",
+        "tier": "high",
+        "reason": "The issue asks for the self-hosted model.",
+    }
+
+    persist_issue_resolve_result(db_session, execution.id, result)
+
+    db_session.refresh(execution)
+    assert (
+        execution.fixer_llm_credential,
+        execution.fixer_llm_model,
+        execution.fixer_llm_reason,
+    ) == ("self-hosted", "qwen3-coder", "The issue asks for the self-hosted model.")
+
+
+def test_fixer_llm_is_ignored_on_other_workflows(db_session):
+    _org, _repo, issue = _setup(db_session)
+    execution = _execution(db_session, issue, workflow=ExecutionWorkflow.FIX.value)
+
+    persist_issue_resolve_result(
+        db_session, execution.id, {"data": {"fixer_llm": {"model": "claude-sonnet-5"}}}
+    )
+
+    db_session.refresh(execution)
+    assert execution.fixer_llm_model is None

@@ -47,7 +47,7 @@ def run_agent_result(
     assertion fails -- no need to rerun with ``-s`` to see what happened.
     """
 
-    async def _run(agent_cls: Any, agent_input: Any) -> Any:
+    async def _run(agent_cls: Any, agent_input: Any, **ctx_fields: Any) -> Any:
         bus = EventBus()
         trace: list[str] = []
 
@@ -58,7 +58,7 @@ def run_agent_result(
                 trace.append(f"<- {event.name}: {event.output[:800]}")
 
         bus.subscribe(_record)
-        ctx = RunContext(cwd=tmp_path, workspace=tmp_path, events=bus)
+        ctx = RunContext(cwd=tmp_path, workspace=tmp_path, events=bus, **ctx_fields)
         result = await agent_cls().invoke(agent_input, ctx)
         trace.append(f"=== final text ===\n{result.text}")
         print("\n".join(trace))
@@ -73,8 +73,8 @@ def run_agent(
 ) -> Callable[[Any, Any], Coroutine[Any, Any, Any]]:
     """Return a coroutine factory that runs an agent and returns ``.structured``."""
 
-    async def _run(agent_cls: Any, agent_input: Any) -> Any:
-        result = await run_agent_result(agent_cls, agent_input)
+    async def _run(agent_cls: Any, agent_input: Any, **ctx_fields: Any) -> Any:
+        result = await run_agent_result(agent_cls, agent_input, **ctx_fields)
         return result.structured
 
     return _run

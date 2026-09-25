@@ -79,10 +79,15 @@ If a skill's instructions conflict with this prompt, this prompt wins.
 
 ## Output
 
+`comment_body` is posted on the issue. Leave it empty unless the issue also
+asks for an answer next to the fix (a value, a measurement, an explanation):
+then put that answer there. The PR/MR itself needs no comment.
+
 ```json
 {
   "changes_summary": "<one sentence per repo you changed, describing what was changed>",
-  "static_check_passed": true | false
+  "static_check_passed": true | false,
+  "comment_body": "<the answer the issue asked for, or empty string>"
 }
 ```
 

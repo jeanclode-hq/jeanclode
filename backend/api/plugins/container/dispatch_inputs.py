@@ -14,7 +14,7 @@ import base64
 import json
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
@@ -23,7 +23,12 @@ from pydantic import BaseModel, Field
 
 from api.context import get_current_app
 from api.database.connectors import db_get_credentials_by_org, db_get_mcp_servers_by_org
-from api.database.llm_credentials import LLMCredentialAvailability, db_select_llm_credential
+from api.database.llm_credentials import (
+    LLMCredentialAvailability,
+    db_list_llm_credentials,
+    db_select_llm_credential,
+    llm_credential_is_stale,
+)
 from api.database.plugins import db_get_installations_by_org
 from api.models.connectors import AuthType, Credential, SubjectType
 from api.models.llm_credentials import LLMCredential
@@ -134,7 +139,7 @@ class LLMSelectionResult(BaseModel):
         return self.availability == LLMCredentialAvailability.AVAILABLE
 
 
-def add_llm_to_inputs(inputs: DispatchInputs) -> LLMSelectionResult:
+def add_llm_to_inputs(inputs: DispatchInputs, *, fixer_options: bool = False) -> LLMSelectionResult:
     """Resolve the LLM credential — env-options first, the admin-configured
     credential pool as fallback (ADR-010).
 
@@ -148,6 +153,10 @@ def add_llm_to_inputs(inputs: DispatchInputs) -> LLMSelectionResult:
       * ``anthropic`` → ``ANTHROPIC_API_KEY`` (``x-api-key`` header)
       * ``openai`` / ``openai_compatible`` → ``OPENAI_API_KEY``; host is
         derived from ``base_url`` so self-hosted endpoints work.
+
+    ``fixer_options`` is for issue-resolve, whose triage can move the fixer
+    to another credential; nobody else gets the extra credentials' secrets
+    or hosts.
 
     Returns a :class:`LLMSelectionResult` so callers can distinguish real,
     temporary exhaustion (every pool row currently stale — retry later)
@@ -175,6 +184,14 @@ def add_llm_to_inputs(inputs: DispatchInputs) -> LLMSelectionResult:
         if availability != LLMCredentialAvailability.AVAILABLE or credential is None:
             return LLMSelectionResult(availability=availability, retry_at=retry_at)
         _add_llm_from_credential(inputs, credential)
+        if not fixer_options:
+            return LLMSelectionResult(availability=LLMCredentialAvailability.AVAILABLE)
+        try:
+            _add_llm_options(inputs, credential, db_list_llm_credentials(db))
+        except Exception:
+            # The options only widen the fixer's choice; the run must not
+            # lose its primary credential over them.
+            logger.warning("skipping fixer LLM options", exc_info=True)
 
     return LLMSelectionResult(availability=LLMCredentialAvailability.AVAILABLE)
 
@@ -268,6 +285,114 @@ def _add_llm_from_credential(inputs: DispatchInputs, credential: LLMCredential) 
             )
         )
         inputs.public_env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+
+
+_ANTHROPIC_HOST = "api.anthropic.com"
+
+
+def _llm_host(credential: LLMCredential) -> str:
+    if credential.provider in ("claude_code", "anthropic"):
+        return _ANTHROPIC_HOST
+    return host_or("api.openai.com", credential.base_url)
+
+
+def _llm_option_name(credential: LLMCredential) -> str:
+    if credential.name:
+        return credential.name
+    if credential.provider in ("openai", "openai_compatible") and credential.base_url:
+        return f"{credential.provider}@{_llm_host(credential)}"
+    return credential.provider
+
+
+def _add_llm_options(
+    inputs: DispatchInputs, primary: LLMCredential, pool: list[LLMCredential]
+) -> None:
+    """Expose every distinct credential to the run so triage can steer the fixer (#43).
+
+    The proxy injects one credential per host, so credentials sharing a host
+    (several Claude subscriptions, an Anthropic key next to one) collapse to
+    the first usable one, the primary winning. Each extra credential gets its
+    own secret name, and ``JEANCLODE_LLM_OPTIONS`` carries only public data:
+    the env a fixer session sets to target it, secrets referenced by name.
+    Nothing is emitted unless there is an actual choice to make.
+    """
+    now = datetime.now(UTC)
+    seen = {_llm_host(primary)}
+    options: list[dict[str, Any]] = [_llm_option(primary, env={}, secret_env={})]
+    for credential in pool:
+        if credential.id == primary.id or llm_credential_is_stale(credential, now):
+            continue
+        host = _llm_host(credential)
+        if host in seen:
+            continue
+        seen.add(host)
+        secret_key = f"JEANCLODE_LLM_OPTION_{len(options)}_SECRET"
+        inputs.secrets[secret_key] = decrypt_secret(credential)
+        env, secret_env, upstream = _llm_option_wiring(credential, secret_key, host)
+        inputs.upstreams.append(upstream)
+        options.append(_llm_option(credential, env=env, secret_env=secret_env))
+
+    if len(options) > 1 or primary.model_heavy:
+        inputs.public_env["JEANCLODE_LLM_OPTIONS"] = json.dumps(options)
+
+
+def _llm_option(
+    credential: LLMCredential, *, env: dict[str, str], secret_env: dict[str, str]
+) -> dict[str, Any]:
+    return {
+        "id": str(credential.id),
+        "name": _llm_option_name(credential),
+        "provider": credential.provider,
+        "model_high": credential.model_high,
+        "model_heavy": credential.model_heavy,
+        "model_low": credential.model_low,
+        "env": env,
+        "secret_env": secret_env,
+    }
+
+
+def _llm_option_wiring(
+    credential: LLMCredential, secret_key: str, host: str
+) -> tuple[dict[str, str], dict[str, str], UpstreamCredential]:
+    """Session env, session-var -> secret-name map, and proxy rule for one extra credential.
+
+    Empty values blank out whatever the primary credential exported, so a
+    fixer session never authenticates two ways at once.
+    """
+    if credential.provider == "claude_code":
+        env = {
+            "ANTHROPIC_BASE_URL": f"https://{_ANTHROPIC_HOST}",
+            "ANTHROPIC_AUTH_TOKEN": "",
+            "ANTHROPIC_API_KEY": "",
+        }
+        upstream = UpstreamCredential(
+            secret_key=secret_key, host=host, header="Authorization", bearer=True
+        )
+        return env, {"CLAUDE_CODE_OAUTH_TOKEN": secret_key}, upstream
+
+    if credential.provider == "anthropic":
+        env = {
+            "ANTHROPIC_BASE_URL": f"https://{_ANTHROPIC_HOST}",
+            "ANTHROPIC_AUTH_TOKEN": "",
+            "CLAUDE_CODE_OAUTH_TOKEN": "",
+        }
+        upstream = UpstreamCredential(secret_key=secret_key, host=host, header="x-api-key")
+        return env, {"ANTHROPIC_API_KEY": secret_key}, upstream
+
+    env = {
+        "CLAUDE_CODE_OAUTH_TOKEN": "",
+        "ANTHROPIC_API_KEY": "",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    }
+    if credential.model_high:
+        env["OPENAI_MODEL"] = credential.model_high
+    if credential.base_url:
+        env["OPENAI_BASE_URL"] = credential.base_url
+        env["ANTHROPIC_BASE_URL"] = credential.base_url
+    upstream = UpstreamCredential(
+        secret_key=secret_key, host=host, header="Authorization", bearer=True
+    )
+    return env, {"ANTHROPIC_AUTH_TOKEN": secret_key, "OPENAI_API_KEY": secret_key}, upstream
 
 
 def _anthropic_oauth_upstream() -> UpstreamCredential:

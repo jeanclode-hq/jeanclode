@@ -34,6 +34,10 @@ const props = withDefaults(defineProps<{
   // Execution metadata.
   trigger?: string | null
   createdAt?: string | null
+  // What an issue-resolve fixer ran on, and why triage picked it.
+  fixerModel?: string | null
+  fixerCredential?: string | null
+  fixerReason?: string | null
 
   // Footer actions.
   externalUrl?: string | null
@@ -60,6 +64,9 @@ const props = withDefaults(defineProps<{
   errorDetail: null,
   trigger: null,
   createdAt: null,
+  fixerModel: null,
+  fixerCredential: null,
+  fixerReason: null,
   externalUrl: null,
   externalLabel: null,
   loading: false,
@@ -126,6 +133,10 @@ async function copyError() {
   await navigator.clipboard.writeText(props.errorDetail)
   toast.add({ title: 'Copied to clipboard', color: 'success' })
 }
+
+const fixerTooltip = computed(() =>
+  [props.fixerCredential, props.fixerReason || 'Default choice'].filter(Boolean).join(' — '),
+)
 </script>
 
 <template>
@@ -197,6 +208,19 @@ async function copyError() {
             />
             {{ timeAgo(createdAt) }}
           </span>
+          <UTooltip
+            v-if="fixerModel"
+            :text="fixerTooltip"
+            :delay-duration="200"
+          >
+            <span class="flex items-center gap-1.5 min-w-0">
+              <UIcon
+                name="i-lucide-cpu"
+                class="size-4 shrink-0"
+              />
+              <span class="truncate max-w-48">{{ fixerModel }}</span>
+            </span>
+          </UTooltip>
         </div>
 
         <template v-if="loading">

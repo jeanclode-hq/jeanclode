@@ -128,7 +128,7 @@ function move(index: number, direction: -1 | 1) {
             </div>
             <div class="flex-1 min-w-0">
               <p class="font-medium text-neutral-900 dark:text-neutral-100 truncate">
-                {{ t('admin.llm.priority', { n: credential.priority }) }} — {{ providerLabel(credential.provider) }}
+                {{ t('admin.llm.priority', { n: credential.priority }) }} — {{ credential.name || providerLabel(credential.provider) }}
               </p>
               <p class="text-xs text-neutral-500 flex items-center gap-1.5">
                 <span
@@ -138,6 +138,10 @@ function move(index: number, direction: -1 | 1) {
                 {{ statusLabel(credential) }}
                 <span class="text-neutral-300 dark:text-neutral-600">·</span>
                 {{ credential.model_high }}
+                <template v-if="credential.model_heavy">
+                  <span class="text-neutral-300 dark:text-neutral-600">·</span>
+                  {{ t('admin.llm.heavyShort', { model: credential.model_heavy }) }}
+                </template>
               </p>
             </div>
             <UButton

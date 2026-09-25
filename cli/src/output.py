@@ -169,12 +169,19 @@ def extract_retry_after(exc: BaseException) -> float | None:
     return None
 
 
+def rate_limited_credential(exc: BaseException) -> str | None:
+    """The credential a failed session ran on, when it wasn't the run's default."""
+    value = getattr(exc, "llm_credential_id", None)
+    return value if isinstance(value, str) else None
+
+
 def emit_rate_limit_error(
     message: str,
     *,
     retry_after: float | None = None,
     branch: str = "",
     pr_url: str = "",
+    credential_id: str | None = None,
 ) -> None:
     """Emit a distinct, identifiable rate-limit event for the backend watcher.
 
@@ -193,7 +200,7 @@ def emit_rate_limit_error(
     place the watcher parses it) is never a TTY anyway.
     """
     data: dict[str, Any] = {"type": "rate_limit_error", "message": message}
-    credential_id = os.environ.get("JEANCLODE_LLM_CREDENTIAL_ID")
+    credential_id = credential_id or os.environ.get("JEANCLODE_LLM_CREDENTIAL_ID")
     if credential_id:
         data["credential_id"] = credential_id
     if retry_after is not None:

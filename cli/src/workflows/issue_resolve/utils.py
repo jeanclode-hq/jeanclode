@@ -6,8 +6,10 @@ import hashlib
 import logging
 from typing import Literal
 
+from pydantic import BaseModel
+
 from src.activities.issue.schemas import IssueContext
-from src.agents.issue.schemas import TriageOutput
+from src.agents.issue.schemas import IssueFixerOutput, TriageOutput
 from src.agents.schemas import AgentResult
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,8 @@ def format_triage_panel(output: TriageOutput, issue_url: str = "") -> str:
     if issue_url:
         lines.append(f"[dim]{issue_url}[/]")
     lines.append(f"outcome: [{color}]{output.kind}[/]")
+    if output.kind == "proceed" and not output.code_change:
+        lines.append("deliverable: [bold]answer on the issue[/] (no code change)")
     if output.target_repos:
         lines.append(f"target repos: [bold]{', '.join(output.target_repos)}[/]")
     if output.reasoning:
@@ -103,7 +107,13 @@ def pr_title(issue_ctx: IssueContext, repo_name: str = "") -> str:
     return f"fix: {cleaned}{suffix}"
 
 
-def pr_body(issue_url: str, issue_ctx: IssueContext, siblings: list[str] | None = None) -> str:
+def pr_body(
+    issue_url: str,
+    issue_ctx: IssueContext,
+    siblings: list[str] | None = None,
+    *,
+    fixer_llm: str = "",
+) -> str:
     """PR/MR body. ``siblings`` names the OTHER repos also part of this fix
     (multi-repo case) — each repo gets its own PR, this just cross-links
     them by name so a reviewer on one isn't confused why it's incomplete
@@ -116,6 +126,8 @@ def pr_body(issue_url: str, issue_ctx: IssueContext, siblings: list[str] | None 
         if siblings
         else ""
     )
+    if fixer_llm:
+        note += f"\n\n_Fixer LLM: {fixer_llm}_"
     return (
         f"Resolves {issue_url}\n\n"
         f"## Issue\n\n**{title}**{note}\n\n"
@@ -125,11 +137,20 @@ def pr_body(issue_url: str, issue_ctx: IssueContext, siblings: list[str] | None 
 
 def parse_triage_output(result: AgentResult) -> TriageOutput | None:
     """Extract a validated ``TriageOutput`` from an ``AgentResult``."""
+    return _parse_output(result, TriageOutput)
+
+
+def parse_fixer_output(result: AgentResult) -> IssueFixerOutput | None:
+    """Extract a validated ``IssueFixerOutput`` from an ``AgentResult``."""
+    return _parse_output(result, IssueFixerOutput)
+
+
+def _parse_output[T: BaseModel](result: AgentResult, model: type[T]) -> T | None:
     if result.structured:
         try:
-            return TriageOutput.model_validate(result.structured)
+            return model.model_validate(result.structured)
         except Exception:
-            logger.warning("Failed to parse triage structured output", exc_info=True)
+            logger.warning("Failed to parse %s structured output", model.__name__, exc_info=True)
     # Fallback: try parsing text as JSON
     if result.text:
         from src.agents.utils import try_parse_json_object
@@ -137,7 +158,9 @@ def parse_triage_output(result: AgentResult) -> TriageOutput | None:
         parsed = try_parse_json_object(result.text)
         if parsed:
             try:
-                return TriageOutput.model_validate(parsed)
+                return model.model_validate(parsed)
             except Exception:
-                logger.warning("Failed to parse triage text output as JSON", exc_info=True)
+                logger.warning(
+                    "Failed to parse %s text output as JSON", model.__name__, exc_info=True
+                )
     return None
