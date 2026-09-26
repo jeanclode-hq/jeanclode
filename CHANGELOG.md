@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.4.0...v1.5.0) (2026-09-26)
+
+
+### Features
+
+* daily memory curator with soft delete and tighter write rules ([1a0f261](https://github.com/jeanclode-hq/jeanclode/commit/1a0f261715ba56da342d0775696b94f1aac5487a))
+* **memory:** curate every due entry in one run ([4b5f7a6](https://github.com/jeanclode-hq/jeanclode/commit/4b5f7a6bb0842c4b001672b68cb07adf2ba8d52f))
+
+
+### Bug Fixes
+
+* **security-proxy:** stream repo archive downloads ([#48](https://github.com/jeanclode-hq/jeanclode/issues/48)) ([d6f6577](https://github.com/jeanclode-hq/jeanclode/commit/d6f6577200369148bc0141bfa1b7863abc3d96fc))
+
 ## [1.4.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.3.2...v1.4.0) (2026-09-25)
 
 
