@@ -12,6 +12,7 @@ from api.plugins.database.plugin import DatabasePlugin
 from api.plugins.faststream.plugin import FastStreamPlugin
 from api.plugins.github.plugin import GitHubPlugin
 from api.plugins.gitlab.plugin import GitLabPlugin
+from api.plugins.memory.plugin import MemoryPlugin
 from api.plugins.oauth.plugin import OAuthPlugin
 from api.plugins.plugin import BasePlugin
 from api.plugins.sentry.plugin import SentryPlugin
@@ -29,6 +30,7 @@ BUILTIN_PLUGINS: list[type[BasePlugin]] = [
     FastStreamPlugin,
     ContainerPlugin,
     SentryPlugin,
+    MemoryPlugin,
 ]
 
 
@@ -74,6 +76,11 @@ class Application:
     def gitlab(self) -> GitLabPlugin | None:
         """Get GitLab plugin if enabled."""
         return next((p for p in self._plugins if isinstance(p, GitLabPlugin)), None)
+
+    @property
+    def memory(self) -> MemoryPlugin | None:
+        """Get memory curation plugin if enabled."""
+        return next((p for p in self._plugins if isinstance(p, MemoryPlugin)), None)
 
     @property
     def oauth(self) -> OAuthPlugin | None:

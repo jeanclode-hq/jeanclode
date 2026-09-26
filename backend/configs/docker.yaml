@@ -182,6 +182,12 @@ plugins:
       - topic: jeanclode.events.gitlab.manual_dispatch
         handler: "api.plugins.gitlab.consumer:router"
 
+  # Memory plugin (daily curation of each workspace's agent memory)
+  memory:
+    enabled: !ENV ${MEMORY_CURATION_ENABLED:-true}
+    curation:
+      cadence_hours: !ENV ${MEMORY_CURATION_CADENCE_HOURS:-24}
+
   # Sentry plugin (Sentry API client + issue dispatch)
   sentry:
     enabled: true

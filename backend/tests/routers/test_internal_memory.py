@@ -15,6 +15,7 @@ so tests can mint tokens without depending on generation order.
 
 import threading
 import uuid
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from api.database import db_create_workspace
 from api.database.instance_settings import db_upsert_setting
 from api.database.memory import db_count_memory_entries, db_create_memory_entry
+from api.models.memory import MemoryEntry
 from api.services.instance_settings import MEMORY_SIGNING_SECRET_KEY
 from api.services.memory_token import mint_memory_token
 
@@ -82,7 +84,6 @@ def test_view_tampered_token_401(memory_client, workspace_id):
 
 def test_view_expired_token_401(memory_client, workspace_id):
     """A token minted with an already-past expiry is rejected."""
-    from datetime import timedelta
 
     token = mint_memory_token(
         workspace_id=workspace_id,
@@ -587,6 +588,135 @@ def test_delete_root_rejected(memory_client, workspace_id):
             "/internal/memory/view", params={"path": "f.md"}, headers=_auth(workspace_id)
         ).status_code
         == 200
+    )
+
+
+def test_delete_keeps_the_row_but_stops_serving_it(memory_client, workspace_id, db_session):
+    _create(memory_client, workspace_id, "dir/a.md", "x")
+    _create(memory_client, workspace_id, "dir/b.md", "y")
+    memory_client.post(
+        "/internal/memory/delete", json={"path": "dir/a.md"}, headers=_auth(workspace_id)
+    )
+
+    row = (
+        db_session.query(MemoryEntry)
+        .filter(MemoryEntry.workspace_id == workspace_id, MemoryEntry.path == "dir/a.md")
+        .one()
+    )
+    assert row.deleted_at is not None
+    listing = memory_client.get(
+        "/internal/memory/view", params={"path": "dir"}, headers=_auth(workspace_id)
+    ).json()
+    assert [e["path"] for e in listing["entries"]] == ["dir/b.md"]
+    assert db_count_memory_entries(db_session, workspace_id) == 1
+
+
+def test_deleted_path_can_be_created_again(memory_client, workspace_id):
+    _create(memory_client, workspace_id, "f.md", "old")
+    memory_client.post(
+        "/internal/memory/delete", json={"path": "f.md"}, headers=_auth(workspace_id)
+    )
+
+    resp = _create(memory_client, workspace_id, "f.md", "new")
+    assert resp.status_code == 201
+    view = memory_client.get(
+        "/internal/memory/view", params={"path": "f.md"}, headers=_auth(workspace_id)
+    )
+    assert view.json()["content"] == "new"
+
+
+def test_deleted_entry_cannot_be_edited_or_renamed(memory_client, workspace_id):
+    _create(memory_client, workspace_id, "f.md", "abc")
+    memory_client.post(
+        "/internal/memory/delete", json={"path": "f.md"}, headers=_auth(workspace_id)
+    )
+
+    edit = memory_client.post(
+        "/internal/memory/str_replace",
+        json={"path": "f.md", "old_str": "abc", "new_str": "x"},
+        headers=_auth(workspace_id),
+    )
+    rename = memory_client.post(
+        "/internal/memory/rename",
+        json={"old_path": "f.md", "new_path": "g.md"},
+        headers=_auth(workspace_id),
+    )
+    assert edit.status_code == 404
+    assert rename.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# curation
+# ---------------------------------------------------------------------------
+
+
+def _due(memory_client, workspace_id) -> list[str]:
+    resp = memory_client.get("/internal/memory/curation", headers=_auth(workspace_id))
+    assert resp.status_code == 200
+    return resp.json()["paths"]
+
+
+def test_new_entries_are_due_until_marked(memory_client, workspace_id):
+    _create(memory_client, workspace_id, "b.md", "x")
+    _create(memory_client, workspace_id, "a.md", "y")
+    assert _due(memory_client, workspace_id) == ["a.md", "b.md"]
+
+    resp = memory_client.post(
+        "/internal/memory/curation/mark",
+        json={"paths": ["a.md", "gone.md"]},
+        headers=_auth(workspace_id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["marked_count"] == 1
+    assert _due(memory_client, workspace_id) == ["b.md"]
+
+
+def test_marking_leaves_updated_at_alone(memory_client, workspace_id, db_session):
+    _create(memory_client, workspace_id, "a.md", "x")
+    row = db_session.query(MemoryEntry).filter(MemoryEntry.workspace_id == workspace_id).one()
+    updated_at = row.updated_at
+
+    memory_client.post(
+        "/internal/memory/curation/mark", json={"paths": ["a.md"]}, headers=_auth(workspace_id)
+    )
+
+    db_session.refresh(row)
+    assert row.updated_at == updated_at
+    assert row.curated_at is not None
+
+
+def test_edited_entry_is_due_again(memory_client, workspace_id, db_session):
+    _create(memory_client, workspace_id, "a.md", "abc")
+    memory_client.post(
+        "/internal/memory/curation/mark", json={"paths": ["a.md"]}, headers=_auth(workspace_id)
+    )
+    # Server clocks tick within one transaction; back-date the mark so the edit lands after it.
+    db_session.query(MemoryEntry).filter(MemoryEntry.workspace_id == workspace_id).update(
+        {MemoryEntry.curated_at: MemoryEntry.curated_at - timedelta(minutes=1)},
+        synchronize_session=False,
+    )
+    db_session.commit()
+
+    memory_client.post(
+        "/internal/memory/str_replace",
+        json={"path": "a.md", "old_str": "abc", "new_str": "abd"},
+        headers=_auth(workspace_id),
+    )
+    assert _due(memory_client, workspace_id) == ["a.md"]
+
+
+def test_deleted_entries_are_never_due(memory_client, workspace_id):
+    _create(memory_client, workspace_id, "a.md", "x")
+    memory_client.post(
+        "/internal/memory/delete", json={"path": "a.md"}, headers=_auth(workspace_id)
+    )
+    assert _due(memory_client, workspace_id) == []
+
+
+def test_curation_endpoints_require_auth(memory_client):
+    assert memory_client.get("/internal/memory/curation").status_code == 401
+    assert (
+        memory_client.post("/internal/memory/curation/mark", json={"paths": []}).status_code == 401
     )
 
 

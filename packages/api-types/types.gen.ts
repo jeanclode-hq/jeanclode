@@ -1420,6 +1420,42 @@ export type MemoryCreateRequest = {
 };
 
 /**
+ * MemoryCurationDueResponse
+ * Entries the curator hasn't reviewed since they last changed.
+ */
+export type MemoryCurationDueResponse = {
+    /**
+     * Paths
+     * Paths due for curation, in path order
+     */
+    paths: Array<string>;
+};
+
+/**
+ * MemoryCurationMarkRequest
+ * Request body for marking entries as curated.
+ */
+export type MemoryCurationMarkRequest = {
+    /**
+     * Paths
+     * Paths the curator has just reviewed
+     */
+    paths: Array<string>;
+};
+
+/**
+ * MemoryCurationMarkResponse
+ * Response for marking entries as curated.
+ */
+export type MemoryCurationMarkResponse = {
+    /**
+     * Marked Count
+     * Number of live entries stamped
+     */
+    marked_count: number;
+};
+
+/**
  * MemoryDeleteRequest
  * Request body for the delete command.
  */
@@ -3994,6 +4030,68 @@ export type RenameMemoryEntryResponses = {
 };
 
 export type RenameMemoryEntryResponse = RenameMemoryEntryResponses[keyof RenameMemoryEntryResponses];
+
+export type ListMemoryDueForCurationData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/internal/memory/curation';
+};
+
+export type ListMemoryDueForCurationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMemoryDueForCurationError = ListMemoryDueForCurationErrors[keyof ListMemoryDueForCurationErrors];
+
+export type ListMemoryDueForCurationResponses = {
+    /**
+     * Successful Response
+     */
+    200: MemoryCurationDueResponse;
+};
+
+export type ListMemoryDueForCurationResponse = ListMemoryDueForCurationResponses[keyof ListMemoryDueForCurationResponses];
+
+export type MarkMemoryCuratedData = {
+    body: MemoryCurationMarkRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/internal/memory/curation/mark';
+};
+
+export type MarkMemoryCuratedErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MarkMemoryCuratedError = MarkMemoryCuratedErrors[keyof MarkMemoryCuratedErrors];
+
+export type MarkMemoryCuratedResponses = {
+    /**
+     * Successful Response
+     */
+    200: MemoryCurationMarkResponse;
+};
+
+export type MarkMemoryCuratedResponse = MarkMemoryCuratedResponses[keyof MarkMemoryCuratedResponses];
 
 export type ListIssuesData = {
     body?: never;

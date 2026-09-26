@@ -59,6 +59,9 @@ class BaseAgent:
     # response has begun.
     system_prompt_file: ClassVar[str] = ""
     allowed_tools: ClassVar[list[str]] = []
+    # Built-in Claude Code tools the session loads at all; None keeps the default set.
+    # bypassPermissions makes allowed_tools no restriction, so this is the real limit.
+    builtin_tools: ClassVar[list[str] | None] = None
     max_turns: ClassVar[int] = 150
     output_schema: ClassVar[type[BaseModel] | None] = None
     # Per-agent opt-in. When True the agent gets:
@@ -405,6 +408,8 @@ class BaseAgent:
         }
         if extra_hooks:
             kwargs["hooks"] = extra_hooks
+        if self.builtin_tools is not None:
+            kwargs["tools"] = list(self.builtin_tools)
 
         tools = list(self.allowed_tools)
         mcp_servers: dict[str, Any] = {}

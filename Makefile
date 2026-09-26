@@ -17,7 +17,7 @@ cli-test: ## Run CLI tests
 	cd cli && uv run pytest -v
 
 eval: ## Run LLM eval tests (requires GOOGLE_API_KEY / GEMINI_API_KEY)
-	cd cli && uv run pytest tests/eval/ -v -m eval
+	cd cli && uv run pytest tests/eval/ -v -m eval -n 8
 
 test: backend-test cli-test ## Run all tests
 
