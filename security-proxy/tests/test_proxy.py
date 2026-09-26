@@ -687,9 +687,38 @@ def test_responseheaders_streams_git_smart_http_paths(path: str) -> None:
     assert flow.response.stream is True
 
 
-def test_responseheaders_does_not_stream_ordinary_api_paths() -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://gitlab.example.com/api/v4/projects/jdoe%2Fwebshop/repository/archive.zip?sha=abc123",
+        "https://gitlab.example.com/api/v4/projects/42/repository/archive",
+        "https://gitlab.example.com/api/v4/projects/42/repository/archive.tar.gz?sha=abc123",
+        "https://api.github.com/repos/jdoe/webshop/zipball/abc123",
+        "https://api.github.com/repos/jdoe/webshop/tarball",
+        "https://codeload.github.com/jdoe/webshop/legacy.zip/abc123",
+        "https://codeload.github.com/jdoe/webshop/zip/refs/heads/main",
+    ],
+)
+def test_responseheaders_streams_repo_archives(url: str) -> None:
+    """A 394MB MR archive OOM-killed the 256MiB sidecar mid-download."""
     proxy = SecurityProxy(make_config())
-    flow = make_flow("https://api.github.com/repos/foo/bar/issues/10")
+    flow = make_flow(url)
+    flow.response = Response.make(200, b"zip-bytes")
+    proxy.responseheaders(flow)
+    assert flow.response.stream is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.github.com/repos/foo/bar/issues/10",
+        "https://gitlab.example.com/api/v4/projects/42/repository/archived_files",
+        "https://api.github.com/repos/foo/bar/contents/docs/zipball.md",
+    ],
+)
+def test_responseheaders_does_not_stream_ordinary_api_paths(url: str) -> None:
+    proxy = SecurityProxy(make_config())
+    flow = make_flow(url)
     flow.response = Response.make(200, b"{}")
     proxy.responseheaders(flow)
     assert not flow.response.stream
