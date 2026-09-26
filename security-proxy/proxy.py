@@ -96,9 +96,17 @@ _GIT_SUFFIX_RE = re.compile(r"\.git(?=/|$)")
 # are streamed straight through instead (see ``responseheaders``).
 _GIT_SMART_HTTP_RE = re.compile(r"/(info/refs|git-upload-pack|git-receive-pack)$")
 
+# Repo snapshots the read-only workflows download instead of cloning — just as
+# large (a 394MB MR archive OOM-killed the 256MiB sidecar). GitLab serves them
+# from the API; GitHub's ``/zipball`` 302s to ``codeload.github.com``.
+_ARCHIVE_RE = re.compile(
+    r"/repository/archive(\.[a-z0-9.]+)?$|/(zipball|tarball)(/|$)|/(legacy\.)?(zip|tar\.gz)/"
+)
 
-def _is_git_smart_http(path: str) -> bool:
-    return bool(_GIT_SMART_HTTP_RE.search(path.split("?", 1)[0]))
+
+def _is_streamed(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    return bool(_GIT_SMART_HTTP_RE.search(bare) or _ARCHIVE_RE.search(bare))
 
 
 def _gitlab_match_path(path: str) -> str:
@@ -512,7 +520,7 @@ class SecurityProxy:
         for header in STRIPPED_RESPONSE_HEADERS:
             if header in flow.response.headers:
                 del flow.response.headers[header]
-        if _is_git_smart_http(flow.request.path):
+        if _is_streamed(flow.request.path):
             flow.response.stream = True
 
 
