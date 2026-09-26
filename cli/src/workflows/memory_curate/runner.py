@@ -17,8 +17,6 @@ from src.workflows.base import register
 from src.workflows.schemas import WorkflowResult
 
 BATCH_SIZE = 20
-# Keeps one run inside the container timeout; whatever's left stays due for the next run.
-MAX_BATCHES_PER_RUN = 5
 
 
 @register
@@ -33,7 +31,6 @@ class MemoryCurateWorkflow:
 
         paths = await fetch_paths_due_for_curation(ctx=ctx)
         batches = [paths[i : i + BATCH_SIZE] for i in range(0, len(paths), BATCH_SIZE)]
-        batches = batches[:MAX_BATCHES_PER_RUN]
 
         curated = 0
         outcomes: list[str] = []

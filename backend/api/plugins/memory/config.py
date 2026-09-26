@@ -21,6 +21,10 @@ class MemoryCurationConfig(BaseModel):
         default=24, description="Minimum hours between two curator runs on one workspace"
     )
     batch_size: int = Field(default=5, description="Max workspaces dispatched per scan")
+    timeout_seconds: int = Field(
+        default=3600,
+        description="Container timeout for one curator run, which curates every due entry",
+    )
 
 
 class MemoryPluginConfig(BaseModel):

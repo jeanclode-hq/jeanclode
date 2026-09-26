@@ -96,8 +96,8 @@ async def test_curator_session_gets_memory_tools_and_no_builtin_tools(tmp_path: 
     assert "=== Memory ===" in prompts[0]
 
 
-async def test_caps_batches_per_run_and_leaves_the_rest_due(tmp_path: Path) -> None:
-    due = [f"r/n{i}.md" for i in range(runner.BATCH_SIZE * (runner.MAX_BATCHES_PER_RUN + 1))]
+async def test_curates_every_due_entry_in_one_run(tmp_path: Path) -> None:
+    due = [f"r/n{i}.md" for i in range(runner.BATCH_SIZE * 9 + 3)]
     marked: list[list[str]] = []
 
     with (
@@ -106,7 +106,8 @@ async def test_caps_batches_per_run_and_leaves_the_rest_due(tmp_path: Path) -> N
     ):
         result = await MemoryCurateWorkflow().run(_ctx(tmp_path))
 
-    assert len(marked) == runner.MAX_BATCHES_PER_RUN
+    assert len(marked) == 10
+    assert sorted(p for batch in marked for p in batch) == sorted(due)
     assert result.data["due"] == len(due)
 
 

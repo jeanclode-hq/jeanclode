@@ -29,15 +29,15 @@ logger = logging.getLogger(__name__)
 PLUGIN_NAME = "memory"
 
 
-def _image_and_timeout() -> tuple[str, int]:
+def _image() -> str:
     container_plugin = get_current_app().container
     if container_plugin:
         config = container_plugin.config
         if config.backend == "kubernetes" and config.kubernetes:
-            return config.kubernetes.image, config.kubernetes.timeout
+            return config.kubernetes.image
         if config.docker:
-            return config.docker.image, config.docker.timeout
-    return "jeanclode/cli:latest", 1800
+            return config.docker.image
+    return "jeanclode/cli:latest"
 
 
 async def _fail(
@@ -84,15 +84,14 @@ async def launch_memory_curation(workspace_id: UUID) -> str | None:
     add_agent_tooling_hosts(inputs)
     await add_memory_to_inputs(inputs, workspace_id=workspace_id, execution_id=execution_id)
 
-    image, timeout = _image_and_timeout()
     request = ContainerRequest(
-        image=image,
+        image=_image(),
         command=["memory-curate", str(workspace_id)],
         env=inputs.public_env,
         secrets=inputs.secrets,
         upstreams=inputs.upstreams,
         extra_hosts=inputs.extra_hosts,
-        timeout_seconds=timeout,
+        timeout_seconds=plugin.config.curation.timeout_seconds,
         labels=build_container_labels(execution_id=str(execution_id), plugin_name=PLUGIN_NAME),
     )
 
