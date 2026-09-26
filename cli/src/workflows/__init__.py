@@ -15,6 +15,7 @@ from src.workflows._smoke import echo as _echo
 from src.workflows.base import WORKFLOWS, Workflow, command_names, find_workflow, register
 from src.workflows.code_review import runner as _code_review
 from src.workflows.issue_resolve import runner as _issue_resolve
+from src.workflows.memory_curate import runner as _memory_curate
 from src.workflows.pr_summary import runner as _pr_summary
 from src.workflows.schemas import WorkflowResult
 from src.workflows.sentry_fix import runner as _sentry_fix

@@ -21,6 +21,8 @@ from api.database.memory import (
     db_get_memory_entries_by_paths,
     db_get_memory_entry,
     db_list_memory_entries,
+    db_list_memory_paths_due_for_curation,
+    db_mark_memory_entries_curated,
     db_rename_memory_entries,
     db_update_memory_entry_content,
 )
@@ -30,6 +32,9 @@ from api.routers.internal.dependencies import MemoryPrincipal, get_memory_princi
 from .paths import is_root, normalize_memory_path
 from .schemas import (
     MemoryCreateRequest,
+    MemoryCurationDueResponse,
+    MemoryCurationMarkRequest,
+    MemoryCurationMarkResponse,
     MemoryDeleteRequest,
     MemoryDeleteResponse,
     MemoryEntryResponse,
@@ -290,7 +295,7 @@ def delete_memory_entry(
     principal: MemoryPrincipal = Depends(get_memory_principal),
     db: Session = Depends(get_session),
 ) -> MemoryDeleteResponse:
-    """Delete a file, or everything under a path prefix. Rejects the root."""
+    """Soft-delete a file, or everything under a path prefix. Rejects the root."""
     normalized = normalize_memory_path(request.path, allow_root=True)
     if is_root(normalized):
         raise HTTPException(status_code=400, detail="Error: cannot delete the memory root")
@@ -341,3 +346,37 @@ def rename_memory_entry(
     return MemoryRenameResponse(
         old_path=old_normalized, new_path=new_normalized, renamed_count=renamed
     )
+
+
+@router.get(
+    "/curation",
+    operation_id="list_memory_due_for_curation",
+    response_model=MemoryCurationDueResponse,
+)
+def list_memory_due_for_curation(
+    principal: MemoryPrincipal = Depends(get_memory_principal),
+    db: Session = Depends(get_session),
+) -> MemoryCurationDueResponse:
+    """List entries changed since the curator last reviewed them.
+
+    Called by the memory-curate workflow itself, not exposed as an agent tool.
+    """
+    return MemoryCurationDueResponse(
+        paths=db_list_memory_paths_due_for_curation(db, principal.workspace_id)
+    )
+
+
+@router.post(
+    "/curation/mark",
+    operation_id="mark_memory_curated",
+    response_model=MemoryCurationMarkResponse,
+)
+def mark_memory_curated(
+    request: MemoryCurationMarkRequest,
+    principal: MemoryPrincipal = Depends(get_memory_principal),
+    db: Session = Depends(get_session),
+) -> MemoryCurationMarkResponse:
+    """Stamp entries as reviewed; paths deleted or renamed meanwhile are skipped."""
+    paths = [normalize_memory_path(path, allow_root=False) for path in request.paths]
+    marked = db_mark_memory_entries_curated(db, principal.workspace_id, paths)
+    return MemoryCurationMarkResponse(marked_count=marked)

@@ -40,7 +40,8 @@ def db_create_execution(
     """Create a new execution record linked to one or more targets.
 
     Every execution must link at least one issue or pull request (replaces the
-    old ``ck_execution_has_target`` check constraint). A FIX execution typically
+    old ``ck_execution_has_target`` check constraint), except MEMORY_CURATE,
+    which is scoped to a workspace. A FIX execution typically
     links issues at creation and gains a linked pull request once it opens one.
     REVIEW/SUMMARY executions link pull requests only.
 
@@ -56,7 +57,7 @@ def db_create_execution(
     ``prompt_text`` is the mention/comment body itself (RESPOND only),
     surfaced read-only in the dashboard detail modal.
     """
-    if not issues and not pull_requests:
+    if not issues and not pull_requests and workflow != ExecutionWorkflow.MEMORY_CURATE.value:
         raise ValueError("Execution must link at least one issue or pull request")
 
     execution = Execution(

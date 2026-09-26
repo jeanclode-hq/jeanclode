@@ -53,6 +53,7 @@ class PluginsConfig(BaseModel):
     github: dict[str, Any] = Field(default_factory=dict)
     gitlab: dict[str, Any] = Field(default_factory=dict)
     oauth: dict[str, Any] = Field(default_factory=dict)
+    memory: dict[str, Any] = Field(default_factory=dict)
 
     def get_raw_config(self, plugin_name: str) -> dict[str, Any]:
         """Get raw config dict for a plugin by name."""

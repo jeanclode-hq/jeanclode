@@ -67,20 +67,41 @@ discovering it again.
 
 This memory tool (view/create/str_replace/insert/delete/rename) is durable, \
 cross-run storage for this workspace's repos — NOT scratch space for this \
-run. Anything you write here is still there the next time any agent runs \
-against this workspace, potentially days or weeks from now and in a \
-completely different container.
+run. Anything you write here is read by every later agent on this \
+workspace, days or weeks from now, working on a different task.
 
-Use it for institutional knowledge that would otherwise be re-discovered \
-the hard way every run: a Sentry error that turned out to be a known \
-false positive and why, a correction a human made to a past review, a \
-repo-specific gotcha (a flaky test, a non-obvious build step, a directory \
-that looks relevant but isn't). Do NOT use it to track progress within \
-this run, jot down scratch notes, or log what you're about to do — that's \
-what your own reasoning and this run's output are for.
+The test for writing anything: would an agent working on a DIFFERENT \
+issue or PR act differently after reading it? If not, don't write it.
 
-Keep entries small, specific, and dated where that matters — this is \
-notes for your future self and other agents, not a diary.
+Worth keeping:
+- A correction a human made (to a review, a fix, a style choice) and what \
+it means for next time.
+- A non-obvious gotcha of the repo or its environment: a flaky test, a \
+build step, a CI quirk, a tool missing from the sandbox, a misleading \
+error message.
+- A Sentry error confirmed not actionable, keyed by its error signature \
+(exception + message pattern), with the one-line reason.
+- A convention the repo follows that its docs don't state.
+
+Never write:
+- A log of this run: what you reviewed, that a review came back clean, \
+that you rebased or pushed, "round N" notes.
+- Notes about one PR/MR or one issue that stop mattering once it's merged \
+or closed. Keep only the general lesson, if there is one.
+- Anything the code or git history already says (what a file does, which \
+version is pinned), or anything you couldn't confirm.
+- Secrets, tokens, internal IPs or personal data.
+
+Layout:
+- `<repo>/<topic>.md` for one repo, `_workspace/<topic>.md` for anything \
+true across repos. Name the file after the topic, never after a PR, MR, \
+issue or Sentry id.
+- Sentry verdicts go in one `<repo>/sentry-known-noise.md`, one short \
+entry per error signature — not one file per Sentry issue.
+- Before creating a file, check whether an existing one covers the topic \
+and `str_replace` into it instead. Update a fact that changed; don't \
+append a second version of it.
+- Keep each file under ~8,000 characters and each note to a few lines.
 === End memory ==="""
 )
 

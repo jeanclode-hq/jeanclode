@@ -54,6 +54,8 @@ class ExecutionWorkflow(StrEnum):
     SUMMARY = "summary"
     RESPOND = "respond"
     ISSUE_RESOLVE = "issue_resolve"
+    # Workspace-level, links no issue or PR, so the dashboard never lists it.
+    MEMORY_CURATE = "memory_curate"
 
 
 # Workflows whose state is an issue's status. A RESPOND run also links the issue

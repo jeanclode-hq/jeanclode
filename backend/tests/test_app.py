@@ -9,8 +9,8 @@ from api.plugins.web.plugin import WebServerPlugin
 
 def test_plugins_started_in_priority_order(app: Application) -> None:
     plugin_names = [p.plugin_name for p in app._plugins]
-    # database=10, httpx(sentry)=30, web=50, faststream=60 (container disabled)
-    assert plugin_names == ["database", "sentry", "web", "faststream"]
+    # database=10, httpx(sentry)=30, web=50, memory=55, faststream=60 (container disabled)
+    assert plugin_names == ["database", "sentry", "web", "memory", "faststream"]
 
 
 async def test_health_check_aggregates_plugins(app: Application) -> None:
@@ -61,4 +61,4 @@ async def test_shutdown_reverse_order(app: Application) -> None:
     await app.shutdown()
 
     # Should be reverse of startup order
-    assert shutdown_order == ["faststream", "web", "sentry", "database"]
+    assert shutdown_order == ["faststream", "memory", "web", "sentry", "database"]

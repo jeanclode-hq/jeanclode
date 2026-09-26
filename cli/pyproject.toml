@@ -170,4 +170,5 @@ dev = [
     "setuptools>=82.0.0",
     "deepeval>=2.0.0",
     "litellm>=1.0.0",
+    "pytest-xdist>=3.6.1",
 ]

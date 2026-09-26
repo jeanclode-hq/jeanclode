@@ -87,7 +87,14 @@ def test_memory_protocol_block_frames_memory_as_durable_not_scratch_state() -> N
     assert "durable" in block
     assert "cross-run" in block
     assert "scratch space" in block
-    assert "Do NOT use it to track progress within this run" in block
+    assert "A log of this run" in block
+
+
+def test_memory_protocol_block_steers_sentry_verdicts_into_one_file_per_repo() -> None:
+    block = memory_protocol_block()
+    assert "sentry-known-noise.md" in block
+    assert "not one file per Sentry issue" in block
+    assert "_workspace/" in block
 
 
 def test_continuity_protocol_block_is_delimited_by_header_and_footer() -> None:

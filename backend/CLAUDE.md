@@ -16,6 +16,7 @@ The backend uses a **plugin system** where each feature is a plugin with startup
 | `GitLabPlugin` | GitLab API client: verifies tokens, syncs repos, dispatches containers, watches log streams |
 | `SentryPlugin` | Sentry API client: fetches orgs/projects/issues, dispatches containers, watches log streams |
 | `OAuthPlugin` | GitHub/GitLab OAuth for the frontend login flow |
+| `MemoryPlugin` | Daily memory curation (ADR-009): its own container backend and watcher (`provider="memory"`), status consumer, and a scheduler dispatching `memory-curate` for each workspace with entries changed since the curator last saw them, at most once per `cadence_hours`. On by default (`MEMORY_CURATION_ENABLED=false` turns it off) |
 
 The `Application` class in `api/app.py` is the central container. Third-party plugins are loadable via `jeanclode.plugins` entry points.
 

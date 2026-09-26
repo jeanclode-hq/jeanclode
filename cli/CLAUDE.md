@@ -71,6 +71,7 @@ env vars that platform's tools need.
 | `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit; with `code_change=False` the fixer answers in an issue comment instead |
 | `pr_summary` | Summarizer → Parser, File Summarizer started 3s after the Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
 | `jeanclode_respond` | one planner agent acting via Bash, plus two deterministic post-turn checks against provider state |
+| `memory_curate` | due entries in batches of 20 → one curator session per batch (memory tool only, no built-in tools) → mark the batch curated; at most 5 batches per run |
 | `_smoke/echo` | internal smoke test, no external calls |
 
 ### Activities vs agents
@@ -163,6 +164,9 @@ cd cli && uv run pytest -v
 API, so they're separate from the unit suite (`make eval`).
 `tests/eval/agents/test_triage_fixer_llm.py` covers the fixer LLM choice,
 `tests/eval/agents/test_triage_code_change.py` the `code_change` decision.
+`tests/eval/agents/test_memory_curator.py` runs the curator against an
+in-memory fake of the memory API (`tests/eval/memory_store.py`) and asserts
+on what's left in the store.
 
 ## Guidelines
 

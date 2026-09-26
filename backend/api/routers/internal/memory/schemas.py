@@ -101,3 +101,21 @@ class MemoryRenameResponse(BaseModel):
     old_path: str = Field(description="Normalized source path")
     new_path: str = Field(description="Normalized destination path")
     renamed_count: int = Field(description="Number of entries moved")
+
+
+class MemoryCurationDueResponse(BaseModel):
+    """Entries the curator hasn't reviewed since they last changed."""
+
+    paths: list[str] = Field(description="Paths due for curation, in path order")
+
+
+class MemoryCurationMarkRequest(BaseModel):
+    """Request body for marking entries as curated."""
+
+    paths: list[str] = Field(description="Paths the curator has just reviewed")
+
+
+class MemoryCurationMarkResponse(BaseModel):
+    """Response for marking entries as curated."""
+
+    marked_count: int = Field(description="Number of live entries stamped")

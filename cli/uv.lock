@@ -622,7 +622,7 @@ wheels = [
 
 [[package]]
 name = "jeanclode"
-version = "1.1.4"
+version = "1.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
@@ -641,6 +641,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
+    { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "setuptools" },
 ]
@@ -663,6 +664,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
+    { name = "pytest-xdist", specifier = ">=3.6.1" },
     { name = "ruff", specifier = ">=0.15.4" },
     { name = "setuptools", specifier = ">=82.0.0" },
 ]
