@@ -71,7 +71,7 @@ env vars that platform's tools need.
 | `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit; with `code_change=False` the fixer answers in an issue comment instead |
 | `pr_summary` | Summarizer → Parser, File Summarizer started 3s after the Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
 | `jeanclode_respond` | one planner agent acting via Bash, plus two deterministic post-turn checks against provider state |
-| `memory_curate` | due entries in batches of 20 → one curator session per batch (memory tool only, no built-in tools) → mark the batch curated; at most 5 batches per run |
+| `memory_curate` | due entries in batches of 20 → one curator session per batch (memory tool only, no built-in tools) → mark the batch curated; every due entry in one run |
 | `_smoke/echo` | internal smoke test, no external calls |
 
 ### Activities vs agents
