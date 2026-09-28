@@ -247,7 +247,7 @@ def handle_repositories_removed(
     removed_count = 0
     for repo_info in repositories_removed:
         external_repo_id = str(repo_info["id"])
-        if db_delete_repository(db, external_repo_id):
+        if db_delete_repository(db, external_repo_id, provider="github"):
             removed_count += 1
 
     return WebhookResponse(
@@ -269,7 +269,9 @@ async def handle_repository_event(event: GitHubRepositoryEvent) -> WebhookRespon
         return WebhookResponse(message="Missing repository ID in payload", processed=False)
 
     if event.action == "deleted":
-        deleted = await run_in_session(lambda db: db_delete_repository(db, external_repo_id))
+        deleted = await run_in_session(
+            lambda db: db_delete_repository(db, external_repo_id, provider="github")
+        )
         return WebhookResponse(
             message=(
                 f"Removed repository {repo_info.get('full_name', external_repo_id)}"
@@ -296,7 +298,7 @@ async def handle_repository_event(event: GitHubRepositoryEvent) -> WebhookRespon
         if not org:
             return None
 
-        existing = db_get_repository_by_external_id(db, external_repo_id)
+        existing = db_get_repository_by_external_id(db, external_repo_id, provider="github")
 
         # A transfer between two connected orgs would otherwise leave a stale row
         # under the old one, shadowing the real repo in every by-external-id lookup.

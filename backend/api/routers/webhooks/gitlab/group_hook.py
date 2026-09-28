@@ -65,7 +65,7 @@ async def handle_group_hook_event(
         return await projects.ensure_project(payload, instance_url, db_plugin, gitlab_plugin)
 
     if event_name in projects.REMOVE_EVENTS:
-        return projects.remove_project(payload, db_plugin)
+        return projects.remove_project(payload, instance_url, db_plugin)
 
     if event_name == "subgroup_destroy":
         return _remove_subgroup(payload, instance_url, db_plugin)

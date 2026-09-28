@@ -53,7 +53,7 @@ async def handle_system_hook_event(
     if event_name in projects.REMOVE_EVENTS:
         if not payload.get("project_id"):
             return WebhookResponse(message="Missing project_id in payload", processed=False)
-        return projects.remove_project(payload, db_plugin)
+        return projects.remove_project(payload, instance_url, db_plugin)
 
     if event_name in GROUP_EVENTS:
         return _remove_group(payload, instance_url, db_plugin)

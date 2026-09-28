@@ -257,7 +257,9 @@ async def handle_mention_event(event_type: str, payload: dict) -> WebhookRespons
     _enrich_pr_fields(normalized, payload)
 
     def _gate(db: Session) -> WebhookResponse | _Gate:
-        repository = db_get_repository_by_external_id(db, normalized.repo_external_id)
+        repository = db_get_repository_by_external_id(
+            db, normalized.repo_external_id, provider="github"
+        )
         if not repository:
             return WebhookResponse(
                 message=f"Repository {normalized.repo_full_name or normalized.repo_external_id} not tracked",

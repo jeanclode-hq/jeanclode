@@ -98,9 +98,9 @@ async def test_sync_links_subgroup_projects_to_own_namespace_org(gitlab_app):
     await sync_gitlab_group_repositories(message)
 
     with db_plugin.session() as db:
-        repo_atlas_sub = db_get_repository_by_external_id(db, "1001")
-        repo_qa = db_get_repository_by_external_id(db, "1002")
-        repo_core = db_get_repository_by_external_id(db, "1003")
+        repo_atlas_sub = db_get_repository_by_external_id(db, "1001", provider="gitlab")
+        repo_qa = db_get_repository_by_external_id(db, "1002", provider="gitlab")
+        repo_core = db_get_repository_by_external_id(db, "1003", provider="gitlab")
 
         assert repo_atlas_sub is not None
         assert repo_qa is not None
@@ -206,8 +206,8 @@ async def test_sync_reuses_existing_namespace_org_across_projects(gitlab_app):
     await sync_gitlab_group_repositories(message)
 
     with db_plugin.session() as db:
-        repo_a = db_get_repository_by_external_id(db, "2001")
-        repo_b = db_get_repository_by_external_id(db, "2002")
+        repo_a = db_get_repository_by_external_id(db, "2001", provider="gitlab")
+        repo_b = db_get_repository_by_external_id(db, "2002", provider="gitlab")
         assert repo_a is not None
         assert repo_b is not None
         assert repo_a.org_id == repo_b.org_id

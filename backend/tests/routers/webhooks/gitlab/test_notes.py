@@ -127,7 +127,7 @@ async def test_mr_top_level_mention_dispatches(app, db_session, mock_broker):
         _seed_mr(db, repo)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3001")
+        repo = db_get_repository_by_external_id(db, "3001", provider="gitlab")
         result = await handle_note_event(
             _mr_top_level_payload(repo=repo, iid=7, body="@jeanclode-bot help here", sender="bob"),
         )
@@ -153,7 +153,7 @@ async def test_bot_top_level_mention_accepted(app, db_session, mock_broker):
         _seed_mr(db, repo, iid=9, author="acme_group_bot")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3003")
+        repo = db_get_repository_by_external_id(db, "3003", provider="gitlab")
         result = await handle_note_event(
             _mr_top_level_payload(
                 repo=repo,
@@ -176,7 +176,7 @@ async def test_bot_mention_on_human_authored_mr_accepted(app, db_session, mock_b
         _seed_mr(db, repo, iid=10, author="alice")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3004")
+        repo = db_get_repository_by_external_id(db, "3004", provider="gitlab")
         result = await handle_note_event(
             _mr_top_level_payload(
                 repo=repo,
@@ -198,7 +198,7 @@ async def test_mr_inline_thread_mention_dispatches(app, db_session, mock_broker)
         _seed_mr(db, repo, iid=8)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3002")
+        repo = db_get_repository_by_external_id(db, "3002", provider="gitlab")
         payload = _mr_top_level_payload(
             repo=repo, iid=8, body="@jeanclode-bot please clarify", sender="bob"
         )
@@ -228,7 +228,7 @@ async def test_unauthorized_reporter_rejected(app, db_session, mock_broker):
         ),
         app.database.session() as db,
     ):
-        repo = db_get_repository_by_external_id(db, "3003")
+        repo = db_get_repository_by_external_id(db, "3003", provider="gitlab")
         result = await notes.handle_note_event(
             _mr_top_level_payload(repo=repo, iid=9, body="@jeanclode-bot", sender="reporter"),
         )
@@ -255,7 +255,7 @@ async def test_anyone_trigger_permission_bypasses_authorization_check(app, db_se
         ),
         app.database.session() as db,
     ):
-        repo = db_get_repository_by_external_id(db, "3009")
+        repo = db_get_repository_by_external_id(db, "3009", provider="gitlab")
         result = await notes.handle_note_event(
             _mr_top_level_payload(repo=repo, iid=9, body="@jeanclode-bot", sender="reporter"),
         )
@@ -272,7 +272,7 @@ async def test_no_mention_no_dispatch(app, db_session, mock_broker):
         _seed_mr(db, repo, iid=10)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3004")
+        repo = db_get_repository_by_external_id(db, "3004", provider="gitlab")
         result = await handle_note_event(
             _mr_top_level_payload(repo=repo, iid=10, body="hello", sender="bob"),
         )
@@ -290,7 +290,7 @@ async def test_resolve_action_skipped(app, db_session, mock_broker):
         _seed_mr(db, repo, iid=11)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3005")
+        repo = db_get_repository_by_external_id(db, "3005", provider="gitlab")
         payload = _mr_top_level_payload(repo=repo, iid=11, body="@jeanclode-bot", sender="bob")
         payload["object_attributes"]["action"] = "resolve"
         result = await handle_note_event(payload)
@@ -337,7 +337,7 @@ async def test_issue_mention_dispatches(app, db_session, mock_broker):
         _, _, repo = _make_org_repo(db, settings=_SETTINGS_ON, external_id="3006")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3006")
+        repo = db_get_repository_by_external_id(db, "3006", provider="gitlab")
         result = await handle_note_event(
             _issue_note_payload(
                 repo=repo, issue_iid=13, body="@jeanclode-bot can you handle it", sender="bob"
@@ -362,7 +362,7 @@ async def test_issue_mention_without_note_url_still_dispatches(app, db_session, 
         _, _, repo = _make_org_repo(db, settings=_SETTINGS_ON, external_id="3007")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3007")
+        repo = db_get_repository_by_external_id(db, "3007", provider="gitlab")
         result = await handle_note_event(
             _issue_note_payload(
                 repo=repo,
@@ -388,7 +388,7 @@ async def test_second_mr_mention_queues_instead_of_dropping(app, db_session, moc
         _seed_mr(db, repo, iid=21)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3008")
+        repo = db_get_repository_by_external_id(db, "3008", provider="gitlab")
         payload = _mr_top_level_payload(
             repo=repo, iid=21, body="@jeanclode-bot help here", sender="bob"
         )
@@ -436,7 +436,7 @@ async def test_issue_mention_not_blocked_by_unrelated_workflow(app, db_session, 
         )
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3009")
+        repo = db_get_repository_by_external_id(db, "3009", provider="gitlab")
         result = await handle_note_event(
             _issue_note_payload(
                 repo=repo, issue_iid=13, body="@jeanclode-bot status?", sender="bob"
@@ -466,7 +466,7 @@ async def test_mention_records_the_sender_identity_when_synced(
             identity_id = identity.id
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "8899")
+        repo = db_get_repository_by_external_id(db, "8899", provider="gitlab")
         result = await handle_note_event(
             _mr_top_level_payload(repo=repo, iid=31, body="@jeanclode-bot help", sender="bob"),
         )

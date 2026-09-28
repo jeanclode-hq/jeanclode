@@ -1,6 +1,7 @@
 """Database operations for Repository model."""
 
 from collections.abc import Sequence
+from urllib.parse import urlparse
 from uuid import UUID
 
 from sqlalchemy import func, or_, true, update
@@ -155,12 +156,42 @@ def db_set_org_repos_enabled(
     return result.rowcount or 0
 
 
+_DEFAULT_HOSTS = {Provider.GITHUB.value: "github.com", Provider.GITLAB.value: "gitlab.com"}
+
+
+def _url_host(url: str) -> str:
+    return (urlparse(url).netloc if "://" in url else url).strip("/").lower()
+
+
+def _repo_host(repo: Repository) -> str | None:
+    url = repo.provider_url or repo.web_url or repo.organization.base_url
+    return _url_host(url) if url else _DEFAULT_HOSTS.get(repo.provider)
+
+
 def db_get_repository_by_external_id(
     db: Session,
     external_id: str,
+    *,
+    provider: str,
+    host: str | None = None,
 ) -> Repository | None:
-    """Get repository by external ID."""
-    return db.query(Repository).filter(Repository.external_id == external_id).first()
+    """Get a repository by the provider's own project/repo id.
+
+    External ids are only unique per provider instance — a Sentry project and
+    a self-hosted GitLab project routinely share a small integer id — so the
+    lookup is scoped to ``provider`` and, when given, ``host`` (a URL or a
+    bare hostname).
+    """
+    candidates = (
+        db.query(Repository)
+        .filter(Repository.external_id == external_id, Repository.provider == provider)
+        .order_by(Repository.created_at)
+        .all()
+    )
+    if host is None:
+        return candidates[0] if candidates else None
+    wanted = _url_host(host)
+    return next((repo for repo in candidates if _repo_host(repo) == wanted), None)
 
 
 def db_get_repository_by_org_and_external_id(
@@ -250,9 +281,12 @@ def db_upsert_repository(
 def db_delete_repository(
     db: Session,
     external_id: str,
+    *,
+    provider: str,
+    host: str | None = None,
 ) -> bool:
-    """Delete repository by external ID."""
-    repository = db_get_repository_by_external_id(db, external_id)
+    """Delete repository by external ID, scoped like ``db_get_repository_by_external_id``."""
+    repository = db_get_repository_by_external_id(db, external_id, provider=provider, host=host)
     if repository:
         db.delete(repository)
         db.commit()

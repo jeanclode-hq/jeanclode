@@ -114,7 +114,7 @@ async def test_project_create_in_connected_group_creates_repo(
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3001")
+        repo = db_get_repository_by_external_id(db, "3001", provider="gitlab")
         assert repo is not None
         assert repo.name == "acme/new-service"
         assert repo.web_url == "https://gitlab.example.com/acme/new-service"
@@ -147,7 +147,7 @@ async def test_project_create_in_subgroup_creates_namespace_org(
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3002")
+        repo = db_get_repository_by_external_id(db, "3002", provider="gitlab")
         platform_org = db_get_org_by_external_id(db, "600", provider="gitlab")
         assert repo is not None
         assert platform_org is not None
@@ -176,7 +176,7 @@ async def test_project_outside_connected_groups_is_ignored(gitlab_app, connected
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        assert db_get_repository_by_external_id(db, "4001") is None
+        assert db_get_repository_by_external_id(db, "4001", provider="gitlab") is None
 
 
 @pytest.mark.asyncio
@@ -193,7 +193,7 @@ async def test_project_the_token_cannot_read_is_ignored(gitlab_app, connected_gr
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        assert db_get_repository_by_external_id(db, "4002") is None
+        assert db_get_repository_by_external_id(db, "4002", provider="gitlab") is None
 
 
 @pytest.mark.asyncio
@@ -218,7 +218,7 @@ async def test_project_destroy_removes_repo(gitlab_app, connected_group):
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        assert db_get_repository_by_external_id(db, "3003") is None
+        assert db_get_repository_by_external_id(db, "3003", provider="gitlab") is None
 
 
 @pytest.mark.asyncio
@@ -251,7 +251,7 @@ async def test_project_transfer_moves_the_existing_row(mock_broker, gitlab_app, 
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3004")
+        repo = db_get_repository_by_external_id(db, "3004", provider="gitlab")
         platform_org = db_get_org_by_external_id(db, "600", provider="gitlab")
         assert repo is not None
         assert repo.name == "acme/platform/moving"
@@ -272,7 +272,7 @@ async def test_event_without_connected_gitlab_org_is_a_noop(gitlab_app):
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        assert db_get_repository_by_external_id(db, "5001") is None
+        assert db_get_repository_by_external_id(db, "5001", provider="gitlab") is None
 
 
 @pytest.mark.asyncio
@@ -293,7 +293,7 @@ async def test_group_hook_project_create_creates_repo(mock_broker, gitlab_app, c
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3010")
+        repo = db_get_repository_by_external_id(db, "3010", provider="gitlab")
         assert repo is not None
         assert repo.org_id == connected_group
 
@@ -320,7 +320,7 @@ async def test_group_hook_project_destroy_removes_repo(gitlab_app, connected_gro
 
     assert result.processed is True
     with gitlab_app.database.session() as db:
-        assert db_get_repository_by_external_id(db, "3011") is None
+        assert db_get_repository_by_external_id(db, "3011", provider="gitlab") is None
 
 
 @pytest.mark.asyncio
@@ -365,7 +365,7 @@ async def test_subgroup_destroy_removes_the_org_and_its_repos(gitlab_app, connec
     assert result.processed is True
     with gitlab_app.database.session() as db:
         assert db_get_org_by_external_id(db, "600", provider="gitlab") is None
-        assert db_get_repository_by_external_id(db, "3012") is None
+        assert db_get_repository_by_external_id(db, "3012", provider="gitlab") is None
         # The group above it is untouched.
         assert db_get_org_by_external_id(db, "500", provider="gitlab") is not None
 

@@ -66,6 +66,7 @@ class _NormalizedNote(BaseModel):
     sender_id: int | None = None
     sender_is_bot: bool = False
     repo_external_id: str
+    repo_web_url: str = ""
     repo_full_name: str = ""
     pr_number: int | None = None
     issue_number: int | None = None
@@ -140,6 +141,7 @@ def _normalize(payload: dict) -> _NormalizedNote | None:
     if not repo_external_id:
         return None
     repo_full_name = project.get("path_with_namespace") or ""
+    repo_web_url = project.get("web_url") or ""
     sender_login = user.get("username") or ""
     sender_id = user.get("id")
 
@@ -159,6 +161,7 @@ def _normalize(payload: dict) -> _NormalizedNote | None:
             sender_id=sender_id,
             sender_is_bot=sender_is_bot,
             repo_external_id=repo_external_id,
+            repo_web_url=repo_web_url,
             repo_full_name=repo_full_name,
             pr_number=int(mr.get("iid") or 0),
             pr_title=mr.get("title") or "",
@@ -183,6 +186,7 @@ def _normalize(payload: dict) -> _NormalizedNote | None:
             sender_id=sender_id,
             sender_is_bot=sender_is_bot,
             repo_external_id=repo_external_id,
+            repo_web_url=repo_web_url,
             repo_full_name=repo_full_name,
             issue_number=int(issue.get("iid") or 0),
             issue_title=issue.get("title") or "",
@@ -214,7 +218,12 @@ async def handle_note_event(payload: dict) -> WebhookResponse:
         return WebhookResponse(message="note: no @jeanclode mention", processed=False)
 
     def _gate(db: Session) -> WebhookResponse | _Gate:
-        repository = db_get_repository_by_external_id(db, normalized.repo_external_id)
+        repository = db_get_repository_by_external_id(
+            db,
+            normalized.repo_external_id,
+            provider="gitlab",
+            host=normalized.repo_web_url or None,
+        )
         if not repository:
             return WebhookResponse(
                 message=f"Repository {normalized.repo_full_name or normalized.repo_external_id} not tracked",

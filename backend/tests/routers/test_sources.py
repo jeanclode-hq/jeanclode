@@ -250,7 +250,7 @@ def test_gitlab_group_token_upgrades_project_org(mock_broker, gitlab_client, git
     with gitlab_app.database.session() as db:
         from api.database import db_get_repository_by_external_id
 
-        repo = db_get_repository_by_external_id(db, "99")
+        repo = db_get_repository_by_external_id(db, "99", provider="gitlab")
         assert repo is not None
         assert repo.auth_token_encrypted is not None
 
@@ -277,7 +277,7 @@ def test_gitlab_group_token_upgrades_project_org(mock_broker, gitlab_client, git
         assert org is not None
         assert org.auth_token_encrypted is not None
 
-        repo = db_get_repository_by_external_id(db, "99")
+        repo = db_get_repository_by_external_id(db, "99", provider="gitlab")
         assert repo is not None
         assert repo.auth_token_encrypted is None  # cleared — inherits from org
 
@@ -337,8 +337,8 @@ def test_gitlab_second_project_reuses_namespace_org(mock_broker, gitlab_client, 
         orgs = db.query(Organization).filter(Organization.external_org_id == "42").all()
         assert len(orgs) == 1
 
-        repo_a = db_get_repository_by_external_id(db, "99")
-        repo_b = db_get_repository_by_external_id(db, "100")
+        repo_a = db_get_repository_by_external_id(db, "99", provider="gitlab")
+        repo_b = db_get_repository_by_external_id(db, "100", provider="gitlab")
         assert repo_a is not None
         assert repo_b is not None
         assert repo_a.org_id == repo_b.org_id
@@ -455,7 +455,7 @@ def test_gitlab_second_project_inherits_group_token(mock_broker, gitlab_client, 
     with gitlab_app.database.session() as db:
         from api.database import db_get_repository_by_external_id
 
-        repo = db_get_repository_by_external_id(db, "55")
+        repo = db_get_repository_by_external_id(db, "55", provider="gitlab")
         assert repo is not None
         assert repo.auth_token_encrypted is None
 
