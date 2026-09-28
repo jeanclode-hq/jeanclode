@@ -133,6 +133,14 @@ worktree activity beyond the initial branch). A repo that needed a change
 but wasn't listed never gets a worktree at all, so get this side right —
 when genuinely unsure whether the primary needs touching, include it.
 
+*Base branch.* The fix branch is cut from, and its PR/MR opened against,
+the repo's default branch. When the issue, a comment or a loaded skill says
+to work from or target another branch ("open the MR on `dev`", "PRs go to
+`develop`"), put that branch name in `base_branch`, exactly as written.
+Otherwise leave it empty — never guess a branch nobody named. It applies to
+every repo in `target_repos`; a repo without that branch falls back to its
+default.
+
 *Findings.* Write what a competent engineer would want handed to them
 before touching code — not a rigid step-by-step plan, your own investigation
 notes:
@@ -157,7 +165,7 @@ opening or commenting on anything): the fixer agent has the same skills and
 doing the work is its role, not yours.
 
 A skill may influence ONLY these output fields: `kind`, `reasoning`,
-`findings`, `comment_body`, `code_change`, and the `fixer_llm_*` fields. When a skill changes
+`findings`, `comment_body`, `code_change`, `base_branch`, and the `fixer_llm_*` fields. When a skill changes
 one of them, attribute it with a `Per <skill-name> skill: ...` prefix so the
 influence is auditable.
 
@@ -186,7 +194,8 @@ Respond with ONLY a JSON object matching the schema:
   "comment_body": "<comment text for non-proceed outcomes, empty string for proceed>",
   "target_repos": ["<every repo name that needs a change — include \"{{ repo_name }}\" if the primary needs one, plus any related repo name(s) from the Related repositories section that also do; omit the primary's name entirely if the fix belongs elsewhere>"],
   "findings": "<handoff notes for the fixer agent, empty string for non-proceed outcomes>",
-  "code_change": true | false
+  "code_change": true | false,
+  "base_branch": "<branch the issue, a comment or a skill names to work from; empty string for the default branch>"
 }
 ```
 

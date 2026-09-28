@@ -14,6 +14,8 @@ class WorktreePath(BaseModel):
     # See create_worktree. Defaults to "" for callers/tests that build a
     # WorktreePath directly instead of through it.
     placeholder_sha: str = ""
+    # The branch it was cut from, which its PR/MR must target.
+    base: str = ""
 
 
 class PRRef(BaseModel):

@@ -67,6 +67,37 @@ def test_create_worktree_falls_back_to_main_when_head_missing(run: Any, ctx: Run
 
 
 @patch("src.activities.git.ops.subprocess.run")
+def test_create_worktree_fetches_and_branches_off_requested_base(run: Any, ctx: RunContext) -> None:
+    run.side_effect = [
+        _completed("refs/remotes/origin/master\n"),
+        _completed(),  # fetch
+        _completed(),
+        _completed(),
+        _completed("placeholder-sha\n"),
+    ]
+    wt = create_worktree("fix/x", ctx=ctx, base="dev")
+    cmds = [c.args[0] for c in run.call_args_list]
+    assert cmds[1][:2] == ["git", "fetch"]
+    assert "+refs/heads/dev:refs/remotes/origin/dev" in cmds[1]
+    assert cmds[2][-1] == "origin/dev"
+    assert wt.base == "dev"
+
+
+@patch("src.activities.git.ops.subprocess.run")
+def test_create_worktree_falls_back_to_default_when_base_missing(run: Any, ctx: RunContext) -> None:
+    run.side_effect = [
+        _completed("refs/remotes/origin/master\n"),
+        _completed(returncode=128),  # fetch: no such ref
+        _completed(),
+        _completed(),
+        _completed("placeholder-sha\n"),
+    ]
+    wt = create_worktree("fix/x", ctx=ctx, base="dev")
+    assert run.call_args_list[2].args[0][-1] == "master"
+    assert wt.base == "master"
+
+
+@patch("src.activities.git.ops.subprocess.run")
 def test_push_branch_uses_upstream(run: Any, ctx: RunContext) -> None:
     run.return_value = _completed()
     push_branch("fix/x", ctx=ctx)

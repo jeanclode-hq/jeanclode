@@ -300,6 +300,7 @@ class IssueResolveWorkflow:
                     pr_body(issue_url, issue_ctx, siblings, fixer_llm=fixer_llm.summary),
                     platform,
                     ctx=pr_ctx,
+                    base=worktrees[name].base,
                 )
                 prs[name] = pr
                 pr_ctx.emit(Panel(title="PR Opened", content=f"[bold]{pr.url}[/]", style="green"))
@@ -310,11 +311,13 @@ class IssueResolveWorkflow:
         try:
             for name, target_ctx in targets:
                 dest = (parent_dir / name) if multi else parent_dir
-                worktrees[name] = create_worktree(branch, ctx=target_ctx, dest=dest)
+                worktrees[name] = create_worktree(
+                    branch, ctx=target_ctx, dest=dest, base=triage_output.base_branch
+                )
                 # Force-sync origin to this run's fresh placeholder base *before*
                 # the fixer touches anything. A retried execution reuses the same
                 # branch name (see issue_branch) but create_worktree always
-                # branches fresh off the default branch, so without this a stale
+                # branches fresh off the base branch, so without this a stale
                 # commit left on origin by a prior run diverges from what the
                 # fixer is about to build on — its own later plain `git push`
                 # would then be rejected and it has no prescribed way to recover,
