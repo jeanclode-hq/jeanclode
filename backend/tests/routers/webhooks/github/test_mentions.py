@@ -154,7 +154,7 @@ async def test_pr_top_level_mention_creates_execution_and_dispatches(app, db_ses
         _seed_pr(db, repo)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "7777")
+        repo = db_get_repository_by_external_id(db, "7777", provider="github")
         result = await handle_mention_event(
             "issue_comment",
             _issue_comment_payload(
@@ -189,7 +189,7 @@ async def test_no_mention_no_dispatch(app, db_session, mock_broker):
         _seed_pr(db, repo)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "2222")
+        repo = db_get_repository_by_external_id(db, "2222", provider="github")
         result = await handle_mention_event(
             "issue_comment",
             _issue_comment_payload(repo=repo, pr_number=7, body="just a comment", sender="bob"),
@@ -213,7 +213,7 @@ async def test_unauthorized_commenter_rejected(app, db_session, mock_broker):
         ),
         app.database.session() as db,
     ):
-        repo = db_get_repository_by_external_id(db, "3333")
+        repo = db_get_repository_by_external_id(db, "3333", provider="github")
         result = await mentions.handle_mention_event(
             "issue_comment",
             _issue_comment_payload(
@@ -245,7 +245,7 @@ async def test_anyone_trigger_permission_bypasses_authorization_check(app, db_se
         ),
         app.database.session() as db,
     ):
-        repo = db_get_repository_by_external_id(db, "4444")
+        repo = db_get_repository_by_external_id(db, "4444", provider="github")
         result = await mentions.handle_mention_event(
             "issue_comment",
             _issue_comment_payload(
@@ -268,7 +268,7 @@ async def test_bot_mention_on_issue_comment_accepted(app, db_session, mock_broke
         _seed_pr(db, repo, author="jeanclode-bot[bot]")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "5555")
+        repo = db_get_repository_by_external_id(db, "5555", provider="github")
         result = await handle_mention_event(
             "issue_comment",
             _issue_comment_payload(
@@ -293,7 +293,7 @@ async def test_bot_top_level_mention_on_human_pr_accepted(app, db_session, mock_
         _seed_pr(db, repo, author="alice")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "5556")
+        repo = db_get_repository_by_external_id(db, "5556", provider="github")
         result = await handle_mention_event(
             "issue_comment",
             _issue_comment_payload(
@@ -319,7 +319,7 @@ async def test_bot_mention_on_pr_review_submission_accepted(app, db_session, moc
         _seed_pr(db, repo, number=8, author="jeanclode-bot[bot]")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "6666")
+        repo = db_get_repository_by_external_id(db, "6666", provider="github")
         payload = {
             "action": "submitted",
             "review": {
@@ -359,7 +359,7 @@ async def test_inline_review_comment_mention_dispatches(app, db_session, mock_br
         _seed_pr(db, repo, number=9)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "8888")
+        repo = db_get_repository_by_external_id(db, "8888", provider="github")
         payload = {
             "action": "created",
             "comment": {
@@ -423,7 +423,7 @@ async def test_second_pr_mention_queues_instead_of_dropping(app, db_session, moc
         _seed_pr(db, repo, number=11)
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "6001")
+        repo = db_get_repository_by_external_id(db, "6001", provider="github")
         payload = _issue_comment_payload(
             repo=repo, pr_number=11, body="@jeanclode-bot help here", sender="bob"
         )
@@ -472,7 +472,7 @@ async def test_issue_mention_not_blocked_by_unrelated_workflow(app, db_session, 
         )
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "6002")
+        repo = db_get_repository_by_external_id(db, "6002", provider="github")
         result = await handle_mention_event(
             "issue_comment",
             _issue_comment_payload_on_issue(
@@ -503,7 +503,7 @@ async def test_mention_records_the_sender_identity_when_synced(
             identity_id = identity.id
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "7788")
+        repo = db_get_repository_by_external_id(db, "7788", provider="github")
         result = await handle_mention_event(
             "issue_comment",
             _issue_comment_payload(

@@ -99,7 +99,7 @@ async def test_github_pr_opened_with_label_fires_once(app, db_session, mock_brok
         _make_org_repo(db, provider="github", external_id="1234")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "1234")
+        repo = db_get_repository_by_external_id(db, "1234", provider="github")
         assert repo is not None
         await handle_pull_request_event(
             _github_payload(action="opened", repo=repo, labels=["bug", "jeanclode:review"]),
@@ -127,7 +127,7 @@ async def test_github_pr_opened_without_label_does_not_fire(app, db_session, moc
         _make_org_repo(db, provider="github", external_id="1235")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "1235")
+        repo = db_get_repository_by_external_id(db, "1235", provider="github")
         assert repo is not None
         await handle_pull_request_event(
             _github_payload(action="opened", repo=repo, labels=["bug"]),
@@ -144,7 +144,7 @@ async def test_github_label_added_after_open_fires_review(app, db_session, mock_
         _make_org_repo(db, provider="github", external_id="5678")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "5678")
+        repo = db_get_repository_by_external_id(db, "5678", provider="github")
         assert repo is not None
         await handle_pull_request_event(
             _github_payload(
@@ -176,7 +176,7 @@ async def test_github_label_added_unrelated_does_not_fire(app, db_session, mock_
         _make_org_repo(db, provider="github", external_id="9999")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9999")
+        repo = db_get_repository_by_external_id(db, "9999", provider="github")
         assert repo is not None
         await handle_pull_request_event(
             _github_payload(
@@ -298,7 +298,7 @@ async def test_disabled_repo_ignores_pr_triggers(app, db_session, mock_broker):
         )
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9201")
+        repo = db_get_repository_by_external_id(db, "9201", provider="github")
         assert repo is not None
         await handle_pull_request_event(_github_payload(action="opened", repo=repo))
         await handle_pull_request_event(

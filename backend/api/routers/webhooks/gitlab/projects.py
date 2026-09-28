@@ -174,16 +174,16 @@ async def ensure_project(
     )
 
 
-def remove_project(payload: dict[str, Any], db_plugin: Any) -> WebhookResponse:
+def remove_project(
+    payload: dict[str, Any], instance_url: str | None, db_plugin: Any
+) -> WebhookResponse:
     """Drop the repo row for a project that no longer exists."""
     project_id = str(payload.get("project_id", ""))
     project_path = payload.get("path_with_namespace", project_id)
 
     with db_plugin.session() as db:
-        repo = db_get_repository_by_external_id(db, project_id)
-        if not repo or repo.provider != "gitlab":
+        if not db_delete_repository(db, project_id, provider="gitlab", host=instance_url):
             return WebhookResponse(message=f"Project {project_path} not tracked", processed=True)
-        db_delete_repository(db, project_id)
 
     return WebhookResponse(message=f"Removed project {project_path}", processed=True)
 
@@ -226,7 +226,9 @@ async def _sync_claimed_project(
     def _write_repo(db: Session) -> tuple[bool, str | None]:
         # A transfer moves the project into another namespace, so an existing
         # row has to follow it rather than gain a duplicate under the new org.
-        existing = db_get_repository_by_external_id(db, project_id)
+        existing = db_get_repository_by_external_id(
+            db, project_id, provider="gitlab", host=candidate.provider_url
+        )
         is_new = existing is None
         if existing and existing.org_id != target_org_id:
             existing.org_id = target_org_id

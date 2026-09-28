@@ -121,7 +121,7 @@ def test_added_repo_gets_a_web_url_from_full_name(mock_broker, github_client, gi
 
     assert response.status_code == 202
     with github_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9001")
+        repo = db_get_repository_by_external_id(db, "9001", provider="github")
         assert repo is not None
         assert repo.web_url == "https://github.com/test-org/late-repo"
         # Falls back to the org avatar rather than leaving the row blank.
@@ -182,7 +182,7 @@ def test_repository_created_event_creates_repo(mock_broker, github_client, githu
     assert response.status_code == 202
     assert response.json()["processed"] is True
     with github_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9100")
+        repo = db_get_repository_by_external_id(db, "9100", provider="github")
         assert repo is not None
         assert repo.web_url == "https://github.com/test-org/brand-new"
         assert repo.avatar_url == "https://github.com/a.png"
@@ -220,7 +220,7 @@ def test_repository_renamed_updates_the_row(mock_broker, github_client, github_a
     _repo_event("renamed", "new-name")
 
     with github_app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9101")
+        repo = db_get_repository_by_external_id(db, "9101", provider="github")
         assert repo is not None
         assert repo.name == "new-name"
         assert repo.web_url == "https://github.com/test-org/new-name"
@@ -263,4 +263,4 @@ def test_repository_deleted_removes_the_row(mock_broker, github_client, github_a
 
     assert response.status_code == 202
     with github_app.database.session() as db:
-        assert db_get_repository_by_external_id(db, "9102") is None
+        assert db_get_repository_by_external_id(db, "9102", provider="github") is None

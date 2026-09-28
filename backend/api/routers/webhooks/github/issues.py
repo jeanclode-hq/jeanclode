@@ -46,7 +46,7 @@ async def handle_issue_event(event: dict) -> WebhookResponse:
     def _upsert(db: Session) -> WebhookResponse | _Upserted:
         # Find repository by GitHub's numeric ID
         external_repo_id = str(repo_data.get("id", ""))
-        repository = db_get_repository_by_external_id(db, external_repo_id)
+        repository = db_get_repository_by_external_id(db, external_repo_id, provider="github")
         if not repository:
             return WebhookResponse(
                 message=f"Repository {repo_data.get('full_name', external_repo_id)} not tracked",

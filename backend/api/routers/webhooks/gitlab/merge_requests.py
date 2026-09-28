@@ -92,7 +92,9 @@ async def handle_merge_request_event(event: dict) -> WebhookResponse:
     def _upsert(db: Session) -> WebhookResponse | _Upserted:
         # Find repository by GitLab project ID
         external_repo_id = str(project_data.get("id", ""))
-        repository = db_get_repository_by_external_id(db, external_repo_id)
+        repository = db_get_repository_by_external_id(
+            db, external_repo_id, provider="gitlab", host=project_data.get("web_url")
+        )
         if not repository:
             return WebhookResponse(
                 message=f"Repository {project_data.get('path_with_namespace', external_repo_id)} not tracked",

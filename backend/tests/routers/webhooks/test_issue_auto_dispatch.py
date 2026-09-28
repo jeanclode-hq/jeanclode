@@ -116,7 +116,7 @@ async def test_github_issue_opened_does_not_dispatch(app, db_session, mock_broke
         _make_org_repo(db, provider="github", external_id="2345")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "2345")
+        repo = db_get_repository_by_external_id(db, "2345", provider="github")
         assert repo is not None
         await handle_issue_event(_github_payload(action="opened", repo=repo))
 
@@ -135,7 +135,7 @@ async def test_github_issue_opened_with_resolve_label_dispatches(app, db_session
         _make_org_repo(db, provider="github", external_id="2346")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "2346")
+        repo = db_get_repository_by_external_id(db, "2346", provider="github")
         assert repo is not None
         await handle_issue_event(
             _github_payload(action="opened", repo=repo, labels=["jeanclode:resolve"]),
@@ -156,7 +156,7 @@ async def test_github_resolve_label_dispatches(app, db_session, mock_broker):
         _make_org_repo(db, provider="github", external_id="3456")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "3456")
+        repo = db_get_repository_by_external_id(db, "3456", provider="github")
         assert repo is not None
         await handle_issue_event(
             _github_payload(action="labeled", repo=repo, label_added="jeanclode:resolve"),
@@ -188,7 +188,7 @@ async def test_github_unrelated_label_no_dispatch(app, db_session, mock_broker):
         _make_org_repo(db, provider="github", external_id="4567")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "4567")
+        repo = db_get_repository_by_external_id(db, "4567", provider="github")
         assert repo is not None
         await handle_issue_event(
             _github_payload(action="labeled", repo=repo, label_added="bug"),
@@ -206,7 +206,7 @@ async def test_github_resolve_label_on_closed_issue_no_dispatch(app, db_session,
         _make_org_repo(db, provider="github", external_id="5678")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "5678")
+        repo = db_get_repository_by_external_id(db, "5678", provider="github")
         assert repo is not None
         await handle_issue_event(
             _github_payload(
@@ -226,7 +226,7 @@ async def test_github_no_duplicate_when_active_execution(app, db_session, mock_b
         _make_org_repo(db, provider="github", external_id="6789")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "6789")
+        repo = db_get_repository_by_external_id(db, "6789", provider="github")
         assert repo is not None
         await handle_issue_event(
             _github_payload(action="labeled", repo=repo, label_added="jeanclode:resolve"),
@@ -249,7 +249,7 @@ async def test_gitlab_issue_open_does_not_dispatch(app, db_session, mock_broker)
         _make_org_repo(db, provider="gitlab", external_id="6000")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "6000")
+        repo = db_get_repository_by_external_id(db, "6000", provider="gitlab")
         assert repo is not None
         await handle_issue_event(_gitlab_payload(action="open", repo=repo))
 
@@ -267,7 +267,7 @@ async def test_gitlab_issue_opened_with_resolve_label_dispatches(app, db_session
         _make_org_repo(db, provider="gitlab", external_id="6100")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "6100")
+        repo = db_get_repository_by_external_id(db, "6100", provider="gitlab")
         assert repo is not None
         payload = _gitlab_payload(action="open", repo=repo)
         payload["labels"] = [{"title": "jeanclode:resolve"}]
@@ -287,7 +287,7 @@ async def test_gitlab_resolve_label_via_changes_block_dispatches(app, db_session
         _make_org_repo(db, provider="gitlab", external_id="7000")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "7000")
+        repo = db_get_repository_by_external_id(db, "7000", provider="gitlab")
         assert repo is not None
         await handle_issue_event(
             _gitlab_payload(action="update", repo=repo, label_added="jeanclode:resolve"),
@@ -313,7 +313,7 @@ async def test_gitlab_unrelated_label_no_dispatch(app, db_session, mock_broker):
         _make_org_repo(db, provider="gitlab", external_id="8000")
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "8000")
+        repo = db_get_repository_by_external_id(db, "8000", provider="gitlab")
         assert repo is not None
         await handle_issue_event(
             _gitlab_payload(action="update", repo=repo, label_added="bug"),
@@ -336,7 +336,7 @@ async def test_disabled_repo_ignores_resolve_label(app, db_session, mock_broker)
         )
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9101")
+        repo = db_get_repository_by_external_id(db, "9101", provider="github")
         assert repo is not None
         await handle_issue_event(
             _github_payload(action="labeled", repo=repo, label_added="jeanclode:resolve"),
@@ -362,7 +362,7 @@ async def test_disabled_repo_ignores_issue_opened(app, db_session, mock_broker):
         )
 
     with app.database.session() as db:
-        repo = db_get_repository_by_external_id(db, "9102")
+        repo = db_get_repository_by_external_id(db, "9102", provider="gitlab")
         assert repo is not None
         await handle_issue_event(_gitlab_payload(action="open", repo=repo))
 

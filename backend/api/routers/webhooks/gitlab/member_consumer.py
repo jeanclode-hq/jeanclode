@@ -79,7 +79,7 @@ async def consume_gitlab_member(event: dict[str, Any]) -> None:
         if group_id:
             org = db_get_org_by_external_id(db, group_id, provider="gitlab")
         else:
-            repo = db_get_repository_by_external_id(db, project_id)
+            repo = db_get_repository_by_external_id(db, project_id, provider="gitlab")
             org = db_get_org_by_id(db, repo.org_id) if repo else None
 
         if not org:
