@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.5.0...v1.5.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **webhooks:** scope repository lookup by provider and host ([#51](https://github.com/jeanclode-hq/jeanclode/issues/51)) ([ea7789c](https://github.com/jeanclode-hq/jeanclode/commit/ea7789ce739dcd4711baeb354da53d4cc34240aa))
+
 ## [1.5.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.4.0...v1.5.0) (2026-09-26)
 
 
