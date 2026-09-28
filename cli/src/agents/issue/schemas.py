@@ -60,9 +60,9 @@ class TriageOutput(BaseModel):
     # (data, a KPI, an explanation) rather than code: the fixer then runs
     # without a branch, push gate or PR and replies in a comment.
     code_change: bool = True
-    # Populated only for "proceed", and only when the issue, a comment or a
-    # skill names the branch to work from and open the PR/MR against. Empty
-    # means the repo's default branch.
+    # Populated only for "proceed": the remote branch to work from and open
+    # the PR/MR against, resolved by triage against the remote's branches.
+    # Empty means the repo's default branch.
     base_branch: str = ""
     # Which LLM the fixer runs on (#43). Only meaningful when the run offers
     # a choice; the defaults keep the run's own credential and model.

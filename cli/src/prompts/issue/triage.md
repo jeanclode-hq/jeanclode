@@ -134,12 +134,35 @@ but wasn't listed never gets a worktree at all, so get this side right —
 when genuinely unsure whether the primary needs touching, include it.
 
 *Base branch.* The fix branch is cut from, and its PR/MR opened against,
-the repo's default branch. When the issue, a comment or a loaded skill says
-to work from or target another branch ("open the MR on `dev`", "PRs go to
-`develop`"), put that branch name in `base_branch`, exactly as written.
-Otherwise leave it empty — never guess a branch nobody named. It applies to
-every repo in `target_repos`; a repo without that branch falls back to its
-default.
+`base_branch`; empty means the repo's default branch. A wrong base is
+costly: the PR/MR diff then drags in every commit between the two branches.
+
+1. Find the intent. In order: the issue or a comment asks for a branch
+   ("open the MR on dev", "this goes to the release branch"); a loaded
+   skill states where changes go; the repo documents it (CONTRIBUTING, a
+   README "branching" or "workflow" section, a PR/MR template). Where a bug
+   was *seen* — a staging URL, a `.dev` host, "broken on preprod" — is an
+   environment, not a branch request, unless one of those sources ties that
+   environment to a branch.
+2. Check which branches actually exist on the remote. The clone is shallow
+   and single-branch, so local refs only show the default — e.g.
+   `git ls-remote --heads origin`.
+3. Resolve the intent to one of those names. People name branches loosely:
+   "dev" may mean `develop` or `development`, "staging" may mean `stage`,
+   "the release branch" may mean `release/2.4`. An exact match wins over a
+   near one. Output the remote's exact name, never the user's wording.
+4. Decide:
+   - One branch clearly matches → set `base_branch` to it. If it is the
+     default branch, leaving it empty is equivalent.
+   - No intent anywhere → leave it empty.
+   - A branch was asked for but nothing on the remote plausibly matches, or
+     several match equally well → `needs_info`. Name the branches that do
+     exist and ask which one to use. Don't fall back to the default branch
+     when someone asked for another: that opens the PR/MR in the wrong place.
+
+Say in `reasoning` which branch you picked and why when it isn't the
+default. It applies to every repo in `target_repos`; a repo without that
+branch falls back to its default.
 
 *Findings.* Write what a competent engineer would want handed to them
 before touching code — not a rigid step-by-step plan, your own investigation
@@ -195,7 +218,7 @@ Respond with ONLY a JSON object matching the schema:
   "target_repos": ["<every repo name that needs a change — include \"{{ repo_name }}\" if the primary needs one, plus any related repo name(s) from the Related repositories section that also do; omit the primary's name entirely if the fix belongs elsewhere>"],
   "findings": "<handoff notes for the fixer agent, empty string for non-proceed outcomes>",
   "code_change": true | false,
-  "base_branch": "<branch the issue, a comment or a skill names to work from; empty string for the default branch>"
+  "base_branch": "<exact name of an existing remote branch to work from and target; empty string for the default branch>"
 }
 ```
 
