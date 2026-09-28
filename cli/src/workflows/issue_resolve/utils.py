@@ -36,6 +36,8 @@ def format_triage_panel(output: TriageOutput, issue_url: str = "") -> str:
         lines.append("deliverable: [bold]answer on the issue[/] (no code change)")
     if output.target_repos:
         lines.append(f"target repos: [bold]{', '.join(output.target_repos)}[/]")
+    if output.base_branch:
+        lines.append(f"base branch: [bold]{output.base_branch}[/]")
     if output.reasoning:
         lines.append(f"\n{output.reasoning}")
     if output.comment_body and output.kind != "proceed":

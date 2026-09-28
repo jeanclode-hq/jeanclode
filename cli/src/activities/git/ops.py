@@ -75,9 +75,28 @@ def ensure_repo(repo_url: str, *, ctx: RunContext) -> Path:
     return clone_repo(repo_url, ctx.workspace, token)
 
 
+def _fetch_branch(cwd: Path, branch: str) -> bool:
+    proc = subprocess.run(
+        [
+            "git",
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
+
+
 @activity(name="Setting up worktree")
-def create_worktree(branch: str, *, ctx: RunContext, dest: Path | None = None) -> WorktreePath:
-    """Add a fresh git worktree on a new branch off the default branch.
+def create_worktree(
+    branch: str, *, ctx: RunContext, dest: Path | None = None, base: str = ""
+) -> WorktreePath:
+    """Add a fresh git worktree on a new branch off ``base``, or the default branch.
 
     Also makes a single empty commit so the branch has a tip distinct from
     the default branch — required by gh pr create / glab mr create, which
@@ -89,13 +108,25 @@ def create_worktree(branch: str, *, ctx: RunContext, dest: Path | None = None) -
     multi-repo fixes call this once per target repo and need each one at
     a distinct path (e.g. siblings under one parent) rather than the
     default single-worktree-per-branch layout every other caller uses.
+
+    A ``base`` missing on the remote falls back to the default branch rather
+    than failing the run.
     """
-    base = default_branch(ctx.cwd)
+    default = default_branch(ctx.cwd)
+    start = default
+    if base and base != default:
+        # The clone is --single-branch, so any other base has to be fetched first.
+        if _fetch_branch(ctx.cwd, base):
+            start = f"origin/{base}"
+        else:
+            logger.warning("base branch %r not found on origin; using %r", base, default)
+            base = ""
+    base = base or default
     wt_path = dest if dest is not None else ctx.workspace / "worktrees" / branch.replace("/", "_")
     wt_path.parent.mkdir(parents=True, exist_ok=True)
 
     proc = subprocess.run(
-        ["git", "worktree", "add", "-b", branch, str(wt_path), base],
+        ["git", "worktree", "add", "-b", branch, str(wt_path), start],
         cwd=ctx.cwd,
         capture_output=True,
         text=True,
@@ -116,7 +147,7 @@ def create_worktree(branch: str, *, ctx: RunContext, dest: Path | None = None) -
         capture_output=True,
         text=True,
     ).stdout.strip()
-    return WorktreePath(path=wt_path, branch=branch, placeholder_sha=placeholder_sha)
+    return WorktreePath(path=wt_path, branch=branch, placeholder_sha=placeholder_sha, base=base)
 
 
 def fix_missing_reason(cwd: Path, branch: str, placeholder_sha: str) -> str | None:

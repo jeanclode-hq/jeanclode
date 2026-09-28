@@ -61,6 +61,21 @@ def test_open_pr_gitlab_pins_the_source_branch(run: Any, ctx: RunContext) -> Non
 
 
 @patch("src.activities.git.pr.subprocess.run")
+def test_open_pr_gitlab_targets_base(run: Any, ctx: RunContext) -> None:
+    run.return_value = _completed("https://gitlab.com/g/p/-/merge_requests/3\n")
+    open_pr("fix/b", "fix: y", "body", "gitlab", ctx=ctx, base="dev")
+    assert "--target-branch=dev" in run.call_args[0][0]
+
+
+@patch("src.activities.git.pr.subprocess.run")
+def test_open_pr_github_targets_base(run: Any, ctx: RunContext) -> None:
+    run.return_value = _completed("https://github.com/org/repo/pull/9\n")
+    open_pr("fix/b", "fix: y", "body", "github", ctx=ctx, base="dev")
+    cmd = run.call_args[0][0]
+    assert cmd[cmd.index("--base") + 1] == "dev"
+
+
+@patch("src.activities.git.pr.subprocess.run")
 def test_close_pr_github(run: Any, ctx: RunContext) -> None:
     run.return_value = _completed()
     close_pr(

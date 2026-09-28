@@ -60,6 +60,7 @@ def _triage(
     target_repos: list[str] | None = None,
     findings: str = "",
     code_change: bool = True,
+    base_branch: str = "",
 ) -> AgentResult:
     return AgentResult(
         text="",
@@ -70,19 +71,27 @@ def _triage(
             target_repos=target_repos or [],
             findings=findings,
             code_change=code_change,
+            base_branch=base_branch,
         ).model_dump(),
     )
 
 
 def _create_worktree_side(
-    branch: str, *, ctx: RunContext, dest: Path | None = None
+    branch: str, *, ctx: RunContext, dest: Path | None = None, base: str = ""
 ) -> WorktreePath:
     path = dest if dest is not None else (ctx.workspace / "wt" / branch.replace("/", "_"))
-    return WorktreePath(path=path, branch=branch, placeholder_sha="base-sha")
+    return WorktreePath(path=path, branch=branch, placeholder_sha="base-sha", base=base)
 
 
 def _open_pr_side(
-    branch: str, title: str, body: str, platform: str, *, ctx: RunContext, draft: bool = True
+    branch: str,
+    title: str,
+    body: str,
+    platform: str,
+    *,
+    ctx: RunContext,
+    draft: bool = True,
+    base: str = "",
 ) -> PRRef:
     # Repo name is baked into ctx.cwd by _create_worktree_side (dest ends in
     # the repo name for multi-repo, or is the flat single-repo worktree dir
@@ -427,6 +436,23 @@ async def test_proceed_invokes_fixer_with_triage_findings(ctx: RunContext) -> No
     ]
 
 
+async def test_proceed_opens_pr_against_triage_base_branch(ctx: RunContext) -> None:
+    open_pr_calls: list[dict[str, Any]] = []
+
+    def open_pr_side(*args: Any, **kwargs: Any) -> PRRef:
+        open_pr_calls.append(kwargs)
+        return _open_pr_side(*args, **kwargs)
+
+    with (
+        _patch_workflow(triage=_triage(kind="proceed", base_branch="dev")),
+        patch("src.workflows.issue_resolve.runner.open_pr", side_effect=open_pr_side),
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+
+    assert result.status == "success"
+    assert [c["base"] for c in open_pr_calls] == ["dev"]
+
+
 # ── target_repos routing ────────────────────────────────────────────────
 
 
@@ -438,7 +464,9 @@ async def test_proceed_with_unmatched_target_repo_only_uses_primary(
     the primary alone, so the run still proceeds against just that."""
     worktree_calls: list[Any] = []
 
-    def create_worktree_side(branch: str, *, ctx: Any, dest: Any = None) -> WorktreePath:
+    def create_worktree_side(
+        branch: str, *, ctx: Any, dest: Any = None, base: str = ""
+    ) -> WorktreePath:
         worktree_calls.append(ctx.cwd)
         return _create_worktree_side(branch, ctx=ctx, dest=dest)
 
@@ -475,7 +503,9 @@ async def test_multi_repo_creates_a_worktree_per_target_repo(tmp_path: Path) -> 
     multi_ctx = _multi_repo_ctx(tmp_path)
     worktree_calls: list[tuple[Path, Path | None]] = []
 
-    def create_worktree_side(branch: str, *, ctx: Any, dest: Any = None) -> WorktreePath:
+    def create_worktree_side(
+        branch: str, *, ctx: Any, dest: Any = None, base: str = ""
+    ) -> WorktreePath:
         worktree_calls.append((ctx.cwd, dest))
         return _create_worktree_side(branch, ctx=ctx, dest=dest)
 
@@ -517,7 +547,9 @@ async def test_multi_repo_fix_entirely_in_related_repo_skips_primary_worktree(
     multi_ctx = _multi_repo_ctx(tmp_path)
     worktree_calls: list[Path] = []
 
-    def create_worktree_side(branch: str, *, ctx: Any, dest: Any = None) -> WorktreePath:
+    def create_worktree_side(
+        branch: str, *, ctx: Any, dest: Any = None, base: str = ""
+    ) -> WorktreePath:
         worktree_calls.append(ctx.cwd)
         return _create_worktree_side(branch, ctx=ctx, dest=dest)
 

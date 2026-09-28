@@ -84,6 +84,7 @@ def open_pr(
     platform: Literal["github", "gitlab"],
     *,
     ctx: RunContext,
+    base: str = "",
 ) -> PRRef:
     """Create a PR/MR on the current branch and return its URL.
 
@@ -95,6 +96,8 @@ def open_pr(
     under a `$CI_MERGE_REQUEST_TITLE =~ /^Draft:/ → when: never` workflow
     rule, and un-drafting is not itself a pipeline trigger — the MR would
     then sit blocked on a pipeline that can never be created.
+
+    Without ``base`` the PR/MR targets the repo's default branch.
     """
     existing = _find_open_pr(branch, platform, ctx=ctx)
     if existing:
@@ -119,6 +122,8 @@ def open_pr(
             "--description",
             body,
         ]
+    if base:
+        cmd += ["--base", base] if platform == "github" else [f"--target-branch={base}"]
 
     proc = subprocess.run(cmd, cwd=ctx.cwd, capture_output=True, text=True, check=True)
     return PRRef(url=proc.stdout.strip(), branch=branch, platform=platform)
