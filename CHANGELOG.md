@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.6.0...v1.7.0) (2026-09-28)
+
+
+### Features
+
+* bump claude-agent-sdk to 0.2.160 for Opus 5.5 ([1f6599a](https://github.com/jeanclode-hq/jeanclode/commit/1f6599abca655f96a7e38551e600fe4c8bd33b22))
+
 ## [1.6.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.5.1...v1.6.0) (2026-09-28)
 
 
