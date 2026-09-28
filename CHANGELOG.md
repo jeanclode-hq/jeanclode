@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.5.1...v1.6.0) (2026-09-28)
+
+
+### Features
+
+* **issue-resolve:** let triage pick the base branch ([#53](https://github.com/jeanclode-hq/jeanclode/issues/53)) ([464e36d](https://github.com/jeanclode-hq/jeanclode/commit/464e36d9d76ba9db75c0cd1c3cd94de912a6c415))
+
 ## [1.5.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.5.0...v1.5.1) (2026-09-28)
 
 
