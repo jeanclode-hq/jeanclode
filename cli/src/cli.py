@@ -12,6 +12,8 @@ import sys
 
 from pydantic import BaseModel, ConfigDict
 
+from src.config_file import VALID_MODELS
+
 
 class URLInput(BaseModel):
     """A single URL with optional repo binding."""
@@ -41,11 +43,9 @@ class CLIArgs(BaseModel):
         return self.urls
 
 
-_VALID_MODELS = {"haiku", "sonnet", "opus"}
-
-
 def _help_text(commands: list[str]) -> str:
     cmds = ", ".join(commands) if commands else "sentry"
+    models = ",".join(VALID_MODELS)
     return f"""\
 usage: jeanclode [command] URL [URL ...] [--repo REPO] [--related-repo REPO] [--dry-run] [--debug] [--model MODEL]
 
@@ -66,7 +66,7 @@ options:
                          across a repo group, e.g. a service split from a monorepo
   --dry-run             Analyze only — print summary without applying fixes
   --debug               Enable debug logging
-  --model {{{cmds}}}
+  --model {{{models}}}
                         Claude model for all agents (default: sonnet)
 """
 
@@ -137,10 +137,10 @@ def parse_args(argv: list[str] | None = None) -> CLIArgs:
             if i >= len(args):
                 raise CLIParseError("--model requires a value")
             model = args[i]
-            if model not in _VALID_MODELS:
+            if model not in VALID_MODELS:
                 raise CLIParseError(
                     f"argument --model: invalid choice: '{model}' "
-                    f"(choose from {', '.join(sorted(_VALID_MODELS))})"
+                    f"(choose from {', '.join(VALID_MODELS)})"
                 )
         elif arg == "--repo":
             i += 1

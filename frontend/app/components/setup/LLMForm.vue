@@ -2,9 +2,10 @@
 /**
  * Form for adding or editing one credential in the LLM pool (ADR-010).
  *
- * Each provider exposes a curated list of models via dropdown. Opus is
- * intentionally excluded for Claude providers — it's too expensive as a
- * default for the automated workflows. ``openai_compatible`` uses free-text
+ * Each provider exposes a curated list of models via dropdown. Claude
+ * providers pick a family alias, never a pinned id: the Agent SDK's bundled
+ * CLI resolves it to the newest model of that family, so a model launch only
+ * needs a claude-agent-sdk bump. ``openai_compatible`` uses free-text
  * inputs since the model list depends on the user's endpoint. ``kind`` is
  * derived from ``provider`` rather than its own control — ``claude_code``
  * is always an OAuth subscription, everything else is an API key.
@@ -40,10 +41,10 @@ const planTierOptions = [
 ]
 
 const claudeModels = [
-  { label: 'Claude Opus 5.5', value: 'claude-opus-5-5' },
-  { label: 'Claude Opus 4.6', value: 'claude-opus-4-6' },
-  { label: 'Claude Sonnet 5', value: 'claude-sonnet-5' },
-  { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5' },
+  { label: 'Haiku', value: 'haiku' },
+  { label: 'Sonnet', value: 'sonnet' },
+  { label: 'Opus', value: 'opus' },
+  { label: 'Fable', value: 'fable' },
 ]
 
 const openaiModels = [
@@ -53,8 +54,8 @@ const openaiModels = [
 ]
 
 const providerDefaults: Record<ProviderId, { high: string, low: string }> = {
-  claude_code: { high: 'claude-sonnet-5', low: 'claude-haiku-4-5' },
-  anthropic: { high: 'claude-sonnet-5', low: 'claude-haiku-4-5' },
+  claude_code: { high: 'sonnet', low: 'haiku' },
+  anthropic: { high: 'sonnet', low: 'haiku' },
   openai: { high: 'gpt-5.4', low: 'gpt-5.4-mini' },
   openai_compatible: { high: '', low: '' },
 }
