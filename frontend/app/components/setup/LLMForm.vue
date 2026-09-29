@@ -51,6 +51,7 @@ const claudeModels = [
 // when OpenAI ships a new generation.
 const openaiModels = [
   { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
+  { label: 'GPT-5.6 Terra', value: 'gpt-5.6-terra' },
   { label: 'GPT-6 Sol', value: 'gpt-6-sol' },
   { label: 'GPT-6 Astra', value: 'gpt-6-astra' },
 ]
@@ -58,7 +59,7 @@ const openaiModels = [
 const providerDefaults: Record<ProviderId, { high: string, low: string }> = {
   claude_code: { high: 'sonnet', low: 'haiku' },
   anthropic: { high: 'sonnet', low: 'haiku' },
-  openai: { high: 'gpt-6-sol', low: 'gpt-6-luna' },
+  openai: { high: 'gpt-6-sol', low: 'gpt-5.6-terra' },
   openai_compatible: { high: '', low: '' },
 }
 
