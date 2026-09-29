@@ -2,9 +2,10 @@
 /**
  * Form for adding or editing one credential in the LLM pool (ADR-010).
  *
- * Each provider exposes a curated list of models via dropdown. Opus is
- * intentionally excluded for Claude providers — it's too expensive as a
- * default for the automated workflows. ``openai_compatible`` uses free-text
+ * Each provider exposes a curated list of models via dropdown. Claude
+ * providers pick a family alias, never a pinned id: the Agent SDK's bundled
+ * CLI resolves it to the newest model of that family, so a model launch only
+ * needs a claude-agent-sdk bump. ``openai_compatible`` uses free-text
  * inputs since the model list depends on the user's endpoint. ``kind`` is
  * derived from ``provider`` rather than its own control — ``claude_code``
  * is always an OAuth subscription, everything else is an API key.
@@ -40,22 +41,25 @@ const planTierOptions = [
 ]
 
 const claudeModels = [
-  { label: 'Claude Opus 5.5', value: 'claude-opus-5-5' },
-  { label: 'Claude Opus 4.6', value: 'claude-opus-4-6' },
-  { label: 'Claude Sonnet 5', value: 'claude-sonnet-5' },
-  { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5' },
+  { label: 'Haiku', value: 'haiku' },
+  { label: 'Sonnet', value: 'sonnet' },
+  { label: 'Opus', value: 'opus' },
+  { label: 'Fable', value: 'fable' },
 ]
 
+// OpenAI has no family aliases, so this list is pinned ids and needs a bump
+// when OpenAI ships a new generation.
 const openaiModels = [
-  { label: 'GPT-5.4', value: 'gpt-5.4' },
-  { label: 'GPT-5.4 mini', value: 'gpt-5.4-mini' },
-  { label: 'GPT-5.4 nano', value: 'gpt-5.4-nano' },
+  { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
+  { label: 'GPT-5.6 Terra', value: 'gpt-5.6-terra' },
+  { label: 'GPT-6 Sol', value: 'gpt-6-sol' },
+  { label: 'GPT-6 Astra', value: 'gpt-6-astra' },
 ]
 
 const providerDefaults: Record<ProviderId, { high: string, low: string }> = {
-  claude_code: { high: 'claude-sonnet-5', low: 'claude-haiku-4-5' },
-  anthropic: { high: 'claude-sonnet-5', low: 'claude-haiku-4-5' },
-  openai: { high: 'gpt-5.4', low: 'gpt-5.4-mini' },
+  claude_code: { high: 'sonnet', low: 'haiku' },
+  anthropic: { high: 'sonnet', low: 'haiku' },
+  openai: { high: 'gpt-6-sol', low: 'gpt-5.6-terra' },
   openai_compatible: { high: '', low: '' },
 }
 
@@ -80,9 +84,21 @@ const isClaude = computed(() => form.provider === 'claude_code' || form.provider
 const isOpenAI = computed(() => form.provider === 'openai')
 const isCompatible = computed(() => form.provider === 'openai_compatible')
 
+// A credential saved before the list changed (e.g. an older GPT) keeps showing
+// its model instead of an empty select.
+function withSaved(options: { label: string, value: string }[]) {
+  const saved = props.existing?.provider === form.provider
+    ? [props.existing.model_high, props.existing.model_heavy, props.existing.model_low]
+    : []
+  const extra = [...new Set(saved)]
+    .filter((m): m is string => !!m && !options.some((o) => o.value === m))
+    .map((m) => ({ label: m, value: m }))
+  return [...options, ...extra]
+}
+
 const modelOptions = computed(() => {
-  if (isClaude.value) return claudeModels
-  if (isOpenAI.value) return openaiModels
+  if (isClaude.value) return withSaved(claudeModels)
+  if (isOpenAI.value) return withSaved(openaiModels)
   return []
 })
 

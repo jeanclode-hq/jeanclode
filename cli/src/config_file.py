@@ -16,13 +16,11 @@ _console = Console(highlight=False)
 
 CONFIG_PATH = Path.home() / ".jeanclode" / "config.toml"
 
-VALID_MODELS = ("haiku", "sonnet", "opus")
+# Family aliases the Agent SDK's bundled CLI resolves to the newest model of
+# that family it knows — bumping claude-agent-sdk is how a new model arrives.
+VALID_MODELS = ("haiku", "sonnet", "opus", "fable")
 
-MODELS = [
-    ("1", "haiku"),
-    ("2", "sonnet"),
-    ("3", "opus"),
-]
+MODELS = [(str(i), name) for i, name in enumerate(VALID_MODELS, start=1)]
 
 AUTH_METHODS = [
     ("1", "api-key"),
@@ -131,7 +129,7 @@ def run_interactive_setup(path: Path = CONFIG_PATH) -> dict:
         Panel(
             "Jeanclode uses Claude to triage Sentry issues and fix bugs.\n"
             "  Choose your authentication method and model.\n\n"
-            "  Available models: haiku (fast), sonnet (balanced), opus (strongest)",
+            "  Available models: haiku (fast), sonnet (balanced), opus (strong), fable (strongest)",
             title="[bold]Welcome to Jeanclode![/]",
             expand=False,
         )

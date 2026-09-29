@@ -61,6 +61,11 @@ def test_model_flag() -> None:
     assert args.model == "opus"
 
 
+def test_model_flag_accepts_fable() -> None:
+    args = parse_args(["https://sentry.io/issues/12345", "--model", "fable"])
+    assert args.model == "fable"
+
+
 def test_model_flag_default_none() -> None:
     args = parse_args(["https://sentry.io/issues/12345"])
     assert args.model is None
