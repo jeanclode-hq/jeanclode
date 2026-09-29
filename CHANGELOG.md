@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.7.0...v1.8.0) (2026-09-29)
+
+
+### Features
+
+* pick Claude models by family alias, bump to Sonnet 5.5 and GPT-6 ([#56](https://github.com/jeanclode-hq/jeanclode/issues/56)) ([884831b](https://github.com/jeanclode-hq/jeanclode/commit/884831b7afc4eb5318ad8d205ba59c702d113512))
+
 ## [1.7.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.6.0...v1.7.0) (2026-09-28)
 
 
