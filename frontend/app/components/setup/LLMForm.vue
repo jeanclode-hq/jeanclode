@@ -84,9 +84,21 @@ const isClaude = computed(() => form.provider === 'claude_code' || form.provider
 const isOpenAI = computed(() => form.provider === 'openai')
 const isCompatible = computed(() => form.provider === 'openai_compatible')
 
+// A credential saved before the list changed (e.g. an older GPT) keeps showing
+// its model instead of an empty select.
+function withSaved(options: { label: string, value: string }[]) {
+  const saved = props.existing?.provider === form.provider
+    ? [props.existing.model_high, props.existing.model_heavy, props.existing.model_low]
+    : []
+  const extra = [...new Set(saved)]
+    .filter((m): m is string => !!m && !options.some((o) => o.value === m))
+    .map((m) => ({ label: m, value: m }))
+  return [...options, ...extra]
+}
+
 const modelOptions = computed(() => {
-  if (isClaude.value) return claudeModels
-  if (isOpenAI.value) return openaiModels
+  if (isClaude.value) return withSaved(claudeModels)
+  if (isOpenAI.value) return withSaved(openaiModels)
   return []
 })
 
