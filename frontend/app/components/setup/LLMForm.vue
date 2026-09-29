@@ -47,16 +47,18 @@ const claudeModels = [
   { label: 'Fable', value: 'fable' },
 ]
 
+// OpenAI has no family aliases, so this list is pinned ids and needs a bump
+// when OpenAI ships a new generation.
 const openaiModels = [
-  { label: 'GPT-5.4', value: 'gpt-5.4' },
-  { label: 'GPT-5.4 mini', value: 'gpt-5.4-mini' },
-  { label: 'GPT-5.4 nano', value: 'gpt-5.4-nano' },
+  { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
+  { label: 'GPT-6 Sol', value: 'gpt-6-sol' },
+  { label: 'GPT-6 Astra', value: 'gpt-6-astra' },
 ]
 
 const providerDefaults: Record<ProviderId, { high: string, low: string }> = {
   claude_code: { high: 'sonnet', low: 'haiku' },
   anthropic: { high: 'sonnet', low: 'haiku' },
-  openai: { high: 'gpt-5.4', low: 'gpt-5.4-mini' },
+  openai: { high: 'gpt-6-sol', low: 'gpt-6-luna' },
   openai_compatible: { high: '', low: '' },
 }
 
