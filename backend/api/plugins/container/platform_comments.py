@@ -27,7 +27,7 @@ async def upsert_github_comment(
 ) -> None:
     """Create or update the marked bot comment on a GitHub PR/issue."""
     comments = await plugin.list_issue_comments(installation_token, owner, repo, number)
-    existing = next((c for c in comments if marker in (c.get("body") or "")), None)
+    existing = next((c for c in comments if (c.get("body") or "").startswith(marker)), None)
     if existing:
         await plugin.update_issue_comment(installation_token, owner, repo, existing["id"], body)
     else:
@@ -52,7 +52,7 @@ async def upsert_gitlab_note(
     notes = await plugin.list_notes(
         access_token, project_id, resource, iid, provider_url=provider_url
     )
-    existing = next((n for n in notes if marker in (n.get("body") or "")), None)
+    existing = next((n for n in notes if (n.get("body") or "").startswith(marker)), None)
     if existing:
         await plugin.update_note(
             access_token,

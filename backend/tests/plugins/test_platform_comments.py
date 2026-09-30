@@ -105,3 +105,49 @@ async def test_upsert_gitlab_note_updates_existing_marked_note():
         "tok", "123", "issues", 3, 9, f"{MARKER}\nnew status", provider_url=None
     )
     plugin.create_note.assert_not_awaited()
+
+
+async def test_upsert_github_comment_ignores_comment_quoting_the_marker():
+    plugin = AsyncMock()
+    plugin.list_issue_comments.return_value = [
+        {"id": 3, "body": f"### QA report\n- @bot — {MARKER} #### Jeanclode Status Update"},
+    ]
+
+    await upsert_github_comment(
+        plugin,
+        installation_token="tok",
+        owner="acme",
+        repo="widgets",
+        number=42,
+        marker=MARKER,
+        body=f"{MARKER}\nhello",
+    )
+
+    plugin.create_issue_comment.assert_awaited_once_with(
+        "tok", "acme", "widgets", 42, f"{MARKER}\nhello"
+    )
+    plugin.update_issue_comment.assert_not_awaited()
+
+
+async def test_upsert_gitlab_note_ignores_note_quoting_the_marker():
+    plugin = AsyncMock()
+    plugin.list_notes.return_value = [
+        {"id": 12, "body": f"### QA report\n- @bot — {MARKER} #### Jeanclode Status Update"},
+        {"id": 9, "body": f"{MARKER}\nold status"},
+    ]
+
+    await upsert_gitlab_note(
+        plugin,
+        access_token="tok",
+        project_id="123",
+        resource="issues",
+        iid=3,
+        marker=MARKER,
+        body=f"{MARKER}\nnew status",
+        provider_url=None,
+    )
+
+    plugin.update_note.assert_awaited_once_with(
+        "tok", "123", "issues", 3, 9, f"{MARKER}\nnew status", provider_url=None
+    )
+    plugin.create_note.assert_not_awaited()
