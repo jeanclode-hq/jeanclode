@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.8.0...v1.8.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **status-comment:** only match comments that start with the status marker ([0343533](https://github.com/jeanclode-hq/jeanclode/commit/034353386dc7b5c52303f1f2dfe6c79e91374ef9))
+
 ## [1.8.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.7.0...v1.8.0) (2026-09-29)
 
 
