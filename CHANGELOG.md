@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.8.1...v1.9.0) (2026-10-01)
+
+
+### Features
+
+* **ci-watch:** give long pipelines room to finish ([#59](https://github.com/jeanclode-hq/jeanclode/issues/59)) ([e371fcf](https://github.com/jeanclode-hq/jeanclode/commit/e371fcf5879cb1abf3059ec5f9e54f903741ba64))
+
 ## [1.8.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.8.0...v1.8.1) (2026-09-30)
 
 
