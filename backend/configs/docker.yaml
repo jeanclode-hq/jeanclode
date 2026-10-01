@@ -217,5 +217,5 @@ plugins:
       network: jeanclode_jeanclode-network
       memory_limit: 2g
       cpu_limit: 2.0
-      timeout: 3600
+      timeout: 7200
       cleanup_containers: false

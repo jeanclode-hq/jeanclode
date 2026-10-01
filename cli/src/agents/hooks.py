@@ -86,11 +86,17 @@ logger = logging.getLogger(__name__)
 # right. A red MR costs a human more than a slow one does, hence the headroom.
 _MAX_BLOCKS = 6
 
+# CI gates get more rounds than the other hooks: past this, a human can still
+# ask the respond workflow to keep going on the PR.
+_MAX_CI_BLOCKS = 10
+
 # The SDK-internal tool the agent calls to emit its `output_schema` result.
 # It's how a schema-bound agent finalizes its turn, so gating it is
 # equivalent to gating "the agent is about to declare itself done" — but
 # early enough that a `deny` still lands (see module docstring).
 _STRUCTURED_OUTPUT_TOOL = "StructuredOutput"
+
+_CI_HOOK_TIMEOUT = 1500
 
 _BYPASS_PANEL_TEXT = (
     "Fixer marked this repo's CI failure as unrelated to its change — no further checks."
@@ -192,7 +198,7 @@ def require_ci_pass_hook(
         nonlocal blocks
         if hook_input.get("tool_name") != _STRUCTURED_OUTPUT_TOOL:
             return {}
-        if blocks >= _MAX_BLOCKS:
+        if blocks >= _MAX_CI_BLOCKS:
             return {}
         try:
             missing = fix_missing_reason(cwd, branch, placeholder_sha)
@@ -230,10 +236,10 @@ def require_ci_pass_hook(
         blocks += 1
         return _deny_structured_output(result.summary_text)
 
-    # check_ci's own wait loop can run up to ~495s (settle + wait-timeout,
+    # check_ci's own wait loop can run up to ~1215s (settle + wait-timeout,
     # see poll.py) — the SDK's HookMatcher default timeout is only 60s,
     # which would kill this hook's callback long before check_ci returns.
-    return HookMatcher(matcher=_STRUCTURED_OUTPUT_TOOL, hooks=[_hook], timeout=600)
+    return HookMatcher(matcher=_STRUCTURED_OUTPUT_TOOL, hooks=[_hook], timeout=_CI_HOOK_TIMEOUT)
 
 
 def require_pushed_and_ci_pass_hook(
@@ -267,7 +273,7 @@ def require_pushed_and_ci_pass_hook(
         nonlocal blocks, pr
         if hook_input.get("tool_name") != _STRUCTURED_OUTPUT_TOOL:
             return {}
-        if blocks >= _MAX_BLOCKS:
+        if blocks >= _MAX_CI_BLOCKS:
             return {}
         try:
             missing = fix_missing_reason(cwd, branch, placeholder_sha)
@@ -307,7 +313,7 @@ def require_pushed_and_ci_pass_hook(
         blocks += 1
         return _deny_structured_output(result.summary_text)
 
-    return HookMatcher(matcher=_STRUCTURED_OUTPUT_TOOL, hooks=[_hook], timeout=600)
+    return HookMatcher(matcher=_STRUCTURED_OUTPUT_TOOL, hooks=[_hook], timeout=_CI_HOOK_TIMEOUT)
 
 
 # --------------------------------------------------------------------------

@@ -226,8 +226,8 @@ is pushed:
     on a clean title.
   - `check_ci` (this ADR's actual subject) is identical either way; only
     when the PR comes to exist differs between the two workflows.
-- **In-session retry budget**: reuses the same `_MAX_BLOCKS = 6` cap
-  `require_pushed_fix_hook` already uses — after 6 denied `StructuredOutput`
+- **In-session retry budget**: `_MAX_CI_BLOCKS = 10`, above the
+  `_MAX_BLOCKS = 6` the other hooks use — after 10 denied `StructuredOutput`
   attempts the hook stops denying (lets the turn finalize) rather than
   looping forever; `max_turns` is the ultimate backstop either way. The
   bypass marker doesn't change this cap, it just gives the agent a way to
@@ -243,7 +243,8 @@ is pushed:
   computes the same path independently in both the hook and the prompt
   (one directory above the worktree, named after it) — deterministic from
   `cwd` alone, so no extra plumbing between them.
-- **K8s Job timeout**: bumped from 600s to 3600s (`backend/configs/kubernetes.yaml`,
+- **K8s Job timeout**: bumped from 600s to 3600s, then to 7200s alongside a
+  20-minute per-call CI wait, for repos whose pipelines run long (`backend/configs/kubernetes.yaml`,
   mirrored in `docker.yaml`) to accommodate several push→check_ci rounds
   within one fixer session, each with its own bounded wait.
 
