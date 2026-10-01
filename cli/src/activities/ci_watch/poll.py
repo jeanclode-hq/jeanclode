@@ -28,7 +28,7 @@ _SETTLE_INTERVAL_SECONDS = 5.0
 # call that times out with checks still running is treated as a failure for
 # gating purposes, same as a real one — the caller just checks again later
 # rather than one call blocking indefinitely.
-_WAIT_TIMEOUT_SECONDS = 480.0
+_WAIT_TIMEOUT_SECONDS = 1200.0
 _WAIT_POLL_INTERVAL_SECONDS = 15.0
 
 

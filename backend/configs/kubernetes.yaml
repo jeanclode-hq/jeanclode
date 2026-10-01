@@ -189,5 +189,5 @@ plugins:
       security_proxy_image: !ENV ${SECURITY_PROXY_IMAGE:-ghcr.io/jeanclode-hq/security-proxy:1.8.1} # x-release-please-version
       memory_limit: 2Gi
       cpu_limit: "2"
-      timeout: 3600
+      timeout: 7200
       cleanup_jobs: !ENV ${K8S_CLEANUP_JOBS:-true}

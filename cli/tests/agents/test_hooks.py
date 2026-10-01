@@ -12,6 +12,7 @@ from src.activities.git.schemas import PRRef
 from src.activities.respond.schemas import MentionContext
 from src.agents.hooks import (
     _MAX_BLOCKS,
+    _MAX_CI_BLOCKS,
     bypass_marker_path,
     require_ci_pass_hook,
     require_pushed_and_ci_pass_hook,
@@ -155,10 +156,10 @@ async def test_ci_hook_stops_blocking_after_max_blocks(
     check.return_value = CiWatchResult(outcome="failure", reason="red", summary_text="ci is red")
     matcher = require_ci_pass_hook(tmp_path, "fix/x", "sha0", _pr(), ctx=_ctx(tmp_path))
     hook = matcher.hooks[0]
-    results = [await hook(_so_input(), None, {"signal": None}) for _ in range(_MAX_BLOCKS + 2)]
+    results = [await hook(_so_input(), None, {"signal": None}) for _ in range(_MAX_CI_BLOCKS + 2)]
     blocked = [r for r in results if _decision(r) == "deny"]
     allowed = [r for r in results if r == {}]
-    assert len(blocked) == _MAX_BLOCKS
+    assert len(blocked) == _MAX_CI_BLOCKS
     assert len(allowed) == 2
 
 
@@ -366,10 +367,10 @@ async def test_lazy_ci_hook_stops_blocking_after_max_blocks(
         tmp_path, "fix/x", "sha0", open_pr, ctx=_ctx(tmp_path)
     )
     hook = matcher.hooks[0]
-    results = [await hook(_so_input(), None, {"signal": None}) for _ in range(_MAX_BLOCKS + 2)]
+    results = [await hook(_so_input(), None, {"signal": None}) for _ in range(_MAX_CI_BLOCKS + 2)]
     blocked = [r for r in results if _decision(r) == "deny"]
     allowed = [r for r in results if r == {}]
-    assert len(blocked) == _MAX_BLOCKS
+    assert len(blocked) == _MAX_CI_BLOCKS
     assert len(allowed) == 2
 
 
