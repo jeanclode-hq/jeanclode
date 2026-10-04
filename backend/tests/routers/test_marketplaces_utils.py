@@ -139,14 +139,14 @@ def test_resolve_legacy_github_type_source(path):
 
 
 def test_resolve_url_source_on_another_gitlab_project():
-    """The numberly-skills ``happily`` entry once it moves to its own repo."""
+    """The acme-skills ``framework`` entry once it moves to its own repo."""
     source = {
         "source": "url",
-        "url": "https://gitlab.example.org/guild-backend/happily.git",
+        "url": "https://gitlab.example.org/platform-team/framework.git",
         "ref": "6.47.1",
     }
     assert resolve_plugin_clone_target(source, MARKET) == _target(
-        "https://gitlab.example.org/guild-backend/happily.git", ref="6.47.1"
+        "https://gitlab.example.org/platform-team/framework.git", ref="6.47.1"
     )
 
 
@@ -347,22 +347,22 @@ async def test_resolve_url_source_carries_ref_and_skills(db_session):
         db_session,
         [
             MarketplacePlugin(
-                name="happily",
+                name="framework",
                 source={
                     "source": "url",
-                    "url": "https://gitlab.example.org/gb/happily.git",
+                    "url": "https://gitlab.example.org/pt/framework.git",
                     "ref": "6.47.1",
                 },
-                skills=["./.claude/skills/happily"],
+                skills=["./.claude/skills/framework"],
             )
         ],
     )
     assert [s.model_dump(exclude_none=True) for s in specs] == [
         {
-            "git_url": "https://gitlab.example.org/gb/happily.git",
+            "git_url": "https://gitlab.example.org/pt/framework.git",
             "ref": "6.47.1",
-            "display_name": "happily",
-            "skills": ["./.claude/skills/happily"],
+            "display_name": "framework",
+            "skills": ["./.claude/skills/framework"],
         }
     ]
 

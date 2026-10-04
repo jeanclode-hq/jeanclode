@@ -87,10 +87,10 @@ async def test_env_payload_hosts_and_clone_urls():
     auth = RepoAuth(provider="gitlab", token="t", base_url="https://gitlab.example.org")
     specs = [
         ResolvedPluginSpec(
-            git_url="https://gitlab.example.org/guild-backend/happily.git",
+            git_url="https://gitlab.example.org/platform-team/framework.git",
             ref="6.47.1",
-            display_name="happily",
-            skills=["./.claude/skills/happily"],
+            display_name="framework",
+            skills=["./.claude/skills/framework"],
         ),
         ResolvedPluginSpec(git_url="https://github.com/anthropics/skills", skills=["./skills/pdf"]),
         ResolvedPluginSpec(
@@ -114,7 +114,7 @@ async def test_env_payload_hosts_and_clone_urls():
     assert resolved.extra_hosts == ["github.com", "gitlab.example.org"]
     assert resolved.git_urls == [
         "https://github.com/anthropics/skills",
-        "https://gitlab.example.org/guild-backend/happily.git",
+        "https://gitlab.example.org/platform-team/framework.git",
     ]
 
 

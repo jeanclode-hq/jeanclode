@@ -626,12 +626,12 @@ async def test_plugin_repo_on_another_host_never_gets_the_org_token() -> None:
             git_org_id=org.id,
             git_urls=[
                 "https://evil.example.net/examplecorp/skills.git",
-                "https://gitlab.example.org/other-team/happily.git",
+                "https://gitlab.example.org/other-team/framework.git",
             ],
         )
 
     assert {(u.host, u.path_prefix) for u in inputs.upstreams} == {
-        ("gitlab.example.org", "/other-team/happily/")
+        ("gitlab.example.org", "/other-team/framework/")
     }
 
 

@@ -487,11 +487,11 @@ def test_loader_gets_the_org_token_tagged_with_its_host(auth_client, app, mock_a
         db.commit()
         org_id = str(org.id)
 
-    load = AsyncMock(return_value=_skills_manifest("happily"))
+    load = AsyncMock(return_value=_skills_manifest("framework"))
     with patch(_LOAD, new=load):
         r = auth_client.post(
             "/marketplaces",
-            json={"org_id": org_id, "git_url": "https://gitlab.example.org/guild-backend/happily"},
+            json={"org_id": org_id, "git_url": "https://gitlab.example.org/platform-team/framework"},
         )
 
     assert r.status_code == 201, r.text

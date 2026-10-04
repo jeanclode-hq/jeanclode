@@ -71,8 +71,8 @@ def _gl(path, ref=None, subpath=None, host="gitlab.example.org"):
             _gl("g/p", "main", ".claude/skills"),
         ),
         (
-            "https://gitlab.example.org/g/p/-/blob/6.47.1/.claude/skills/happily/SKILL.md",
-            _gl("g/p", "6.47.1", ".claude/skills/happily"),
+            "https://gitlab.example.org/g/p/-/blob/6.47.1/.claude/skills/framework/SKILL.md",
+            _gl("g/p", "6.47.1", ".claude/skills/framework"),
         ),
         ("https://gitlab.example.org:8443/g/p", _gl("g/p", host="gitlab.example.org:8443")),
         ("gitlab.example.org/g/sub/p", _gl("g/sub/p")),
@@ -126,7 +126,7 @@ def test_parse_repo_locator_rejects(raw, match):
         _gl("g/sub/p"),
         _gl("g/p", "v1"),
         _gl("g/p", None, ".claude/skills"),
-        _gl("g/p", "6.47.1", ".claude/skills/happily"),
+        _gl("g/p", "6.47.1", ".claude/skills/framework"),
     ],
 )
 def test_canonical_url_round_trips(loc):
@@ -159,7 +159,7 @@ def test_canonical_url_shapes():
             None,
             ["skills/a", "skills/b"],
         ),
-        ([".claude/skills/happily/SKILL.md"], None, [".claude/skills/happily"]),
+        ([".claude/skills/framework/SKILL.md"], None, [".claude/skills/framework"]),
         (
             [".agents/skills/x/SKILL.md", "skills/y/SKILL.md"],
             None,
@@ -190,7 +190,7 @@ def test_skill_names_use_folder_names_and_fall_back_to_paths_on_collision():
         "legacy/a": "legacy/a",
         "skills/b": "b",
     }
-    assert skill_names(["."], "happily") == {".": "happily"}
+    assert skill_names(["."], "framework") == {".": "framework"}
 
 
 @pytest.mark.parametrize(
@@ -272,13 +272,13 @@ async def test_marketplace_json_is_read_at_the_url_ref(repos):
     """GitLab used to read HEAD whatever ref the marketplace URL named."""
     repos.add(
         "gitlab",
-        "numberly/skills",
+        "acme/team-skills",
         {".claude-plugin/marketplace.json": json.dumps({"name": "v2", "plugins": []})},
         ref="v2",
     )
 
     manifest = await load_source_manifest(
-        "https://gitlab.example.org/numberly/skills/-/tree/v2", auth=GL_AUTH
+        "https://gitlab.example.org/acme/team-skills/-/tree/v2", auth=GL_AUTH
     )
 
     assert manifest.name == "v2"
@@ -326,36 +326,36 @@ async def test_repo_without_marketplace_becomes_one_plugin_per_skill(repos):
 
 @pytest.mark.asyncio
 async def test_single_skill_repo(repos):
-    repos.add("gitlab", "guild-backend/happily-skill", {"SKILL.md": _skill("happily")})
+    repos.add("gitlab", "platform-team/framework-skill", {"SKILL.md": _skill("framework")})
 
     manifest = await load_source_manifest(
-        "https://gitlab.example.org/guild-backend/happily-skill", auth=GL_AUTH
+        "https://gitlab.example.org/platform-team/framework-skill", auth=GL_AUTH
     )
 
-    assert [(p.name, p.skills) for p in manifest.plugins] == [("happily-skill", ["."])]
+    assert [(p.name, p.skills) for p in manifest.plugins] == [("framework-skill", ["."])]
 
 
 @pytest.mark.asyncio
 async def test_folder_url_skips_the_marketplace_and_scans_that_folder(repos):
     repos.add(
         "gitlab",
-        "guild-backend/happily",
+        "platform-team/framework",
         {
             ".claude-plugin/marketplace.json": json.dumps({"name": "ignored", "plugins": []}),
-            ".claude/skills/happily/SKILL.md": _skill("happily"),
+            ".claude/skills/framework/SKILL.md": _skill("framework"),
             "skills/other/SKILL.md": _skill("other"),
         },
         ref="6.47.1",
     )
 
     manifest = await load_source_manifest(
-        "https://gitlab.example.org/guild-backend/happily/-/tree/6.47.1/.claude/skills",
+        "https://gitlab.example.org/platform-team/framework/-/tree/6.47.1/.claude/skills",
         auth=GL_AUTH,
     )
 
-    assert manifest.name == "guild-backend/happily/.claude/skills"
+    assert manifest.name == "platform-team/framework/.claude/skills"
     assert [(p.name, p.skills) for p in manifest.plugins] == [
-        ("happily", ["./.claude/skills/happily"])
+        ("framework", ["./.claude/skills/framework"])
     ]
     repos.gitlab.fetch_repo_file_text.assert_not_awaited()
     tree = repos.gitlab.list_repo_blob_paths.await_args.kwargs

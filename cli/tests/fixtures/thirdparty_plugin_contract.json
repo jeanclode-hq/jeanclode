@@ -3,58 +3,58 @@
   "cases": [
     {
       "id": "shared-source-skills-allowlist",
-      "source": "https://gitlab.example.org/numberly/skills",
-      "install": "happily",
+      "source": "https://gitlab.example.org/acme/team-skills",
+      "install": "framework",
       "repos": {
-        "https://gitlab.example.org/numberly/skills": {
+        "https://gitlab.example.org/acme/team-skills": {
           ".claude-plugin/marketplace.json": {
-            "name": "numberly-skills",
+            "name": "acme-skills",
             "plugins": [
-              {"name": "happily", "source": "./", "strict": false, "skills": ["./skills/happily"]},
+              {"name": "framework", "source": "./", "strict": false, "skills": ["./skills/framework"]},
               {"name": "infrastructure", "source": "./", "strict": false, "skills": ["./skills/helm"]}
             ]
           },
-          "skills/happily/SKILL.md": {"skill": "happily"},
+          "skills/framework/SKILL.md": {"skill": "framework"},
           "skills/helm/SKILL.md": {"skill": "helm"}
         }
       },
       "spec": {
-        "git_url": "https://gitlab.example.org/numberly/skills",
-        "display_name": "happily",
-        "skills": ["./skills/happily"]
+        "git_url": "https://gitlab.example.org/acme/team-skills",
+        "display_name": "framework",
+        "skills": ["./skills/framework"]
       },
-      "skills": ["happily"]
+      "skills": ["framework"]
     },
     {
       "id": "url-source-pinned-to-a-tag",
-      "source": "https://gitlab.example.org/numberly/skills",
-      "install": "happily",
+      "source": "https://gitlab.example.org/acme/team-skills",
+      "install": "framework",
       "repos": {
-        "https://gitlab.example.org/numberly/skills": {
+        "https://gitlab.example.org/acme/team-skills": {
           ".claude-plugin/marketplace.json": {
-            "name": "numberly-skills",
+            "name": "acme-skills",
             "plugins": [
               {
-                "name": "happily",
-                "source": {"source": "url", "url": "https://gitlab.example.org/guild-backend/happily.git", "ref": "6.47.1"},
+                "name": "framework",
+                "source": {"source": "url", "url": "https://gitlab.example.org/platform-team/framework.git", "ref": "6.47.1"},
                 "strict": false,
-                "skills": ["./.claude/skills/happily"]
+                "skills": ["./.claude/skills/framework"]
               }
             ]
           }
         },
-        "https://gitlab.example.org/guild-backend/happily@6.47.1": {
-          ".claude/skills/happily/SKILL.md": {"skill": "happily"},
-          "happily/__init__.py": ""
+        "https://gitlab.example.org/platform-team/framework@6.47.1": {
+          ".claude/skills/framework/SKILL.md": {"skill": "framework"},
+          "framework/__init__.py": ""
         }
       },
       "spec": {
-        "git_url": "https://gitlab.example.org/guild-backend/happily.git",
+        "git_url": "https://gitlab.example.org/platform-team/framework.git",
         "ref": "6.47.1",
-        "display_name": "happily",
-        "skills": ["./.claude/skills/happily"]
+        "display_name": "framework",
+        "skills": ["./.claude/skills/framework"]
       },
-      "skills": ["happily"]
+      "skills": ["framework"]
     },
     {
       "id": "github-source-with-plugin-json",
@@ -249,21 +249,21 @@
     },
     {
       "id": "claude-skills-folder-in-a-gitlab-project",
-      "source": "https://gitlab.example.org/guild-backend/happily/-/tree/6.47.1/.claude/skills",
-      "install": "happily",
+      "source": "https://gitlab.example.org/platform-team/framework/-/tree/6.47.1/.claude/skills",
+      "install": "framework",
       "repos": {
-        "https://gitlab.example.org/guild-backend/happily@6.47.1": {
-          ".claude/skills/happily/SKILL.md": {"skill": "happily"},
+        "https://gitlab.example.org/platform-team/framework@6.47.1": {
+          ".claude/skills/framework/SKILL.md": {"skill": "framework"},
           "skills/unrelated/SKILL.md": {"skill": "unrelated"}
         }
       },
       "spec": {
-        "git_url": "https://gitlab.example.org/guild-backend/happily",
+        "git_url": "https://gitlab.example.org/platform-team/framework",
         "ref": "6.47.1",
-        "display_name": "happily",
-        "skills": ["./.claude/skills/happily"]
+        "display_name": "framework",
+        "skills": ["./.claude/skills/framework"]
       },
-      "skills": ["happily"]
+      "skills": ["framework"]
     },
     {
       "id": "single-skill-repo",
