@@ -19,7 +19,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -63,14 +63,11 @@ from .schemas import (
     MarketplaceManifest,
     MarketplacePluginEntry,
     PluginsOverview,
+    RepoAuth,
     UpdateInstallRequest,
 )
-from .utils import (
-    get_marketplace_provider,
-    gitlab_project_path,
-    parse_github_url,
-    parse_marketplace_response,
-)
+from .sources import InvalidSourceError, load_source_manifest, parse_repo_locator
+from .utils import plugin_unsupported_reason
 
 logger = logging.getLogger(__name__)
 
@@ -83,76 +80,41 @@ class _OrgGitAuth(NamedTuple):
     provider: str
     installation_id: str | None
     auth_token_encrypted: str | None
+    base_url: str | None
 
 
 def read_org_git_auth(db: Session, org_id: uuid.UUID) -> _OrgGitAuth | None:
     org = db_get_org_by_id(db, org_id)
     if not org:
         return None
-    return _OrgGitAuth(org.provider, org.installation_id, org.auth_token_encrypted)
+    return _OrgGitAuth(org.provider, org.installation_id, org.auth_token_encrypted, org.base_url)
 
 
-async def resolve_org_git_token(
-    auth: _OrgGitAuth | None, org_id: uuid.UUID, provider: str
-) -> str | None:
-    """Resolve the org's git token matching the given provider.
+async def resolve_org_repo_auth(auth: _OrgGitAuth | None, org_id: uuid.UUID) -> RepoAuth | None:
+    """The org's git token, tagged with the host it may be sent to.
 
     Takes the credentials already read from the DB rather than a session: the
     GitHub branch makes an API call, and a session passed in here would hold
     its pooled connection for that whole round trip.
     """
-    if not auth or auth.provider != provider:
+    if not auth or auth.provider not in ("github", "gitlab"):
         return None
 
     app = get_current_app()
-
-    if provider == "github" and auth.installation_id and app.github:
+    token: str | None = None
+    if auth.provider == "github" and auth.installation_id and app.github:
         try:
-            return await app.github.get_installation_access_token(auth.installation_id)
+            token = await app.github.get_installation_access_token(auth.installation_id)
         except Exception:
             logger.warning("Failed to get GitHub installation token for org %s", org_id)
-            return None
-
-    if provider == "gitlab" and auth.auth_token_encrypted and app.database:
+    elif auth.provider == "gitlab" and auth.auth_token_encrypted and app.database:
         try:
-            return app.database.decrypt(auth.auth_token_encrypted)
+            token = app.database.decrypt(auth.auth_token_encrypted)
         except Exception:
             logger.warning("Failed to decrypt GitLab token for org %s", org_id)
-            return None
 
-    return None
-
-
-async def _fetch_manifest(git_url: str, *, auth_token: str | None = None) -> MarketplaceManifest:
-    """Fetch marketplace.json from the right git plugin based on URL provider."""
-    app = get_current_app()
-    provider = get_marketplace_provider(git_url)
-
-    if provider == "github":
-        if not app.github:
-            raise MarketplaceFetchError("GitHub plugin is not enabled")
-        loc = parse_github_url(git_url)
-        assert loc is not None
-        status, text = await app.github.fetch_repo_file_text(
-            loc.owner,
-            loc.repo,
-            ".claude-plugin/marketplace.json",
-            ref=loc.ref,
-            auth_token=auth_token,
-        )
-    else:
-        if not app.gitlab:
-            raise MarketplaceFetchError("GitLab plugin is not enabled")
-        project_path = gitlab_project_path(git_url)
-        if not project_path:
-            raise MarketplaceFetchError(f"unrecognized git URL: {git_url}")
-        status, text = await app.gitlab.fetch_repo_file_text(
-            project_path,
-            ".claude-plugin/marketplace.json",
-            auth_token=auth_token,
-        )
-
-    return parse_marketplace_response(status, text, git_url)
+    provider: Literal["github", "gitlab"] = "github" if auth.provider == "github" else "gitlab"
+    return RepoAuth(provider=provider, token=token, base_url=auth.base_url)
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +163,7 @@ def _marketplace_entry(
                 description=p.description,
                 version=p.version,
                 installed=p.name in installed_names,
+                unsupported_reason=plugin_unsupported_reason(p, manifest, m.git_url),
             )
             for p in manifest.plugins
         ]
@@ -210,6 +173,7 @@ def _marketplace_entry(
         org_id=m.org_id,
         name=m.name,
         git_url=m.git_url,
+        kind=manifest.kind if manifest else None,
         last_sync_status=m.last_sync_status,
         last_sync_error=m.last_sync_error,
         last_synced_at=m.last_synced_at,
@@ -267,12 +231,11 @@ async def get_plugins_overview(
 
     async def _fetch_one(git_url: str) -> MarketplaceManifest | MarketplaceFetchError:
         try:
-            provider = get_marketplace_provider(git_url)
-            token = await resolve_org_git_token(org_auth, org_id, provider)
-            return await _fetch_manifest(git_url, auth_token=token)
+            return await load_source_manifest(git_url, auth=repo_auth, describe=True)
         except MarketplaceFetchError as e:
             return e
 
+    repo_auth = await resolve_org_repo_auth(org_auth, org_id)
     results = await asyncio.gather(*(_fetch_one(url) for url in git_urls))
 
     def _write(db: Session) -> list[MarketplaceEntry]:
@@ -326,12 +289,21 @@ async def install_plugins(
 
     git_url, org_auth = await run_in_session(_read)
 
-    provider = get_marketplace_provider(git_url)
-    auth_token = await resolve_org_git_token(org_auth, request.org_id, provider)
+    repo_auth = await resolve_org_repo_auth(org_auth, request.org_id)
     try:
-        manifest = await _fetch_manifest(git_url, auth_token=auth_token)
+        manifest = await load_source_manifest(git_url, auth=repo_auth)
     except MarketplaceFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    unsupported = {
+        p.name: reason
+        for p in manifest.plugins
+        if p.name in request.plugin_names
+        and (reason := plugin_unsupported_reason(p, manifest, git_url))
+    }
+    if unsupported:
+        detail = "; ".join(f"{name}: {reason}" for name, reason in unsupported.items())
+        raise HTTPException(status_code=422, detail=f"Unsupported plugin source — {detail}")
 
     def _write(db: Session) -> list[InstalledPlugin]:
         manifest_by_name = {p.name: p for p in manifest.plugins}
@@ -425,26 +397,32 @@ async def connect_marketplace(
     request: ConnectMarketplaceRequest,
     current_user: User = Depends(get_current_user),
 ) -> MarketplaceEntry:
-    """Connect a marketplace by fetching and validating its manifest."""
+    """Connect a skill source: a marketplace, or any repo holding SKILL.md folders."""
+
+    try:
+        git_url = parse_repo_locator(request.git_url).canonical_url
+    except InvalidSourceError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     def _read(db: Session) -> _OrgGitAuth | None:
         verify_org_access_from_body(db, current_user, request.org_id)
-        if db_get_marketplace_by_url(db, request.org_id, request.git_url):
-            raise HTTPException(status_code=409, detail="This marketplace is already connected")
+        if db_get_marketplace_by_url(db, request.org_id, git_url) or db_get_marketplace_by_url(
+            db, request.org_id, request.git_url.strip()
+        ):
+            raise HTTPException(status_code=409, detail="This source is already connected")
         return read_org_git_auth(db, request.org_id)
 
     org_auth = await run_in_session(_read)
 
-    provider = get_marketplace_provider(request.git_url)
-    auth_token = await resolve_org_git_token(org_auth, request.org_id, provider)
+    repo_auth = await resolve_org_repo_auth(org_auth, request.org_id)
     try:
-        manifest = await _fetch_manifest(request.git_url, auth_token=auth_token)
+        manifest = await load_source_manifest(git_url, auth=repo_auth, describe=True)
     except MarketplaceFetchError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     def _write(db: Session) -> MarketplaceEntry:
         marketplace = db_create_marketplace(
-            db, org_id=request.org_id, name=manifest.name, git_url=request.git_url
+            db, org_id=request.org_id, name=manifest.name, git_url=git_url
         )
         db_update_marketplace_sync(
             db, marketplace, status=MarketplaceStatus.OK, synced_at=datetime.now(UTC)

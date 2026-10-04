@@ -173,6 +173,21 @@ tenant turned off); explicit choices ignore that flag.
 Settings are read through `db_resolve_org_settings`, since the connected group
 is the only org the UI offers and a subgroup's own row is empty.
 
+## Skill sources (`/marketplaces`, `/plugins`)
+
+A source is one GitHub or GitLab repo, pasted as `owner/repo` or any clone/web
+URL (`routers/marketplaces/sources.py` parses it and stores the canonical URL).
+With `.claude-plugin/marketplace.json` at its root it is a Claude Code
+marketplace, resolved per Claude Code's plugin-source schema (relative,
+`github`, `url`, `git-subdir`, with `ref`/`sha`); `npm`, `archive` and
+`command` are refused with a reason shown in the UI. Any other repo — or a
+URL narrowed to a folder — is scanned for `SKILL.md` folders and each becomes
+an installable plugin. Sources are read over the REST APIs only; the backend
+never clones. GitLab is limited to jeanclode's instance and the org's own
+host, and the org token goes only to the org's own host. Specs reach the CLI
+as `JEANCLODE_THIRDPARTY_PLUGINS`; `cli/tests/fixtures/thirdparty_plugin_contract.json`
+is the contract both sides test against.
+
 ## LLM Credential Pool (ADR-010)
 
 `llm_credentials` is an instance-level, priority-ordered pool (lower priority

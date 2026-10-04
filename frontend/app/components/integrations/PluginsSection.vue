@@ -62,7 +62,7 @@ function installedCount(market: MarketplaceEntry): number {
 
 function installableCount(market: MarketplaceEntry): number {
   const set = installedByMarket.value.get(market.id)
-  return (market.plugins ?? []).filter((p) => !set?.has(p.name)).length
+  return (market.plugins ?? []).filter((p) => !set?.has(p.name) && !p.unsupported_reason).length
 }
 
 // Accordion — one open at a time
@@ -90,7 +90,17 @@ function expandAdd() {
 function collapseAdd() {
   addExpanded.value = false
   addUrl.value = ''
+  connectError.value = null
 }
+
+const connectError = ref<string | null>(null)
+watch(addUrl, () => { connectError.value = null })
+
+const sourceExamples = computed(() => [
+  { value: 'anthropics/skills', label: t('plugins.accepts.shorthand') },
+  { value: 'https://gitlab.example.com/team/skills', label: t('plugins.accepts.repo') },
+  { value: 'https://github.com/org/repo/tree/main/.claude/skills', label: t('plugins.accepts.folder') },
+])
 
 // Per-item loading state
 const installingNames = ref(new Set<string>())
@@ -104,7 +114,10 @@ async function submitConnect() {
     toast.add({ title: t('plugins.toast.marketplaceConnected'), color: 'success' })
     collapseAdd()
   } catch (e) {
-    toast.add({ title: t('plugins.toast.connectFailed'), description: extractApiError(e, t('plugins.toast.connectFailed')), color: 'error' })
+    // Kept next to the input too: the reason ("no SKILL.md found", "not a GitHub owner/repo")
+    // is what tells the user what to paste instead.
+    connectError.value = extractApiError(e, t('plugins.toast.connectFailed'))
+    toast.add({ title: t('plugins.toast.connectFailed'), description: connectError.value, color: 'error' })
   }
 }
 
@@ -130,7 +143,7 @@ async function installOne(market: MarketplaceEntry, plugin: MarketplacePluginEnt
 }
 
 async function installAll(market: MarketplaceEntry) {
-  const names = (market.plugins ?? []).filter((p) => !p.installed).map((p) => p.name)
+  const names = (market.plugins ?? []).filter((p) => !p.installed && !p.unsupported_reason).map((p) => p.name)
   if (!names.length) return
   installingAllMarket.value = market.id
   try {
@@ -189,7 +202,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
             v-model="addUrl"
             :placeholder="t('plugins.urlPlaceholder')"
             size="xs"
-            class="w-64"
+            class="w-80"
             @keydown.escape="collapseAdd"
           />
           <UButton
@@ -225,6 +238,37 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
       {{ t('plugins.subtitle') }}
     </p>
 
+    <!-- What the connect box accepts, shown while it's open -->
+    <div
+      v-if="addExpanded"
+      class="mb-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400"
+    >
+      <p class="mb-1 font-medium text-neutral-700 dark:text-neutral-300">
+        {{ t('plugins.accepts.title') }}
+      </p>
+      <ul class="space-y-0.5">
+        <li
+          v-for="example in sourceExamples"
+          :key="example.value"
+        >
+          <button
+            type="button"
+            class="font-mono text-neutral-800 dark:text-neutral-200 hover:underline cursor-pointer"
+            @click="addUrl = example.value"
+          >
+            {{ example.value }}
+          </button>
+          <span class="text-neutral-500"> — {{ example.label }}</span>
+        </li>
+      </ul>
+      <p
+        v-if="connectError"
+        class="mt-2 text-red-600 dark:text-red-400"
+      >
+        {{ connectError }}
+      </p>
+    </div>
+
     <!-- Loading -->
     <div
       v-if="isLoading && !overview"
@@ -259,7 +303,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
           <div class="min-w-0 text-left">
             <div class="flex items-center gap-2">
               <UIcon
-                name="i-lucide-package"
+                :name="market.kind === 'skills' ? 'i-lucide-sparkles' : 'i-lucide-package'"
                 class="size-3.5 text-neutral-400 shrink-0"
               />
               <h5 class="text-sm font-medium truncate">
@@ -268,7 +312,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
               <span
                 v-if="market.plugins?.length"
                 class="text-[10px] text-neutral-500"
-              >{{ market.plugins.length }} {{ market.plugins.length === 1 ? 'plugin' : 'plugins' }}</span>
+              >{{ t(market.kind === 'skills' ? 'plugins.skillCount' : 'plugins.pluginCount', market.plugins.length) }}</span>
               <span
                 v-if="installedCount(market)"
                 class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200 font-medium"
@@ -318,7 +362,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
 
         <div v-if="expandedId === market.id">
           <div
-            v-if="market.plugins === null"
+            v-if="!market.plugins"
             class="px-4 py-3 text-xs text-red-600 dark:text-red-400 border-t border-neutral-200 dark:border-neutral-700"
           >
             {{ market.last_sync_error ?? t('plugins.fetchFailed') }}
@@ -379,6 +423,17 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
                       @click="uninstallOne(market, plugin.name)"
                     />
                   </template>
+                  <UTooltip
+                    v-else-if="plugin.unsupported_reason"
+                    :text="plugin.unsupported_reason"
+                  >
+                    <UBadge
+                      :label="t('plugins.unsupported')"
+                      color="warning"
+                      variant="subtle"
+                      size="sm"
+                    />
+                  </UTooltip>
                   <UButton
                     v-else
                     :label="t('plugins.install')"

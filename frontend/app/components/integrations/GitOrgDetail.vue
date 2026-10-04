@@ -721,7 +721,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
 
     <!-- Plugins (third-party Claude Code plugins installed for this org) -->
     <PluginsSection
-      data-guide="gitTools"
+      data-guide="gitSkills"
       :org-id="org.id"
     />
 

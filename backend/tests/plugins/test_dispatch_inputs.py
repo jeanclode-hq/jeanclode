@@ -584,7 +584,7 @@ async def test_plugin_marketplace_gets_the_org_token_scoped_to_its_own_path() ->
     org's namespace — so none of the per-repo prefixes cover it. Without its
     own entry the CLI clones it with whatever ``extra_hosts`` lets through,
     which for an ``internal`` GitLab repo is nothing."""
-    org = _make_org(external_org_id="1114")
+    org = _make_org(external_org_id="1114", base_url="https://gitlab.example.org")
     app = _make_app()
 
     with (
@@ -607,6 +607,32 @@ async def test_plugin_marketplace_gets_the_org_token_scoped_to_its_own_path() ->
         inputs.secrets[u.secret_key] for u in inputs.upstreams if u.header == "Authorization"
     )
     assert basic == "Basic " + base64.b64encode(b"oauth2:grp-token").decode()
+
+
+@pytest.mark.asyncio
+async def test_plugin_repo_on_another_host_never_gets_the_org_token() -> None:
+    """A marketplace ``url`` source can name any host; the org token stays on its own."""
+    org = _make_org(external_org_id="1114", base_url="https://gitlab.example.org")
+    app = _make_app()
+
+    with (
+        patch("api.plugins.container.dispatch_inputs.get_current_app", return_value=app),
+        patch(_ORG_BY_ID, return_value=org),
+        patch(_DISPATCH_GIT_TOKEN, return_value="grp-token"),
+    ):
+        inputs = DispatchInputs()
+        await add_plugin_marketplace_credentials(
+            inputs,
+            git_org_id=org.id,
+            git_urls=[
+                "https://evil.example.net/examplecorp/skills.git",
+                "https://gitlab.example.org/other-team/framework.git",
+            ],
+        )
+
+    assert {(u.host, u.path_prefix) for u in inputs.upstreams} == {
+        ("gitlab.example.org", "/other-team/framework/")
+    }
 
 
 @pytest.mark.asyncio

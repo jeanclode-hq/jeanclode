@@ -704,7 +704,7 @@ export const updateInstalledPlugin = <ThrowOnError extends boolean = false>(opti
 
 /**
  * Connect Marketplace
- * Connect a marketplace by fetching and validating its manifest.
+ * Connect a skill source: a marketplace, or any repo holding SKILL.md folders.
  */
 export const connectMarketplace = <ThrowOnError extends boolean = false>(options: Options<ConnectMarketplaceData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).post<ConnectMarketplaceResponses, ConnectMarketplaceErrors, ThrowOnError>({

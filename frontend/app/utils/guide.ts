@@ -43,6 +43,7 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
       { id: 'gitNotify' },
       { id: 'gitSubgroup' },
       { id: 'gitWebhooks' },
+      { id: 'gitSkills' },
       { id: 'gitTools' },
     ],
   },

@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
 from api.context import get_current_app
+from api.routers.marketplaces.schemas import RepoAuth
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -177,8 +178,8 @@ def resolve_git_org_id(issues: list[Issue]) -> UUID | None:
         return git_org.id if git_org else None
 
 
-async def _get_dispatch_git_token(org_id: UUID) -> str | None:
-    """Get the git org's auth token for marketplace manifest fetches at dispatch."""
+async def _get_dispatch_repo_auth(org_id: UUID) -> RepoAuth | None:
+    """The git org's token for reading skill sources at dispatch, tagged with its host."""
     from api.database.organization import db_get_org_by_id
 
     app = get_current_app()
@@ -193,22 +194,31 @@ async def _get_dispatch_git_token(org_id: UUID) -> str | None:
         provider = org.provider
         installation_id = org.installation_id
         encrypted_token = org.auth_token_encrypted
+        base_url = org.base_url
 
+    if provider not in ("github", "gitlab"):
+        return None
+
+    token: str | None = None
     if provider == "github" and installation_id and app.github:
         try:
-            return await app.github.get_installation_access_token(installation_id)
+            token = await app.github.get_installation_access_token(installation_id)
         except Exception:
             logger.warning("Failed to get GitHub token for dispatch plugin resolve")
-            return None
-
-    if provider == "gitlab" and encrypted_token and db_plugin:
+    elif provider == "gitlab" and encrypted_token:
         try:
-            return db_plugin.decrypt(encrypted_token)
+            token = db_plugin.decrypt(encrypted_token)
         except Exception:
             logger.warning("Failed to decrypt GitLab token for dispatch plugin resolve")
-            return None
 
-    return None
+    repo_provider: Literal["github", "gitlab"] = "github" if provider == "github" else "gitlab"
+    return RepoAuth(provider=repo_provider, token=token, base_url=base_url)
+
+
+async def _get_dispatch_git_token(org_id: UUID) -> str | None:
+    """The git org's token, for credentialing plugin clones in the container."""
+    auth = await _get_dispatch_repo_auth(org_id)
+    return auth.token if auth else None
 
 
 async def resolve_third_party_plugins_env(issues: list[Issue]) -> ThirdPartyPluginsResolved:
@@ -245,13 +255,13 @@ async def resolve_third_party_plugins_env_for_org(
     if not db_plugin:
         return ThirdPartyPluginsResolved()
 
-    auth_token = await _get_dispatch_git_token(git_org_id)
+    auth = await _get_dispatch_repo_auth(git_org_id)
 
     try:
         rows = await db_plugin.run_in_session(
             lambda db: read_plugin_install_rows(db, git_org_id, workflow=workflow)
         )
-        specs = await resolve_plugin_specs(rows, auth_token=auth_token)
+        specs = await resolve_plugin_specs(rows, auth=auth)
     except Exception:
         logger.exception("Failed to resolve third-party plugins for org %s", git_org_id)
         return ThirdPartyPluginsResolved()

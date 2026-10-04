@@ -1,0 +1,310 @@
+{
+  "_doc": "Shared by backend/tests/routers/test_thirdparty_plugin_contract.py and cli/tests/test_thirdparty_plugin_contract.py. The backend reads `source` from `repos` and must emit exactly `spec`; the CLI clones `spec` from the same `repos` and must load exactly `skills`. A file value of {\"skill\": name} is a SKILL.md with that frontmatter name. A repo key is its URL, with @ref when the files live at that ref rather than the default branch.",
+  "cases": [
+    {
+      "id": "shared-source-skills-allowlist",
+      "source": "https://gitlab.example.org/acme/team-skills",
+      "install": "framework",
+      "repos": {
+        "https://gitlab.example.org/acme/team-skills": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme-skills",
+            "plugins": [
+              {"name": "framework", "source": "./", "strict": false, "skills": ["./skills/framework"]},
+              {"name": "infrastructure", "source": "./", "strict": false, "skills": ["./skills/helm"]}
+            ]
+          },
+          "skills/framework/SKILL.md": {"skill": "framework"},
+          "skills/helm/SKILL.md": {"skill": "helm"}
+        }
+      },
+      "spec": {
+        "git_url": "https://gitlab.example.org/acme/team-skills",
+        "display_name": "framework",
+        "skills": ["./skills/framework"]
+      },
+      "skills": ["framework"]
+    },
+    {
+      "id": "url-source-pinned-to-a-tag",
+      "source": "https://gitlab.example.org/acme/team-skills",
+      "install": "framework",
+      "repos": {
+        "https://gitlab.example.org/acme/team-skills": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme-skills",
+            "plugins": [
+              {
+                "name": "framework",
+                "source": {"source": "url", "url": "https://gitlab.example.org/platform-team/framework.git", "ref": "6.47.1"},
+                "strict": false,
+                "skills": ["./.claude/skills/framework"]
+              }
+            ]
+          }
+        },
+        "https://gitlab.example.org/platform-team/framework@6.47.1": {
+          ".claude/skills/framework/SKILL.md": {"skill": "framework"},
+          "framework/__init__.py": ""
+        }
+      },
+      "spec": {
+        "git_url": "https://gitlab.example.org/platform-team/framework.git",
+        "ref": "6.47.1",
+        "display_name": "framework",
+        "skills": ["./.claude/skills/framework"]
+      },
+      "skills": ["framework"]
+    },
+    {
+      "id": "github-source-with-plugin-json",
+      "source": "https://github.com/acme/marketplace",
+      "install": "fmt",
+      "repos": {
+        "https://github.com/acme/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "plugins": [{"name": "fmt", "source": {"source": "github", "repo": "acme/fmt", "ref": "v2"}}]
+          }
+        },
+        "https://github.com/acme/fmt@v2": {
+          ".claude-plugin/plugin.json": {"name": "fmt"},
+          "skills/fmt/SKILL.md": {"skill": "fmt"},
+          "skills/fmt-strict/SKILL.md": {"skill": "fmt-strict"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/fmt", "ref": "v2", "display_name": "fmt"},
+      "skills": ["fmt", "fmt-strict"]
+    },
+    {
+      "id": "legacy-type-github-source",
+      "source": "https://github.com/acme/marketplace",
+      "install": "fmt",
+      "repos": {
+        "https://github.com/acme/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "plugins": [{"name": "fmt", "source": {"type": "github", "repo": "acme/fmt", "path": "./plugin"}}]
+          }
+        },
+        "https://github.com/acme/fmt": {
+          "plugin/.claude-plugin/plugin.json": {"name": "fmt"},
+          "plugin/skills/fmt/SKILL.md": {"skill": "fmt"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/fmt", "plugin_subpath": "plugin", "display_name": "fmt"},
+      "skills": ["fmt"]
+    },
+    {
+      "id": "git-subdir-in-a-monorepo",
+      "source": "https://gitlab.example.org/platform/marketplace",
+      "install": "lint",
+      "repos": {
+        "https://gitlab.example.org/platform/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "platform",
+            "plugins": [
+              {"name": "lint", "source": {"source": "git-subdir", "url": "https://gitlab.example.org/platform/mono.git", "path": "tools/lint"}}
+            ]
+          }
+        },
+        "https://gitlab.example.org/platform/mono": {
+          "tools/lint/.claude-plugin/plugin.json": {"name": "lint"},
+          "tools/lint/skills/lint/SKILL.md": {"skill": "lint"},
+          "tools/other/skills/other/SKILL.md": {"skill": "other"}
+        }
+      },
+      "spec": {
+        "git_url": "https://gitlab.example.org/platform/mono.git",
+        "plugin_subpath": "tools/lint",
+        "display_name": "lint"
+      },
+      "skills": ["lint"]
+    },
+    {
+      "id": "git-subdir-with-skills-relative-to-the-plugin",
+      "source": "https://github.com/acme/marketplace",
+      "install": "docs",
+      "repos": {
+        "https://github.com/acme/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "plugins": [
+              {
+                "name": "docs",
+                "source": {"source": "git-subdir", "url": "acme/mono", "path": "packages/docs"},
+                "skills": ["./skills/write-docs"]
+              }
+            ]
+          }
+        },
+        "https://github.com/acme/mono": {
+          "packages/docs/skills/write-docs/SKILL.md": {"skill": "write-docs"},
+          "packages/docs/skills/draft/SKILL.md": {"skill": "draft"},
+          "skills/write-docs/SKILL.md": {"skill": "wrong-one"}
+        }
+      },
+      "spec": {
+        "git_url": "https://github.com/acme/mono",
+        "plugin_subpath": "packages/docs",
+        "display_name": "docs",
+        "skills": ["./skills/write-docs"]
+      },
+      "skills": ["write-docs"]
+    },
+    {
+      "id": "relative-plugin-folder",
+      "source": "https://github.com/acme/marketplace/tree/stable",
+      "install": "review",
+      "repos": {
+        "https://github.com/acme/marketplace@stable": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "plugins": [{"name": "review", "source": "./plugins/review"}]
+          },
+          "plugins/review/.claude-plugin/plugin.json": {"name": "review"},
+          "plugins/review/skills/review/SKILL.md": {"skill": "review"}
+        }
+      },
+      "spec": {
+        "git_url": "https://github.com/acme/marketplace",
+        "ref": "stable",
+        "plugin_subpath": "plugins/review",
+        "display_name": "review"
+      },
+      "skills": ["review"]
+    },
+    {
+      "id": "bare-name-under-plugin-root",
+      "source": "https://github.com/acme/marketplace",
+      "install": "review",
+      "repos": {
+        "https://github.com/acme/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "metadata": {"pluginRoot": "./plugins"},
+            "plugins": [{"name": "review", "source": "review"}]
+          },
+          "plugins/review/.claude-plugin/plugin.json": {"name": "review"},
+          "plugins/review/skills/review/SKILL.md": {"skill": "review"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/marketplace", "plugin_subpath": "plugins/review", "display_name": "review"},
+      "skills": ["review"]
+    },
+    {
+      "id": "plugin-json-lists-extra-skill-folders",
+      "source": "https://github.com/acme/marketplace",
+      "install": "kit",
+      "repos": {
+        "https://github.com/acme/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "plugins": [{"name": "kit", "source": {"source": "github", "repo": "acme/kit"}}]
+          }
+        },
+        "https://github.com/acme/kit": {
+          ".claude-plugin/plugin.json": {"name": "kit", "skills": ["./extra"]},
+          "skills/base/SKILL.md": {"skill": "base"},
+          "extra/one/SKILL.md": {"skill": "one"},
+          "extra/two/SKILL.md": {"skill": "two"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/kit", "display_name": "kit"},
+      "skills": ["base", "one", "two"]
+    },
+    {
+      "id": "plugin-repo-without-plugin-json",
+      "source": "https://github.com/acme/marketplace",
+      "install": "bare",
+      "repos": {
+        "https://github.com/acme/marketplace": {
+          ".claude-plugin/marketplace.json": {
+            "name": "acme",
+            "plugins": [{"name": "bare", "source": {"source": "github", "repo": "acme/bare"}, "strict": false}]
+          }
+        },
+        "https://github.com/acme/bare": {
+          "skills/one/SKILL.md": {"skill": "one"},
+          "skills/two/SKILL.md": {"skill": "two"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/bare", "display_name": "bare"},
+      "skills": ["one", "two"]
+    },
+    {
+      "id": "npx-style-skills-repo-one-skill-picked",
+      "source": "anthropics/skills",
+      "install": "pdf",
+      "repos": {
+        "https://github.com/anthropics/skills": {
+          "README.md": "",
+          "skills/pdf/SKILL.md": {"skill": "pdf"},
+          "skills/pdf/scripts/extract.py": "",
+          "skills/xlsx/SKILL.md": {"skill": "xlsx"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/anthropics/skills", "plugin_subpath": "skills/pdf", "display_name": "pdf", "skills": ["."]},
+      "skills": ["pdf"]
+    },
+    {
+      "id": "claude-skills-folder-in-a-gitlab-project",
+      "source": "https://gitlab.example.org/platform-team/framework/-/tree/6.47.1/.claude/skills",
+      "install": "framework",
+      "repos": {
+        "https://gitlab.example.org/platform-team/framework@6.47.1": {
+          ".claude/skills/framework/SKILL.md": {"skill": "framework"},
+          "skills/unrelated/SKILL.md": {"skill": "unrelated"}
+        }
+      },
+      "spec": {
+        "git_url": "https://gitlab.example.org/platform-team/framework",
+        "ref": "6.47.1",
+        "plugin_subpath": ".claude/skills/framework",
+        "display_name": "framework",
+        "skills": ["."]
+      },
+      "skills": ["framework"]
+    },
+    {
+      "id": "single-skill-repo",
+      "source": "git@gitlab.example.org:team/commit-style.git",
+      "install": "commit-style",
+      "repos": {
+        "https://gitlab.example.org/team/commit-style": {
+          "SKILL.md": {"skill": "conventional-commits"},
+          "examples.md": ""
+        }
+      },
+      "spec": {"git_url": "https://gitlab.example.org/team/commit-style", "display_name": "commit-style", "skills": ["."]},
+      "skills": ["conventional-commits"]
+    },
+    {
+      "id": "two-skills-sharing-a-folder-name",
+      "source": "https://github.com/acme/skills",
+      "install": "legacy/review",
+      "repos": {
+        "https://github.com/acme/skills": {
+          "skills/review/SKILL.md": {"skill": "review"},
+          "legacy/review/SKILL.md": {"skill": "review-legacy"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/skills", "plugin_subpath": "legacy/review", "display_name": "legacy/review", "skills": ["."]},
+      "skills": ["review-legacy"]
+    },
+    {
+      "id": "skills-repo-with-a-root-plugin-json-installs-only-the-picked-skill",
+      "source": "https://github.com/acme/toolkit",
+      "install": "lint",
+      "repos": {
+        "https://github.com/acme/toolkit": {
+          ".claude-plugin/plugin.json": {"name": "toolkit"},
+          "skills/lint/SKILL.md": {"skill": "lint"},
+          "skills/deploy/SKILL.md": {"skill": "deploy"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/toolkit", "plugin_subpath": "skills/lint", "display_name": "lint", "skills": ["."]},
+      "skills": ["lint"]
+    }
+  ]
+}

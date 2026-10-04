@@ -248,7 +248,7 @@ export type ConnectMarketplaceRequest = {
     org_id: string;
     /**
      * Git Url
-     * Git repo URL hosting marketplace.json
+     * Where the skills live: a GitHub `owner/repo`, or a GitHub/GitLab URL (clone URL, or web URL down to a branch, folder or SKILL.md). The repo is read as a marketplace when it has .claude-plugin/marketplace.json, otherwise every SKILL.md folder in it becomes an installable skill.
      */
     git_url: string;
 };
@@ -1319,6 +1319,11 @@ export type MarketplaceEntry = {
      */
     git_url: string;
     /**
+     * Kind
+     * 'skills' for a plain repo of SKILL.md folders; null when the source is unreachable
+     */
+    kind?: ('marketplace' | 'skills') | null;
+    /**
      * Last Sync Status
      */
     last_sync_status: string;
@@ -1357,6 +1362,11 @@ export type MarketplacePluginEntry = {
      * Installed
      */
     installed?: boolean;
+    /**
+     * Unsupported Reason
+     * Why this plugin can't be installed, when its source type isn't supported
+     */
+    unsupported_reason?: string | null;
 };
 
 /**

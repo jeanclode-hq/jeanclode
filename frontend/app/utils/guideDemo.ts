@@ -296,7 +296,33 @@ const sentryProjects: SentryProjectResponse[] = [
   { id: `${MARKER}-project-3`, external_id: '3', name: 'sync-worker', mapped_repo_id: repos[2]!.id, mapping_method: 'fuzzy' },
 ]
 
-const plugins: PluginsOverview = { marketplaces: [], installed: [] }
+const skillsSourceId = `${MARKER}-skills-source`
+const plugins: PluginsOverview = {
+  marketplaces: [
+    {
+      id: skillsSourceId,
+      org_id: gitOrgId,
+      name: 'acme/engineering-skills',
+      git_url: 'https://gitlab.example.com/acme/engineering-skills',
+      kind: 'skills',
+      last_sync_status: 'ok',
+      plugins: [
+        { name: 'deploy', description: 'How we ship a service: release tags, Helm values and the rollout checklist.', installed: true },
+        { name: 'backend-conventions', description: 'Our FastAPI layout, error handling and migration rules.', installed: true },
+        { name: 'frontend-conventions', description: 'Nuxt UI components, i18n and form validation the way we do it.', installed: false },
+      ],
+    },
+  ],
+  installed: ['deploy', 'backend-conventions'].map((name) => ({
+    id: `${MARKER}-skill-${name}`,
+    org_id: gitOrgId,
+    marketplace_id: skillsSourceId,
+    plugin_name: name,
+    display_name: name,
+    project_overrides: {},
+    credentials: [],
+  })),
+}
 
 const mcpServers: McpServerResponse[] = [
   { id: `${MARKER}-mcp-1`, org_id: gitOrgId, name: 'linear', host: 'mcp.linear.app', credential_count: 1 },
