@@ -38,9 +38,9 @@ def clone_thirdparty_plugins_from_env(
     """Clone every plugin spec in ``JEANCLODE_THIRDPARTY_PLUGINS``.
 
     Returns the resolved local plugin root for each spec, ready to hand to
-    ``src.skills.discovery.load_skills``. Each spec is cloned into its own
-    subdirectory of ``workspace`` — never shared — so two installs pinned
-    to different refs of the same marketplace repo can't collide.
+    ``src.skills.discovery.load_skills``. Specs naming the same repo at the
+    same ref and sha share one clone — installing ten skills from one repo
+    clones it once — while a different ref or sha gets its own.
 
     A resolved root is the plugin folder itself when it has a ``plugin.json``
     and nothing else to add, otherwise a shim (see
@@ -70,13 +70,16 @@ def clone_thirdparty_plugins_from_env(
         return []
 
     roots: list[Path] = []
+    clones: dict[tuple[str, str | None, str | None], Path | Exception] = {}
     for idx, spec in enumerate(specs):
         if not isinstance(spec, dict) or not spec.get("git_url"):
             logger.warning("ignoring malformed third-party plugin spec #%d: %r", idx, spec)
             continue
         display_name = spec.get("display_name") or spec["git_url"]
         try:
-            root = _materialize_spec(workspace / ".thirdparty-plugins", idx, spec, display_name)
+            root = _materialize_spec(
+                workspace / ".thirdparty-plugins", idx, spec, display_name, clones
+            )
         except Exception:
             logger.warning(
                 "failed to load third-party plugin %s (%s)",
@@ -85,23 +88,23 @@ def clone_thirdparty_plugins_from_env(
                 exc_info=True,
             )
             continue
-        if root is not None:
+        # Two plugins of one marketplace can resolve to the same folder.
+        if root is not None and root not in roots:
             roots.append(root)
 
     return roots
 
 
-def _materialize_spec(base: Path, idx: int, spec: dict, display_name: str) -> Path | None:
+def _materialize_spec(
+    base: Path,
+    idx: int,
+    spec: dict,
+    display_name: str,
+    clones: dict[tuple[str, str | None, str | None], Path | Exception],
+) -> Path | None:
     """Clone one spec and return a plugin folder ``load_skills`` can read, or ``None``."""
-    ref = spec.get("ref")
-    sha = spec.get("sha")
+    clone_root = _shared_clone(base / str(idx), spec, clones)
     subpath = spec.get("plugin_subpath")
-
-    # A sha outlives the branch or tag it was cut from, so clone the default
-    # branch and fetch the commit rather than trust ``ref``.
-    clone_root = clone_repo(spec["git_url"], base / str(idx), ref=None if sha else ref)
-    if sha:
-        _checkout_sha(clone_root, sha)
 
     plugin_root = (clone_root / subpath) if subpath else clone_root
     if not _is_within(plugin_root, clone_root) or not plugin_root.is_dir():
@@ -135,6 +138,35 @@ def _materialize_spec(base: Path, idx: int, spec: dict, display_name: str) -> Pa
         )
         return None
     return _materialize_skills_shim(base / f"{idx}-shim", skill_dirs, clone_root, display_name)
+
+
+def _shared_clone(
+    target: Path,
+    spec: dict,
+    clones: dict[tuple[str, str | None, str | None], Path | Exception],
+) -> Path:
+    """The clone for ``spec``'s repo, ref and sha, made on first use.
+
+    A failure is remembered too, so a repo that can't be cloned isn't retried
+    (with backoff) once per skill installed from it.
+    """
+    sha = spec.get("sha")
+    ref = None if sha else spec.get("ref")
+    key = (spec["git_url"].removesuffix(".git").rstrip("/"), ref, sha)
+    if key not in clones:
+        try:
+            # A sha outlives the branch or tag it was cut from, so clone the
+            # default branch and fetch the commit rather than trust ``ref``.
+            clone_root = clone_repo(spec["git_url"], target, ref=ref)
+            if sha:
+                _checkout_sha(clone_root, sha)
+            clones[key] = clone_root
+        except Exception as e:
+            clones[key] = e
+    cached = clones[key]
+    if isinstance(cached, Exception):
+        raise cached
+    return cached
 
 
 def _read_plugin_json(plugin_root: Path) -> dict | None:

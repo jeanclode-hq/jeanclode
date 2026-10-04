@@ -533,3 +533,75 @@ def test_shim_failure_is_contained(mock_clone, tmp_path: Path) -> None:
     env = _env([{"git_url": "https://example.com/o/p", "skills": ["./skills/a"]}])
     with patch("pathlib.Path.symlink_to", side_effect=OSError("read-only fs")):
         assert clone_thirdparty_plugins_from_env(tmp_path, env=env) == []
+
+
+@patch("src.skills.thirdparty.clone_repo")
+def test_skills_from_one_repo_share_a_single_clone(mock_clone, tmp_path: Path) -> None:
+    clone_dir = tmp_path / "clone"
+    for name in ("vue", "pinia", "vite"):
+        _make_skill_dir(clone_dir, f"skills/{name}")
+    mock_clone.return_value = clone_dir
+
+    env = _env(
+        [
+            {
+                "git_url": "https://github.com/antfu/skills",
+                "display_name": n,
+                "skills": [f"./skills/{n}"],
+            }
+            for n in ("vue", "pinia")
+        ]
+        + [{"git_url": "https://github.com/antfu/skills.git", "skills": ["./skills/vite"]}]
+    )
+    roots = clone_thirdparty_plugins_from_env(tmp_path, env=env)
+
+    mock_clone.assert_called_once()
+    assert _skill_names(roots) == ["pinia", "vite", "vue"]
+
+
+@patch("src.skills.thirdparty.clone_repo")
+def test_different_ref_or_sha_gets_its_own_clone(mock_clone, tmp_path: Path) -> None:
+    mock_clone.side_effect = lambda _url, workspace, ref=None: (
+        _make_skill_dir(workspace / "repo", "skills/a").parent.parent
+    )
+    url = "https://example.com/o/p"
+
+    with patch("src.skills.thirdparty.subprocess.run"):
+        roots = clone_thirdparty_plugins_from_env(
+            tmp_path,
+            env=_env(
+                [
+                    {"git_url": url, "skills": ["./skills/a"]},
+                    {"git_url": url, "ref": "v1", "skills": ["./skills/a"]},
+                    {"git_url": url, "sha": "a" * 40, "skills": ["./skills/a"]},
+                    {"git_url": url, "sha": "b" * 40, "skills": ["./skills/a"]},
+                    {"git_url": url, "ref": "v1", "skills": ["./skills/a"]},
+                ]
+            ),
+        )
+
+    assert mock_clone.call_count == 4
+    assert len(roots) == 5
+
+
+@patch("src.skills.thirdparty.clone_repo")
+def test_a_failed_clone_is_not_retried_for_every_skill(mock_clone, tmp_path: Path) -> None:
+    mock_clone.side_effect = RuntimeError("clone failed")
+    env = _env([{"git_url": "https://example.com/o/p", "skills": [f"./skills/{n}"]} for n in "abc"])
+
+    assert clone_thirdparty_plugins_from_env(tmp_path, env=env) == []
+    mock_clone.assert_called_once()
+
+
+@patch("src.skills.thirdparty.clone_repo")
+def test_two_plugins_resolving_to_one_folder_load_it_once(mock_clone, tmp_path: Path) -> None:
+    clone_dir = tmp_path / "clone"
+    _make_plugin_dir(clone_dir)
+    _make_skill_dir(clone_dir, "skills/a")
+    mock_clone.return_value = clone_dir
+
+    env = _env([{"git_url": "https://example.com/o/p"}, {"git_url": "https://example.com/o/p"}])
+    roots = clone_thirdparty_plugins_from_env(tmp_path, env=env)
+
+    assert roots == [clone_dir]
+    assert len(load_skills(roots)) == 1
