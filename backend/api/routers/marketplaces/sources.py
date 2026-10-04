@@ -139,6 +139,10 @@ def _gitlab_locator(host: str, path: str, raw: str) -> RepoLocator:
         if len(rest) < 2 or rest[0] not in ("tree", "blob"):
             raise InvalidSourceError(f"{raw!r} is not a repository, tree or blob URL")
         ref, subpath = _ref_and_subpath(rest[0], rest[1], rest[2:], raw)
+    elif len(parts) >= 4 and parts[-2] in ("tree", "blob"):
+        # The pre-``/-/`` link form (``group/project/tree/<ref>``), which
+        # sources connected before this parser may still be stored as.
+        project, ref = parts[:-2], (None if parts[-1] == "HEAD" else parts[-1])
     else:
         project = parts
     if len(project) < 2:

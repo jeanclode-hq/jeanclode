@@ -79,6 +79,10 @@ def _gl(path, ref=None, subpath=None, host="gitlab.example.org"):
         ("git@gitlab.example.org:g/sub/p.git", _gl("g/sub/p")),
         ("ssh://git@gitlab.example.org/g/p.git", _gl("g/p")),
         ("https://gitlab.com/g/p", _gl("g/p", host="gitlab.com")),
+        # Legacy links without ``/-/``, as sources connected before may be stored
+        ("https://gitlab.example.org/g/p/tree/main", _gl("g/p", "main")),
+        ("https://gitlab.example.org/g/sub/p/blob/v1", _gl("g/sub/p", "v1")),
+        ("https://gitlab.example.org/g/p/tree/HEAD", _gl("g/p")),
     ],
 )
 def test_parse_repo_locator(raw, expected):
