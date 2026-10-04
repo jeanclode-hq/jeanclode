@@ -491,7 +491,10 @@ def test_loader_gets_the_org_token_tagged_with_its_host(auth_client, app, mock_a
     with patch(_LOAD, new=load):
         r = auth_client.post(
             "/marketplaces",
-            json={"org_id": org_id, "git_url": "https://gitlab.example.org/platform-team/framework"},
+            json={
+                "org_id": org_id,
+                "git_url": "https://gitlab.example.org/platform-team/framework",
+            },
         )
 
     assert r.status_code == 201, r.text

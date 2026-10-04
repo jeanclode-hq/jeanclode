@@ -244,7 +244,7 @@
           "skills/xlsx/SKILL.md": {"skill": "xlsx"}
         }
       },
-      "spec": {"git_url": "https://github.com/anthropics/skills", "display_name": "pdf", "skills": ["./skills/pdf"]},
+      "spec": {"git_url": "https://github.com/anthropics/skills", "plugin_subpath": "skills/pdf", "display_name": "pdf", "skills": ["."]},
       "skills": ["pdf"]
     },
     {
@@ -260,8 +260,9 @@
       "spec": {
         "git_url": "https://gitlab.example.org/platform-team/framework",
         "ref": "6.47.1",
+        "plugin_subpath": ".claude/skills/framework",
         "display_name": "framework",
-        "skills": ["./.claude/skills/framework"]
+        "skills": ["."]
       },
       "skills": ["framework"]
     },
@@ -288,8 +289,22 @@
           "legacy/review/SKILL.md": {"skill": "review-legacy"}
         }
       },
-      "spec": {"git_url": "https://github.com/acme/skills", "display_name": "legacy/review", "skills": ["./legacy/review"]},
+      "spec": {"git_url": "https://github.com/acme/skills", "plugin_subpath": "legacy/review", "display_name": "legacy/review", "skills": ["."]},
       "skills": ["review-legacy"]
+    },
+    {
+      "id": "skills-repo-with-a-root-plugin-json-installs-only-the-picked-skill",
+      "source": "https://github.com/acme/toolkit",
+      "install": "lint",
+      "repos": {
+        "https://github.com/acme/toolkit": {
+          ".claude-plugin/plugin.json": {"name": "toolkit"},
+          "skills/lint/SKILL.md": {"skill": "lint"},
+          "skills/deploy/SKILL.md": {"skill": "deploy"}
+        }
+      },
+      "spec": {"git_url": "https://github.com/acme/toolkit", "plugin_subpath": "skills/lint", "display_name": "lint", "skills": ["."]},
+      "skills": ["lint"]
     }
   ]
 }

@@ -190,8 +190,8 @@ def _gitlab_instance(app: Application, loc: RepoLocator, auth: RepoAuth | None) 
     arbitrary server.
     """
     candidates: list[str] = []
-    if auth and auth.provider == "gitlab" and auth.base_url:
-        candidates.append(auth.base_url)
+    if auth and auth.provider == "gitlab":
+        candidates.append(_org_gitlab_base(auth))
     if app.gitlab:
         candidates.append(app.gitlab.get_effective_instance_url())
     for base in candidates:
@@ -210,8 +210,14 @@ def _token_for(loc: RepoLocator, auth: RepoAuth | None, instance: str | None) ->
         return None
     if loc.provider == "github":
         return auth.token
-    org_host = urlparse(auth.base_url or "").netloc.lower()
-    return auth.token if instance and org_host and org_host == loc.host else None
+    base = _org_gitlab_base(auth)
+    org_host = urlparse(base if "://" in base else f"https://{base}").netloc.lower()
+    return auth.token if instance and org_host == loc.host else None
+
+
+def _org_gitlab_base(auth: RepoAuth) -> str:
+    """The org's GitLab instance; orgs stored without one are on gitlab.com."""
+    return auth.base_url or "https://gitlab.com"
 
 
 async def fetch_repo_file(
@@ -389,11 +395,13 @@ async def discover_skills_manifest(
         name=title,
         kind="skills",
         plugins=[
+            # Rooted at the skill folder itself, so a plugin.json at the repo
+            # root can't pull its sibling skills into this one install.
             MarketplacePlugin(
                 name=names[d],
                 description=descriptions.get(d),
-                source="./",
-                skills=["." if d == "." else f"./{d}"],
+                source="./" if d == "." else f"./{d}",
+                skills=["."],
             )
             for d in skill_dirs
         ],

@@ -319,8 +319,8 @@ async def test_repo_without_marketplace_becomes_one_plugin_per_skill(repos):
     assert manifest.kind == "skills"
     assert manifest.name == "anthropics/skills"
     assert [(p.name, p.source, p.skills, p.description) for p in manifest.plugins] == [
-        ("pdf", "./", ["./skills/pdf"], None),
-        ("xlsx", "./", ["./skills/xlsx"], None),
+        ("pdf", "./skills/pdf", ["."], None),
+        ("xlsx", "./skills/xlsx", ["."], None),
     ]
 
 
@@ -332,7 +332,9 @@ async def test_single_skill_repo(repos):
         "https://gitlab.example.org/platform-team/framework-skill", auth=GL_AUTH
     )
 
-    assert [(p.name, p.skills) for p in manifest.plugins] == [("framework-skill", ["."])]
+    assert [(p.name, p.source, p.skills) for p in manifest.plugins] == [
+        ("framework-skill", "./", ["."])
+    ]
 
 
 @pytest.mark.asyncio
@@ -354,8 +356,8 @@ async def test_folder_url_skips_the_marketplace_and_scans_that_folder(repos):
     )
 
     assert manifest.name == "platform-team/framework/.claude/skills"
-    assert [(p.name, p.skills) for p in manifest.plugins] == [
-        ("framework", ["./.claude/skills/framework"])
+    assert [(p.name, p.source, p.skills) for p in manifest.plugins] == [
+        ("framework", "./.claude/skills/framework", ["."])
     ]
     repos.gitlab.fetch_repo_file_text.assert_not_awaited()
     tree = repos.gitlab.list_repo_blob_paths.await_args.kwargs
@@ -569,6 +571,18 @@ async def test_org_gitlab_host_is_allowed_even_when_not_the_configured_instance(
     assert repos.gitlab.list_repo_blob_paths.await_args.kwargs["provider_url"] == (
         "https://gitlab.example.org"
     )
+
+
+@pytest.mark.asyncio
+async def test_gitlab_org_without_base_url_is_on_gitlab_com(repos):
+    """Orgs stored without a base_url are gitlab.com ones, so their token reads gitlab.com."""
+    no_base = RepoAuth(provider="gitlab", token="glpat", base_url=None)
+    repos.add("gitlab", "g/p", {"skills/a/SKILL.md": _skill("a")})
+
+    await load_source_manifest("https://gitlab.com/g/p", auth=no_base)
+
+    call = repos.gitlab.list_repo_blob_paths.await_args.kwargs
+    assert (call["auth_token"], call["provider_url"]) == ("glpat", "https://gitlab.com")
 
 
 @pytest.mark.asyncio
