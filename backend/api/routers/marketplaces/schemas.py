@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -44,6 +45,11 @@ class MarketplaceManifest(BaseModel):
     description: str | None = Field(default=None)
     metadata: dict | None = Field(default=None)
     plugins: list[MarketplacePlugin] = Field(default_factory=list)
+    kind: Literal["marketplace", "skills"] = Field(
+        default="marketplace",
+        exclude=True,
+        description="'skills' when built from the repo's SKILL.md files rather than a marketplace.json",
+    )
 
     @property
     def plugin_root(self) -> str | None:
@@ -51,19 +57,39 @@ class MarketplaceManifest(BaseModel):
         return root if isinstance(root, str) else None
 
 
-class GitHubLocator(BaseModel):
-    """A parsed GitHub repo URL."""
+class RepoLocator(BaseModel):
+    """A git repository on GitHub or GitLab, optionally narrowed to a ref and folder."""
 
-    owner: str
-    repo: str
-    ref: str | None = None
-
-
-class GitLabLocator(BaseModel):
-    """A parsed GitLab repo URL."""
-
+    provider: Literal["github", "gitlab"]
+    host: str
     project_path: str
     ref: str | None = None
+    subpath: str | None = None
+
+    @property
+    def clone_url(self) -> str:
+        return f"https://{self.host}/{self.project_path}"
+
+    @property
+    def name(self) -> str:
+        return self.project_path.rsplit("/", 1)[-1]
+
+    @property
+    def canonical_url(self) -> str:
+        """The web URL this locator round-trips through, used as the stored key."""
+        if not self.ref and not self.subpath:
+            return self.clone_url
+        tree = "tree" if self.provider == "github" else "-/tree"
+        url = f"{self.clone_url}/{tree}/{self.ref or 'HEAD'}"
+        return f"{url}/{self.subpath}" if self.subpath else url
+
+
+class RepoAuth(BaseModel):
+    """An org's git token and the host it belongs to — it is never sent anywhere else."""
+
+    provider: Literal["github", "gitlab"]
+    token: str | None = None
+    base_url: str | None = None
 
 
 class PluginCloneTarget(BaseModel):
@@ -103,7 +129,14 @@ class ConnectMarketplaceRequest(BaseModel):
     """Connect a new marketplace to an organization."""
 
     org_id: uuid.UUID
-    git_url: str = Field(description="Git repo URL hosting marketplace.json")
+    git_url: str = Field(
+        description=(
+            "Where the skills live: a GitHub `owner/repo`, or a GitHub/GitLab URL "
+            "(clone URL, or web URL down to a branch, folder or SKILL.md). The repo "
+            "is read as a marketplace when it has .claude-plugin/marketplace.json, "
+            "otherwise every SKILL.md folder in it becomes an installable skill."
+        )
+    )
 
 
 class MarketplacePluginEntry(BaseModel):
@@ -126,6 +159,10 @@ class MarketplaceEntry(BaseModel):
     org_id: uuid.UUID
     name: str
     git_url: str
+    kind: Literal["marketplace", "skills"] | None = Field(
+        default=None,
+        description="'skills' for a plain repo of SKILL.md folders; null when the source is unreachable",
+    )
     last_sync_status: str
     last_sync_error: str | None = None
     last_synced_at: datetime | None = None

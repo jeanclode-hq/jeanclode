@@ -501,6 +501,35 @@ class GitHubPlugin(BaseHttpPlugin[GitHubPluginConfig]):
         response = await self.http.get(url, headers=headers)
         return response.status_code, response.text
 
+    async def list_repo_blob_paths(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        ref: str | None = None,
+        auth_token: str | None = None,
+    ) -> tuple[int, list[str], bool]:
+        """Every file path at ``ref`` (default branch when unset), in one recursive call.
+
+        Returns ``(status_code, paths, truncated)``; GitHub cuts the listing
+        off past 100k entries and says so with ``truncated``.
+        """
+        from urllib.parse import quote
+
+        headers = {"Accept": "application/vnd.github+json"}
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+        response = await self.http.get(
+            f"/repos/{owner}/{repo}/git/trees/{quote(ref or 'HEAD', safe='')}",
+            headers=headers,
+            params={"recursive": "1"},
+        )
+        if response.status_code != 200:
+            return response.status_code, [], False
+        payload = response.json()
+        paths = [e["path"] for e in payload.get("tree", []) if e.get("type") == "blob"]
+        return 200, paths, bool(payload.get("truncated"))
+
     async def fetch_repository_pull_requests(
         self, installation_token: str, owner: str, repo: str, state: str = "open"
     ) -> list[dict]:

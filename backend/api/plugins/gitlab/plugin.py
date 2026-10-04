@@ -529,6 +529,50 @@ class GitLabPlugin(BaseHttpPlugin[GitLabPluginConfig]):
         response = await self.http.get(url, headers=headers)
         return response.status_code, response.text
 
+    async def list_repo_blob_paths(
+        self,
+        project_path: str,
+        *,
+        ref: str | None = None,
+        path: str | None = None,
+        auth_token: str | None = None,
+        provider_url: str | None = None,
+        max_pages: int = 50,
+    ) -> tuple[int, list[str], bool]:
+        """Every file path under ``path`` at ``ref``, walked page by page.
+
+        Returns ``(status_code, paths, truncated)``; ``truncated`` means
+        ``max_pages`` ran out before the listing did.
+        """
+        from urllib.parse import quote
+
+        instance_url = provider_url or self.get_effective_instance_url()
+        params: dict[str, str] = {
+            "recursive": "true",
+            "per_page": "100",
+            "pagination": "keyset",
+            "ref": ref or "HEAD",
+        }
+        if path:
+            params["path"] = path
+        headers = {"PRIVATE-TOKEN": auth_token} if auth_token else {}
+        url: str | None = (
+            f"{instance_url}/api/v4/projects/{quote(project_path, safe='')}/repository/tree"
+        )
+
+        paths: list[str] = []
+        for _ in range(max_pages):
+            assert url is not None
+            response = await self.http.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                return response.status_code, [], False
+            paths += [e["path"] for e in response.json() if e.get("type") == "blob"]
+            url = _next_link(response.headers.get("Link", ""))
+            if url is None:
+                return 200, paths, False
+            params = {}
+        return 200, paths, True
+
     async def fetch_group_ancestors(
         self,
         access_token: str,
@@ -1061,3 +1105,12 @@ class GitLabPlugin(BaseHttpPlugin[GitLabPluginConfig]):
                 iid,
                 response.status_code,
             )
+
+
+def _next_link(link_header: str) -> str | None:
+    """The ``rel="next"`` URL of a GitLab keyset-paginated response."""
+    for part in link_header.split(","):
+        url, _, rel = part.partition(";")
+        if 'rel="next"' in rel:
+            return url.strip().strip("<>")
+    return None

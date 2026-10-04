@@ -189,7 +189,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
             v-model="addUrl"
             :placeholder="t('plugins.urlPlaceholder')"
             size="xs"
-            class="w-64"
+            class="w-80"
             @keydown.escape="collapseAdd"
           />
           <UButton
@@ -259,7 +259,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
           <div class="min-w-0 text-left">
             <div class="flex items-center gap-2">
               <UIcon
-                name="i-lucide-package"
+                :name="market.kind === 'skills' ? 'i-lucide-sparkles' : 'i-lucide-package'"
                 class="size-3.5 text-neutral-400 shrink-0"
               />
               <h5 class="text-sm font-medium truncate">
@@ -268,7 +268,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
               <span
                 v-if="market.plugins?.length"
                 class="text-[10px] text-neutral-500"
-              >{{ market.plugins.length }} {{ market.plugins.length === 1 ? 'plugin' : 'plugins' }}</span>
+              >{{ t(market.kind === 'skills' ? 'plugins.skillCount' : 'plugins.pluginCount', market.plugins.length) }}</span>
               <span
                 v-if="installedCount(market)"
                 class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200 font-medium"

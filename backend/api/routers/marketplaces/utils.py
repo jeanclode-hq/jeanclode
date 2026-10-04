@@ -1,29 +1,30 @@
 """Marketplace router utilities.
 
-Provider detection, manifest parsing, frontmatter sanitization, and the
-dispatch-time resolver. All Pydantic models live in ``schemas.py``.
+Plugin source resolution, frontmatter sanitization, and the dispatch-time
+resolver. Reading a source repo lives in ``sources.py``. All Pydantic models live in ``schemas.py``.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import posixpath
 import re
 from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import urlparse
 
-from pydantic import ValidationError
-
 from .schemas import (
-    GitHubLocator,
-    GitLabLocator,
     MarketplaceFetchError,
     MarketplaceManifest,
     MarketplacePlugin,
     PluginCloneTarget,
+    RepoAuth,
     ResolvedPluginSpec,
     UnsupportedPluginSourceError,
+)
+from .sources import (
+    InvalidSourceError,
+    load_source_manifest,
+    normalize_repo_path,
+    parse_repo_locator,
 )
 
 if TYPE_CHECKING:
@@ -34,139 +35,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Provider detection
-# ---------------------------------------------------------------------------
-
-
-_GITHUB_HOSTS = {"github.com", "www.github.com"}
-
-
-def get_marketplace_provider(git_url: str) -> str:
-    """Return ``'github'`` or ``'gitlab'`` based on the URL."""
-    return "github" if parse_github_url(git_url) is not None else "gitlab"
-
-
-def parse_github_url(git_url: str) -> GitHubLocator | None:
-    """Parse a GitHub repo URL into ``(owner, repo, ref)``.
-
-    Returns ``None`` for non-GitHub URLs.
-    """
-    git_url = git_url.strip()
-    ssh_match = re.match(r"^git@([^:]+):([^/]+)/(.+?)(\.git)?$", git_url)
-    if ssh_match:
-        host, owner, repo, _ = ssh_match.groups()
-        if host in _GITHUB_HOSTS:
-            return GitHubLocator(owner=owner, repo=repo)
-        return None
-
-    parsed = urlparse(git_url)
-    if parsed.hostname not in _GITHUB_HOSTS:
-        return None
-
-    parts = [p for p in parsed.path.split("/") if p]
-    if len(parts) < 2:
-        return None
-    owner = parts[0]
-    repo = parts[1]
-    if repo.endswith(".git"):
-        repo = repo[:-4]
-
-    ref: str | None = None
-    if len(parts) >= 4 and parts[2] in ("tree", "blob"):
-        ref = parts[3]
-
-    return GitHubLocator(owner=owner, repo=repo, ref=ref)
-
-
-def parse_gitlab_url(git_url: str) -> GitLabLocator | None:
-    """Parse a GitLab repo URL into ``(project_path, ref)``.
-
-    Understands the web UI's ``/-/tree/<ref>`` and ``/-/blob/<ref>/...`` forms
-    as well as plain clone URLs (``https://`` or ``git@``).
-    """
-    git_url = git_url.strip()
-    ssh_match = re.match(r"^git@[^:]+:(.+?)(\.git)?/?$", git_url)
-    if ssh_match:
-        path = ssh_match.group(1).strip("/")
-        return GitLabLocator(project_path=path) if "/" in path else None
-
-    path = urlparse(git_url).path
-    ref: str | None = None
-    if "/-/" in path:
-        path, _, rest = path.partition("/-/")
-        kind, _, ref_part = rest.partition("/")
-        if kind == "tree" and ref_part:
-            ref = ref_part.strip("/")
-        elif kind == "blob" and ref_part:
-            ref = ref_part.split("/", 1)[0]
-    parts = [p for p in path.split("/") if p]
-    if len(parts) >= 4 and parts[-2] in ("tree", "blob"):
-        ref = ref or parts[-1]
-        parts = parts[:-2]
-    if len(parts) < 2:
-        return None
-    return GitLabLocator(project_path="/".join(parts).removesuffix(".git"), ref=ref)
-
-
-def gitlab_project_path(git_url: str) -> str | None:
-    """Extract the ``namespace/project`` path from a GitLab-style git URL."""
-    loc = parse_gitlab_url(git_url)
-    return loc.project_path if loc else None
-
-
 def marketplace_clone_target(git_url: str) -> tuple[str, str | None]:
-    """The clonable URL and ref behind a marketplace URL.
+    """The clonable URL and ref behind a stored source URL.
 
-    A marketplace may be connected by its web UI link (``.../tree/<ref>``),
-    which ``git clone`` can't fetch, so relative-path plugins clone from the
-    bare repo URL at that ref instead.
+    A source may be stored as its web link (``.../tree/<ref>/<folder>``),
+    which ``git clone`` can't fetch, so relative-path plugins clone the bare
+    repo at that ref instead.
     """
-    gh = parse_github_url(git_url)
-    if gh is not None:
-        return f"https://github.com/{gh.owner}/{gh.repo}", gh.ref
-    parsed = urlparse(git_url.strip())
-    gl = parse_gitlab_url(git_url)
-    if gl is None or parsed.scheme not in ("http", "https") or not parsed.netloc:
-        return git_url, None
-    return f"{parsed.scheme}://{parsed.netloc}/{gl.project_path}", gl.ref
-
-
-# ---------------------------------------------------------------------------
-# Manifest parsing
-# ---------------------------------------------------------------------------
-
-
-def parse_marketplace_response(status: int, text: str, git_url: str) -> MarketplaceManifest:
-    """Parse a raw HTTP response into a ``MarketplaceManifest``.
-
-    Raises ``MarketplaceFetchError`` on non-200 status or invalid content.
-    """
-    if status == 404:
-        raise MarketplaceFetchError(f".claude-plugin/marketplace.json not found at {git_url}")
-    if status in (401, 403):
-        raise MarketplaceFetchError(
-            f"access denied fetching marketplace.json from {git_url} "
-            f"(status {status}) — check the git token"
-        )
-    if status >= 400:
-        raise MarketplaceFetchError(f"failed to fetch marketplace.json: HTTP {status}")
-
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise MarketplaceFetchError(f"marketplace.json is not valid JSON: {e}") from e
-
-    if not isinstance(data, dict):
-        raise MarketplaceFetchError("marketplace.json must be a JSON object")
-
-    if "plugins" not in data and isinstance(data.get("data"), dict):
-        data = data["data"]
-
-    try:
-        return MarketplaceManifest.model_validate(data)
-    except ValidationError as e:
-        raise MarketplaceFetchError(f"marketplace.json failed validation: {e}") from e
+        loc = parse_repo_locator(git_url)
+    except InvalidSourceError as e:
+        raise UnsupportedPluginSourceError(str(e)) from e
+    return loc.clone_url, loc.ref
 
 
 # ---------------------------------------------------------------------------
@@ -181,14 +61,11 @@ _SUPPORTED_SOURCES_HINT = "relative path, github, url or git-subdir"
 
 
 def _normalize_subpath(raw: str) -> str | None:
-    """Normalize a source path inside a repo, ``None`` meaning the repo root.
-
-    Refuses ``..`` so a manifest can't point the clone outside its own repo.
-    """
-    subpath = posixpath.normpath("/" + raw.strip()).strip("/")
-    if ".." in raw.replace("\\", "/").split("/"):
-        raise UnsupportedPluginSourceError(f"path {raw!r} must not contain '..'")
-    return subpath or None
+    """A path inside the plugin's repo, ``None`` meaning its root."""
+    try:
+        return normalize_repo_path(raw)
+    except InvalidSourceError as e:
+        raise UnsupportedPluginSourceError(str(e)) from e
 
 
 def _https_git_url(raw: str) -> str:
@@ -400,12 +277,9 @@ def read_plugin_install_rows(
 
 
 async def resolve_plugin_specs(
-    rows: list[PluginInstallRow], *, auth_token: str | None = None
+    rows: list[PluginInstallRow], *, auth: RepoAuth | None = None
 ) -> list[ResolvedPluginSpec]:
     """Turn install rows into clone-ready specs. Touches the network, not the DB."""
-    from api.context import get_current_app
-
-    app = get_current_app()
     manifest_cache: dict[str, MarketplaceManifest] = {}
     specs: list[ResolvedPluginSpec] = []
 
@@ -414,13 +288,12 @@ async def resolve_plugin_specs(
         manifest = manifest_cache.get(git_url_source)
         if manifest is None:
             try:
-                status, text = await _fetch_marketplace_file(
-                    app, git_url_source, auth_token=auth_token
-                )
-                manifest = parse_marketplace_response(status, text, git_url_source)
+                manifest = await load_source_manifest(git_url_source, auth=auth)
             except MarketplaceFetchError as e:
-                logger.warning(
-                    "Failed to refetch marketplace %s for dispatch: %s", git_url_source, e
+                logger.error(
+                    "Skill source %s unreadable at dispatch, its plugins won't load: %s",
+                    git_url_source,
+                    e,
                 )
                 continue
             manifest_cache[git_url_source] = manifest
@@ -466,7 +339,7 @@ async def resolve_plugin_specs_for_org(
     org_id: UUID,
     *,
     workflow: str | None = None,
-    auth_token: str | None = None,
+    auth: RepoAuth | None = None,
 ) -> list[ResolvedPluginSpec]:
     """Resolve an org's plugin installs into clone-ready specs.
 
@@ -475,49 +348,7 @@ async def resolve_plugin_specs_for_org(
     session is theirs to scope.
     """
     rows = read_plugin_install_rows(db, org_id, workflow=workflow)
-    return await resolve_plugin_specs(rows, auth_token=auth_token)
-
-
-async def fetch_marketplace_manifest(
-    git_url: str, *, auth_token: str | None = None
-) -> MarketplaceManifest:
-    """Fetch and parse marketplace.json at the ref the URL names, if any."""
-    from api.context import get_current_app
-
-    status, text = await _fetch_marketplace_file(get_current_app(), git_url, auth_token=auth_token)
-    return parse_marketplace_response(status, text, git_url)
-
-
-async def _fetch_marketplace_file(
-    app: object, git_url: str, *, auth_token: str | None
-) -> tuple[int, str]:
-    from api.app import Application
-
-    assert isinstance(app, Application)
-    provider = get_marketplace_provider(git_url)
-    if provider == "github":
-        if not app.github:
-            raise MarketplaceFetchError("GitHub plugin is not enabled")
-        loc = parse_github_url(git_url)
-        assert loc is not None
-        return await app.github.fetch_repo_file_text(
-            loc.owner,
-            loc.repo,
-            ".claude-plugin/marketplace.json",
-            ref=loc.ref,
-            auth_token=auth_token,
-        )
-    if not app.gitlab:
-        raise MarketplaceFetchError("GitLab plugin is not enabled")
-    gl = parse_gitlab_url(git_url)
-    if gl is None:
-        raise MarketplaceFetchError(f"unrecognized git URL: {git_url}")
-    return await app.gitlab.fetch_repo_file_text(
-        gl.project_path,
-        ".claude-plugin/marketplace.json",
-        ref=gl.ref,
-        auth_token=auth_token,
-    )
+    return await resolve_plugin_specs(rows, auth=auth)
 
 
 def _workflow_enabled(enabled: list[str] | None, workflow: str) -> bool:

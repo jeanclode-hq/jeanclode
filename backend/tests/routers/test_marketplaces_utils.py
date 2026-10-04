@@ -1,4 +1,4 @@
-"""Tests for marketplace utils (provider detection, parsing, sanitize, resolve)."""
+"""Tests for marketplace utils (source resolution, sanitize, dispatch resolver)."""
 
 from __future__ import annotations
 
@@ -9,81 +9,21 @@ import pytest
 
 from api.database import db_create_org, db_create_workspace
 from api.routers.marketplaces.schemas import (
-    GitHubLocator,
     MarketplaceFetchError,
     MarketplaceManifest,
     MarketplacePlugin,
     PluginCloneTarget,
+    RepoAuth,
     UnsupportedPluginSourceError,
 )
+from api.routers.marketplaces.sources import parse_marketplace_response
 from api.routers.marketplaces.utils import (
-    get_marketplace_provider,
-    gitlab_project_path,
-    parse_github_url,
-    parse_gitlab_url,
-    parse_marketplace_response,
+    PluginInstallRow,
     resolve_plugin_clone_target,
+    resolve_plugin_specs,
     resolve_plugin_specs_for_org,
     sanitize_frontmatter_text,
 )
-
-# ---------------------------------------------------------------------------
-# Provider detection
-# ---------------------------------------------------------------------------
-
-
-def test_get_provider_github():
-    assert get_marketplace_provider("https://github.com/foo/bar") == "github"
-
-
-def test_get_provider_gitlab():
-    assert get_marketplace_provider("https://gitlab.com/foo/bar") == "gitlab"
-
-
-def test_parse_github_url_https():
-    assert parse_github_url("https://github.com/foo/bar") == GitHubLocator(owner="foo", repo="bar")
-
-
-def test_parse_github_url_git_suffix():
-    assert parse_github_url("https://github.com/foo/bar.git").repo == "bar"
-
-
-def test_parse_github_url_ssh():
-    assert parse_github_url("git@github.com:foo/bar.git") == GitHubLocator(owner="foo", repo="bar")
-
-
-def test_parse_github_url_tree_ref():
-    loc = parse_github_url("https://github.com/foo/bar/tree/main")
-    assert loc == GitHubLocator(owner="foo", repo="bar", ref="main")
-
-
-def test_parse_github_url_non_github():
-    assert parse_github_url("https://gitlab.com/foo/bar") is None
-
-
-def test_gitlab_project_path_basic():
-    assert gitlab_project_path("https://gitlab.com/foo/bar") == "foo/bar"
-
-
-def test_gitlab_project_path_nested():
-    assert gitlab_project_path("https://gitlab.com/group/sub/project") == "group/sub/project"
-
-
-@pytest.mark.parametrize(
-    ("url", "path", "ref"),
-    [
-        ("https://gitlab.com/g/sub/p.git", "g/sub/p", None),
-        ("https://gitlab.com/g/sub/p/-/tree/v1.2", "g/sub/p", "v1.2"),
-        ("https://gitlab.com/g/p/-/tree/feat/x", "g/p", "feat/x"),
-        ("https://gitlab.com/g/p/-/blob/main/README.md", "g/p", "main"),
-        ("git@gitlab.com:g/sub/p.git", "g/sub/p", None),
-    ],
-)
-def test_parse_gitlab_url(url, path, ref):
-    loc = parse_gitlab_url(url)
-    assert loc is not None
-    assert (loc.project_path, loc.ref) == (path, ref)
-
 
 # ---------------------------------------------------------------------------
 # Response parsing
@@ -151,11 +91,36 @@ def test_resolve_bare_name_under_plugin_root():
 def test_resolve_relative_source_clones_marketplace_at_its_ref():
     """A marketplace connected by its web link can't be cloned as-is."""
     assert resolve_plugin_clone_target(
-        "./x", "https://gitlab.example.org/team/skills/-/tree/release/v2"
-    ) == _target("https://gitlab.example.org/team/skills", "x", ref="release/v2")
+        "./x", "https://gitlab.example.org/team/skills/-/tree/release-v2"
+    ) == _target("https://gitlab.example.org/team/skills", "x", ref="release-v2")
     assert resolve_plugin_clone_target("./x", "https://github.com/a/b/tree/main") == _target(
         "https://github.com/a/b", "x", ref="main"
     )
+
+
+@pytest.mark.parametrize(
+    ("market", "expected"),
+    [
+        ("anthropics/skills", _target("https://github.com/anthropics/skills")),
+        (
+            "https://github.com/o/r/tree/HEAD/skills",
+            _target("https://github.com/o/r"),
+        ),
+        (
+            "https://gitlab.example.org/g/sub/p/-/tree/v1/.claude/skills",
+            _target("https://gitlab.example.org/g/sub/p", ref="v1"),
+        ),
+        ("git@gitlab.example.org:g/p.git", _target("https://gitlab.example.org/g/p")),
+    ],
+)
+def test_resolve_relative_source_against_any_stored_source_url(market, expected):
+    """A discovered skill's paths are repo-relative, so the clone is the bare repo."""
+    assert resolve_plugin_clone_target("./", market) == expected
+
+
+def test_resolve_relative_source_against_an_unparseable_marketplace_url():
+    with pytest.raises(UnsupportedPluginSourceError):
+        resolve_plugin_clone_target("./x", "not a url")
 
 
 def test_resolve_github_source_claude_code_schema():
@@ -274,6 +239,9 @@ def test_sanitize_passthrough():
 # ---------------------------------------------------------------------------
 
 
+_LOAD = "api.routers.marketplaces.utils.load_source_manifest"
+
+
 def _make_org(db):
     ws = db_create_workspace(db=db, name="ws", slug="ws")
     org = db_create_org(
@@ -313,16 +281,7 @@ async def test_resolve_basic(db_session):
     manifest = MarketplaceManifest(
         name="m", plugins=[MarketplacePlugin(name="alpha", source="plugins/alpha")]
     )
-    with (
-        patch(
-            "api.routers.marketplaces.utils._fetch_marketplace_file",
-            new=AsyncMock(return_value=(200, manifest.model_dump_json())),
-        ),
-        patch(
-            "api.routers.marketplaces.utils.parse_marketplace_response",
-            return_value=manifest,
-        ),
-    ):
+    with patch(_LOAD, new=AsyncMock(return_value=manifest)):
         specs = await resolve_plugin_specs_for_org(db_session, org_id)
 
     assert len(specs) == 1
@@ -353,16 +312,7 @@ async def test_resolve_carries_skills_allowlist_for_shared_source(db_session):
         name="m",
         plugins=[MarketplacePlugin(name="handbook", source="./", skills=["./skills/handbook"])],
     )
-    with (
-        patch(
-            "api.routers.marketplaces.utils._fetch_marketplace_file",
-            new=AsyncMock(return_value=(200, manifest.model_dump_json())),
-        ),
-        patch(
-            "api.routers.marketplaces.utils.parse_marketplace_response",
-            return_value=manifest,
-        ),
-    ):
+    with patch(_LOAD, new=AsyncMock(return_value=manifest)):
         specs = await resolve_plugin_specs_for_org(db_session, org_id)
 
     assert len(specs) == 1
@@ -387,10 +337,7 @@ async def _resolve_with_manifest(db_session, plugins, *, pinned_ref=None):
             pinned_ref=pinned_ref,
         )
     manifest = MarketplaceManifest(name="m", plugins=plugins)
-    with patch(
-        "api.routers.marketplaces.utils._fetch_marketplace_file",
-        new=AsyncMock(return_value=(200, manifest.model_dump_json())),
-    ):
+    with patch(_LOAD, new=AsyncMock(return_value=manifest)):
         return await resolve_plugin_specs_for_org(db_session, org_id)
 
 
@@ -467,16 +414,7 @@ async def test_resolve_workflow_filter(db_session):
     manifest = MarketplaceManifest(
         name="m", plugins=[MarketplacePlugin(name="p", source="plugins/p")]
     )
-    with (
-        patch(
-            "api.routers.marketplaces.utils._fetch_marketplace_file",
-            new=AsyncMock(return_value=(200, manifest.model_dump_json())),
-        ),
-        patch(
-            "api.routers.marketplaces.utils.parse_marketplace_response",
-            return_value=manifest,
-        ),
-    ):
+    with patch(_LOAD, new=AsyncMock(return_value=manifest)):
         assert await resolve_plugin_specs_for_org(db_session, org_id, workflow="fix") == []
         specs = await resolve_plugin_specs_for_org(db_session, org_id, workflow="code_review")
         assert len(specs) == 1
@@ -499,16 +437,7 @@ async def test_resolve_skips_removed_plugin(db_session):
     )
 
     manifest = MarketplaceManifest(name="m", plugins=[])
-    with (
-        patch(
-            "api.routers.marketplaces.utils._fetch_marketplace_file",
-            new=AsyncMock(return_value=(200, manifest.model_dump_json())),
-        ),
-        patch(
-            "api.routers.marketplaces.utils.parse_marketplace_response",
-            return_value=manifest,
-        ),
-    ):
+    with patch(_LOAD, new=AsyncMock(return_value=manifest)):
         assert await resolve_plugin_specs_for_org(db_session, org_id) == []
 
 
@@ -528,8 +457,48 @@ async def test_resolve_skips_unreachable(db_session):
         display_name="p",
     )
 
-    with patch(
-        "api.routers.marketplaces.utils._fetch_marketplace_file",
-        new=AsyncMock(return_value=(404, "")),
-    ):
+    with patch(_LOAD, new=AsyncMock(side_effect=MarketplaceFetchError("gone"))):
         assert await resolve_plugin_specs_for_org(db_session, org_id) == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_loads_each_source_once_per_dispatch():
+    rows = [
+        PluginInstallRow(
+            plugin_name=n, display_name=n, pinned_ref=None, marketplace_git_url="acme/skills"
+        )
+        for n in ("pdf", "xlsx")
+    ]
+    manifest = MarketplaceManifest(
+        name="acme/skills",
+        kind="skills",
+        plugins=[
+            MarketplacePlugin(name=n, source="./", skills=[f"./skills/{n}"])
+            for n in ("pdf", "xlsx")
+        ],
+    )
+    auth = RepoAuth(provider="github", token="ghs")
+    load = AsyncMock(return_value=manifest)
+
+    with patch(_LOAD, new=load):
+        specs = await resolve_plugin_specs(rows, auth=auth)
+
+    load.assert_awaited_once_with("acme/skills", auth=auth)
+    assert [(s.git_url, s.skills) for s in specs] == [
+        ("https://github.com/acme/skills", ["./skills/pdf"]),
+        ("https://github.com/acme/skills", ["./skills/xlsx"]),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resolve_logs_an_error_for_an_unreadable_source(caplog):
+    rows = [
+        PluginInstallRow(
+            plugin_name="p", display_name="p", pinned_ref=None, marketplace_git_url="acme/gone"
+        )
+    ]
+    with patch(_LOAD, new=AsyncMock(side_effect=MarketplaceFetchError("HTTP 404"))):
+        assert await resolve_plugin_specs(rows) == []
+    [record] = [r for r in caplog.records if "acme/gone" in r.getMessage()]
+    assert record.levelname == "ERROR"
+    assert "HTTP 404" in record.getMessage()
