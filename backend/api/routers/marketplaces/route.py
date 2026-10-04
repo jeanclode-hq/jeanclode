@@ -66,10 +66,9 @@ from .schemas import (
     UpdateInstallRequest,
 )
 from .utils import (
+    fetch_marketplace_manifest,
     get_marketplace_provider,
-    gitlab_project_path,
-    parse_github_url,
-    parse_marketplace_response,
+    plugin_unsupported_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,38 +122,6 @@ async def resolve_org_git_token(
     return None
 
 
-async def _fetch_manifest(git_url: str, *, auth_token: str | None = None) -> MarketplaceManifest:
-    """Fetch marketplace.json from the right git plugin based on URL provider."""
-    app = get_current_app()
-    provider = get_marketplace_provider(git_url)
-
-    if provider == "github":
-        if not app.github:
-            raise MarketplaceFetchError("GitHub plugin is not enabled")
-        loc = parse_github_url(git_url)
-        assert loc is not None
-        status, text = await app.github.fetch_repo_file_text(
-            loc.owner,
-            loc.repo,
-            ".claude-plugin/marketplace.json",
-            ref=loc.ref,
-            auth_token=auth_token,
-        )
-    else:
-        if not app.gitlab:
-            raise MarketplaceFetchError("GitLab plugin is not enabled")
-        project_path = gitlab_project_path(git_url)
-        if not project_path:
-            raise MarketplaceFetchError(f"unrecognized git URL: {git_url}")
-        status, text = await app.gitlab.fetch_repo_file_text(
-            project_path,
-            ".claude-plugin/marketplace.json",
-            auth_token=auth_token,
-        )
-
-    return parse_marketplace_response(status, text, git_url)
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -201,6 +168,7 @@ def _marketplace_entry(
                 description=p.description,
                 version=p.version,
                 installed=p.name in installed_names,
+                unsupported_reason=plugin_unsupported_reason(p, manifest, m.git_url),
             )
             for p in manifest.plugins
         ]
@@ -269,7 +237,7 @@ async def get_plugins_overview(
         try:
             provider = get_marketplace_provider(git_url)
             token = await resolve_org_git_token(org_auth, org_id, provider)
-            return await _fetch_manifest(git_url, auth_token=token)
+            return await fetch_marketplace_manifest(git_url, auth_token=token)
         except MarketplaceFetchError as e:
             return e
 
@@ -329,9 +297,19 @@ async def install_plugins(
     provider = get_marketplace_provider(git_url)
     auth_token = await resolve_org_git_token(org_auth, request.org_id, provider)
     try:
-        manifest = await _fetch_manifest(git_url, auth_token=auth_token)
+        manifest = await fetch_marketplace_manifest(git_url, auth_token=auth_token)
     except MarketplaceFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    unsupported = {
+        p.name: reason
+        for p in manifest.plugins
+        if p.name in request.plugin_names
+        and (reason := plugin_unsupported_reason(p, manifest, git_url))
+    }
+    if unsupported:
+        detail = "; ".join(f"{name}: {reason}" for name, reason in unsupported.items())
+        raise HTTPException(status_code=422, detail=f"Unsupported plugin source — {detail}")
 
     def _write(db: Session) -> list[InstalledPlugin]:
         manifest_by_name = {p.name: p for p in manifest.plugins}
@@ -438,7 +416,7 @@ async def connect_marketplace(
     provider = get_marketplace_provider(request.git_url)
     auth_token = await resolve_org_git_token(org_auth, request.org_id, provider)
     try:
-        manifest = await _fetch_manifest(request.git_url, auth_token=auth_token)
+        manifest = await fetch_marketplace_manifest(request.git_url, auth_token=auth_token)
     except MarketplaceFetchError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

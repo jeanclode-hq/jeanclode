@@ -50,7 +50,7 @@ def _manifest(*plugin_names: str) -> MarketplaceManifest:
 
 def test_connect_marketplace(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1", "p2"),
     ):
         r = auth_client.post(
@@ -66,7 +66,7 @@ def test_connect_marketplace(auth_client, org_with_membership):
 
 def test_connect_marketplace_fetch_error(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         side_effect=MarketplaceFetchError("boom"),
     ):
         r = auth_client.post(
@@ -78,7 +78,7 @@ def test_connect_marketplace_fetch_error(auth_client, org_with_membership):
 
 def test_connect_marketplace_duplicate(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("a"),
     ):
         auth_client.post(
@@ -104,7 +104,7 @@ def test_overview_empty(auth_client, org_with_membership):
 
 def test_overview_inlines_manifest(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1", "p2"),
     ):
         connect = auth_client.post(
@@ -137,9 +137,35 @@ def test_overview_inlines_manifest(auth_client, org_with_membership):
 # ---------------------------------------------------------------------------
 
 
+def test_unsupported_source_is_flagged_and_refused(auth_client, org_with_membership):
+    manifest = MarketplaceManifest(
+        name="m",
+        plugins=[
+            MarketplacePlugin(name="ok", source="./ok"),
+            MarketplacePlugin(name="pkg", source={"source": "npm", "package": "@a/pkg"}),
+        ],
+    )
+    with patch("api.routers.marketplaces.route.fetch_marketplace_manifest", return_value=manifest):
+        connect = auth_client.post(
+            "/marketplaces",
+            json={"org_id": org_with_membership, "git_url": "https://github.com/acme/m"},
+        )
+        mid = connect.json()["id"]
+        r = auth_client.post(
+            "/plugins",
+            json={"org_id": org_with_membership, "marketplace_id": mid, "plugin_names": ["pkg"]},
+        )
+
+    reasons = {p["name"]: p["unsupported_reason"] for p in connect.json()["plugins"]}
+    assert reasons["ok"] is None
+    assert "'npm' is not supported" in reasons["pkg"]
+    assert r.status_code == 422
+    assert "pkg" in r.json()["detail"]
+
+
 def test_install_unknown_plugin_skipped(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("only"),
     ):
         mid = auth_client.post(
@@ -161,7 +187,7 @@ def test_install_unknown_plugin_skipped(auth_client, org_with_membership):
 
 def test_install_duplicate_skipped(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1"),
     ):
         mid = auth_client.post(
@@ -185,7 +211,7 @@ def test_install_duplicate_skipped(auth_client, org_with_membership):
 def test_install_batch(auth_client, org_with_membership):
     """Install multiple plugins in a single call."""
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1", "p2", "p3"),
     ):
         mid = auth_client.post(
@@ -212,7 +238,7 @@ def test_install_batch(auth_client, org_with_membership):
 
 def test_update_install(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1"),
     ):
         mid = auth_client.post(
@@ -242,7 +268,7 @@ def test_update_install(auth_client, org_with_membership):
 
 def test_uninstall(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1"),
     ):
         mid = auth_client.post(
@@ -265,7 +291,7 @@ def test_uninstall(auth_client, org_with_membership):
 
 def test_disconnect_cascades(auth_client, org_with_membership):
     with patch(
-        "api.routers.marketplaces.route._fetch_manifest",
+        "api.routers.marketplaces.route.fetch_marketplace_manifest",
         return_value=_manifest("p1"),
     ):
         mid = auth_client.post(

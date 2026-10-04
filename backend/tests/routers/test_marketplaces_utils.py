@@ -13,11 +13,14 @@ from api.routers.marketplaces.schemas import (
     MarketplaceFetchError,
     MarketplaceManifest,
     MarketplacePlugin,
+    PluginCloneTarget,
+    UnsupportedPluginSourceError,
 )
 from api.routers.marketplaces.utils import (
     get_marketplace_provider,
     gitlab_project_path,
     parse_github_url,
+    parse_gitlab_url,
     parse_marketplace_response,
     resolve_plugin_clone_target,
     resolve_plugin_specs_for_org,
@@ -66,6 +69,22 @@ def test_gitlab_project_path_nested():
     assert gitlab_project_path("https://gitlab.com/group/sub/project") == "group/sub/project"
 
 
+@pytest.mark.parametrize(
+    ("url", "path", "ref"),
+    [
+        ("https://gitlab.com/g/sub/p.git", "g/sub/p", None),
+        ("https://gitlab.com/g/sub/p/-/tree/v1.2", "g/sub/p", "v1.2"),
+        ("https://gitlab.com/g/p/-/tree/feat/x", "g/p", "feat/x"),
+        ("https://gitlab.com/g/p/-/blob/main/README.md", "g/p", "main"),
+        ("git@gitlab.com:g/sub/p.git", "g/sub/p", None),
+    ],
+)
+def test_parse_gitlab_url(url, path, ref):
+    loc = parse_gitlab_url(url)
+    assert loc is not None
+    assert (loc.project_path, loc.ref) == (path, ref)
+
+
 # ---------------------------------------------------------------------------
 # Response parsing
 # ---------------------------------------------------------------------------
@@ -98,46 +117,128 @@ def test_parse_response_invalid_json():
 # ---------------------------------------------------------------------------
 
 
+MARKET = "https://github.com/a/b"
+
+
+def _target(git_url, subpath=None, ref=None, sha=None):
+    return PluginCloneTarget(git_url=git_url, subpath=subpath, ref=ref, sha=sha)
+
+
 def test_resolve_none_source():
-    assert resolve_plugin_clone_target(None, "https://github.com/a/b") == (
-        "https://github.com/a/b",
-        None,
-    )
+    assert resolve_plugin_clone_target(None, MARKET) == _target(MARKET)
 
 
-def test_resolve_string_source():
-    assert resolve_plugin_clone_target("plugins/alpha", "https://github.com/a/b") == (
-        "https://github.com/a/b",
-        "plugins/alpha",
-    )
-
-
-def test_resolve_github_object_source():
-    source = {"type": "github", "repo": "other/repo", "path": "pkg"}
-    assert resolve_plugin_clone_target(source, "https://github.com/a/b") == (
-        "https://github.com/other/repo",
-        "pkg",
-    )
+@pytest.mark.parametrize(
+    "source", ["plugins/alpha", "./plugins/alpha", {"source": "./plugins/alpha"}]
+)
+def test_resolve_relative_source(source):
+    assert resolve_plugin_clone_target(source, MARKET) == _target(MARKET, "plugins/alpha")
 
 
 @pytest.mark.parametrize("source", ["./", ".", "/"])
 def test_resolve_root_source_normalizes_to_none(source):
-    """A plain ``.strip("/")`` leaves a truthy ``"."`` for ``"./"``/``"."``,
-    which downstream gets treated as a real subdirectory name instead of
-    "this repo's root" — this is the bug that made every plugin in a
-    shared-source marketplace (source: "./" on every entry) unresolvable."""
-    assert resolve_plugin_clone_target(source, "https://github.com/a/b") == (
-        "https://github.com/a/b",
-        None,
+    """A truthy ``"."`` left over from ``"./"`` used to be treated as a real
+    subdirectory, making every plugin of a shared-source marketplace unresolvable."""
+    assert resolve_plugin_clone_target(source, MARKET) == _target(MARKET)
+
+
+def test_resolve_bare_name_under_plugin_root():
+    assert resolve_plugin_clone_target("formatter", MARKET, plugin_root="./plugins") == _target(
+        MARKET, "plugins/formatter"
     )
 
 
-def test_resolve_github_object_root_source_normalizes_to_none():
-    source = {"type": "github", "repo": "other/repo", "path": "./"}
-    assert resolve_plugin_clone_target(source, "https://github.com/a/b") == (
-        "https://github.com/other/repo",
-        None,
+def test_resolve_relative_source_clones_marketplace_at_its_ref():
+    """A marketplace connected by its web link can't be cloned as-is."""
+    assert resolve_plugin_clone_target(
+        "./x", "https://gitlab.example.org/team/skills/-/tree/release/v2"
+    ) == _target("https://gitlab.example.org/team/skills", "x", ref="release/v2")
+    assert resolve_plugin_clone_target("./x", "https://github.com/a/b/tree/main") == _target(
+        "https://github.com/a/b", "x", ref="main"
     )
+
+
+def test_resolve_github_source_claude_code_schema():
+    source = {"source": "github", "repo": "other/repo", "ref": "v2.0.0", "sha": "a" * 40}
+    assert resolve_plugin_clone_target(source, MARKET) == _target(
+        "https://github.com/other/repo", ref="v2.0.0", sha="a" * 40
+    )
+
+
+@pytest.mark.parametrize("path", ["pkg", "./pkg"])
+def test_resolve_legacy_github_type_source(path):
+    source = {"type": "github", "repo": "other/repo", "path": path}
+    assert resolve_plugin_clone_target(source, MARKET) == _target(
+        "https://github.com/other/repo", "pkg"
+    )
+
+
+def test_resolve_url_source_on_another_gitlab_project():
+    """The numberly-skills ``happily`` entry once it moves to its own repo."""
+    source = {
+        "source": "url",
+        "url": "https://gitlab.example.org/guild-backend/happily.git",
+        "ref": "6.47.1",
+    }
+    assert resolve_plugin_clone_target(source, MARKET) == _target(
+        "https://gitlab.example.org/guild-backend/happily.git", ref="6.47.1"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["git@gitlab.example.org:team/x.git", "ssh://git@gitlab.example.org/team/x.git"],
+)
+def test_resolve_url_source_rewrites_ssh_to_https(url):
+    assert resolve_plugin_clone_target({"source": "url", "url": url}, MARKET) == _target(
+        "https://gitlab.example.org/team/x.git"
+    )
+
+
+def test_resolve_git_subdir_source():
+    source = {
+        "source": "git-subdir",
+        "url": "https://gitlab.example.org/t/mono.git",
+        "path": "tools/fmt",
+    }
+    assert resolve_plugin_clone_target(source, MARKET) == _target(
+        "https://gitlab.example.org/t/mono.git", "tools/fmt"
+    )
+
+
+def test_resolve_git_subdir_github_shorthand():
+    source = {"source": "git-subdir", "url": "acme/mono", "path": "tools/fmt", "ref": "main"}
+    assert resolve_plugin_clone_target(source, MARKET) == _target(
+        "https://github.com/acme/mono", "tools/fmt", ref="main"
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "match"),
+    [
+        ({"source": "npm", "package": "@acme/fmt"}, "'npm' is not supported"),
+        ({"source": "archive", "url": "https://x/y.zip"}, "'archive' is not supported"),
+        ({"source": "command", "command": "make"}, "'command' is not supported"),
+        ({"repo": "a/b"}, "no 'source' type"),
+        ({"source": "github", "repo": "nope"}, "owner/repo"),
+        ({"source": "url"}, "needs a 'url'"),
+        ({"source": "url", "url": "http://insecure/x.git"}, "https"),
+        ({"source": "url", "url": "file:///etc"}, "https"),
+        ({"source": "git-subdir", "url": "a/b"}, "needs a 'path'"),
+        ({"source": "github", "repo": "a/b", "sha": "abc"}, "40-character"),
+        ("./../outside", "'..'"),
+        ({"source": "github", "repo": "a/b", "path": "x/../../y"}, "'..'"),
+        (42, "string or object"),
+    ],
+)
+def test_resolve_unsupported_source_raises(source, match):
+    with pytest.raises(UnsupportedPluginSourceError, match=match):
+        resolve_plugin_clone_target(source, MARKET)
+
+
+def test_manifest_accepts_single_skill_string():
+    plugin = MarketplacePlugin(name="p", skills="./skills/p")
+    assert plugin.skills == ["./skills/p"]
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +368,83 @@ async def test_resolve_carries_skills_allowlist_for_shared_source(db_session):
     assert len(specs) == 1
     assert specs[0].plugin_subpath is None
     assert specs[0].skills == ["./skills/handbook"]
+
+
+async def _resolve_with_manifest(db_session, plugins, *, pinned_ref=None):
+    from api.database import db_create_marketplace, db_create_marketplace_install
+
+    org_id = _make_org(db_session)
+    m = db_create_marketplace(
+        db_session, org_id=org_id, name="m", git_url="https://github.com/acme/m"
+    )
+    for plugin in plugins:
+        db_create_marketplace_install(
+            db_session,
+            org_id=org_id,
+            marketplace_id=m.id,
+            plugin_name=plugin.name,
+            display_name=plugin.name,
+            pinned_ref=pinned_ref,
+        )
+    manifest = MarketplaceManifest(name="m", plugins=plugins)
+    with patch(
+        "api.routers.marketplaces.utils._fetch_marketplace_file",
+        new=AsyncMock(return_value=(200, manifest.model_dump_json())),
+    ):
+        return await resolve_plugin_specs_for_org(db_session, org_id)
+
+
+@pytest.mark.asyncio
+async def test_resolve_url_source_carries_ref_and_skills(db_session):
+    specs = await _resolve_with_manifest(
+        db_session,
+        [
+            MarketplacePlugin(
+                name="happily",
+                source={
+                    "source": "url",
+                    "url": "https://gitlab.example.org/gb/happily.git",
+                    "ref": "6.47.1",
+                },
+                skills=["./.claude/skills/happily"],
+            )
+        ],
+    )
+    assert [s.model_dump(exclude_none=True) for s in specs] == [
+        {
+            "git_url": "https://gitlab.example.org/gb/happily.git",
+            "ref": "6.47.1",
+            "display_name": "happily",
+            "skills": ["./.claude/skills/happily"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resolve_install_pin_overrides_manifest_pin(db_session):
+    specs = await _resolve_with_manifest(
+        db_session,
+        [
+            MarketplacePlugin(
+                name="p", source={"source": "github", "repo": "a/p", "ref": "v1", "sha": "b" * 40}
+            )
+        ],
+        pinned_ref="v2",
+    )
+    assert (specs[0].ref, specs[0].sha) == ("v2", None)
+
+
+@pytest.mark.asyncio
+async def test_resolve_logs_and_skips_unsupported_source(db_session, caplog):
+    specs = await _resolve_with_manifest(
+        db_session,
+        [
+            MarketplacePlugin(name="pkg", source={"source": "npm", "package": "@a/pkg"}),
+            MarketplacePlugin(name="ok", source="./ok"),
+        ],
+    )
+    assert [s.plugin_subpath for s in specs] == ["ok"]
+    assert "'pkg'" in caplog.text and "'npm' is not supported" in caplog.text
 
 
 @pytest.mark.asyncio

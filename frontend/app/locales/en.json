@@ -435,6 +435,7 @@
     "connectMarketplace": "Connect marketplace",
     "urlPlaceholder": "https://github.com/org/skills",
     "install": "Install",
+    "unsupported": "Unsupported source",
     "installAll": "Install all",
     "uninstallAll": "Uninstall plugins",
     "disconnect": "Disconnect",

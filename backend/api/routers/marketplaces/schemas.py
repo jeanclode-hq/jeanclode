@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from api.routers.connectors.schemas import CredentialStatus
 
@@ -24,11 +24,17 @@ class MarketplacePlugin(BaseModel):
     skills: list[str] | None = Field(
         default=None,
         description=(
-            "Skill folder allowlist, relative to source, for plugins that share "
-            "a source root with sibling plugins instead of owning a dedicated "
-            ".claude-plugin/plugin.json."
+            "Skill folder allowlist, relative to the plugin root, for plugins "
+            "that share a source root with sibling plugins instead of owning a "
+            "dedicated .claude-plugin/plugin.json."
         ),
     )
+
+    @field_validator("skills", mode="before")
+    @classmethod
+    def _skills_as_list(cls, value: object) -> object:
+        # Claude Code accepts a single path as well as an array.
+        return [value] if isinstance(value, str) else value
 
 
 class MarketplaceManifest(BaseModel):
@@ -36,7 +42,13 @@ class MarketplaceManifest(BaseModel):
 
     name: str = Field(description="Marketplace display name")
     description: str | None = Field(default=None)
+    metadata: dict | None = Field(default=None)
     plugins: list[MarketplacePlugin] = Field(default_factory=list)
+
+    @property
+    def plugin_root(self) -> str | None:
+        root = (self.metadata or {}).get("pluginRoot")
+        return root if isinstance(root, str) else None
 
 
 class GitHubLocator(BaseModel):
@@ -47,11 +59,28 @@ class GitHubLocator(BaseModel):
     ref: str | None = None
 
 
+class GitLabLocator(BaseModel):
+    """A parsed GitLab repo URL."""
+
+    project_path: str
+    ref: str | None = None
+
+
+class PluginCloneTarget(BaseModel):
+    """Where one marketplace plugin's files live."""
+
+    git_url: str
+    subpath: str | None = None
+    ref: str | None = None
+    sha: str | None = None
+
+
 class ResolvedPluginSpec(BaseModel):
     """A clone-ready third-party plugin pointer for the CLI worker."""
 
     git_url: str
     ref: str | None = None
+    sha: str | None = None
     plugin_subpath: str | None = None
     display_name: str | None = None
     skills: list[str] | None = None
@@ -59,6 +88,10 @@ class ResolvedPluginSpec(BaseModel):
 
 class MarketplaceFetchError(Exception):
     """Failed to fetch or parse a marketplace manifest."""
+
+
+class UnsupportedPluginSourceError(ValueError):
+    """A marketplace plugin ``source`` jeanclode can't fetch."""
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +113,10 @@ class MarketplacePluginEntry(BaseModel):
     description: str | None = None
     version: str | None = None
     installed: bool = False
+    unsupported_reason: str | None = Field(
+        default=None,
+        description="Why this plugin can't be installed, when its source type isn't supported",
+    )
 
 
 class MarketplaceEntry(BaseModel):

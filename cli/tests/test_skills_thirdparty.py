@@ -178,3 +178,54 @@ def test_plugin_json_takes_priority_over_skills_allowlist(mock_clone, tmp_path: 
     roots = clone_thirdparty_plugins_from_env(tmp_path, env=env)
 
     assert roots == [clone_dir]
+
+
+@patch("src.skills.thirdparty.clone_repo")
+def test_skills_allowlist_resolves_from_the_plugin_subpath(mock_clone, tmp_path: Path) -> None:
+    """Claude Code resolves an entry's ``skills`` from the plugin root, not the repo root."""
+    clone_dir = tmp_path / "clone"
+    _make_skill_dir(clone_dir, "tools/fmt/skills/fmt")
+    mock_clone.return_value = clone_dir
+
+    env = _env(
+        [
+            {
+                "git_url": "https://example.com/org/mono",
+                "plugin_subpath": "tools/fmt",
+                "skills": ["./skills/fmt"],
+            }
+        ]
+    )
+    roots = clone_thirdparty_plugins_from_env(tmp_path, env=env)
+
+    assert (roots[0] / "skills" / "fmt").resolve() == (clone_dir / "tools/fmt/skills/fmt").resolve()
+
+
+@patch("src.skills.thirdparty.clone_repo")
+def test_skills_outside_the_plugin_root_are_refused(mock_clone, tmp_path: Path) -> None:
+    clone_dir = tmp_path / "clone"
+    clone_dir.mkdir()
+    _make_skill_dir(tmp_path, "elsewhere")
+    mock_clone.return_value = clone_dir
+
+    env = _env([{"git_url": "https://example.com/org/x", "skills": ["../elsewhere"]}])
+    assert clone_thirdparty_plugins_from_env(tmp_path, env=env) == []
+
+
+@patch("src.skills.thirdparty.subprocess.run")
+@patch("src.skills.thirdparty.clone_repo")
+def test_sha_pin_clones_default_branch_then_checks_out_the_commit(
+    mock_clone, mock_run, tmp_path: Path
+) -> None:
+    clone_dir = tmp_path / "clone"
+    _make_plugin_dir(clone_dir)
+    mock_clone.return_value = clone_dir
+    sha = "a" * 40
+
+    env = _env([{"git_url": "https://example.com/org/p", "ref": "v1", "sha": sha}])
+    assert clone_thirdparty_plugins_from_env(tmp_path, env=env) == [clone_dir]
+
+    assert mock_clone.call_args.kwargs["ref"] is None
+    fetch, checkout = (c.args[0] for c in mock_run.call_args_list)
+    assert fetch[-2:] == ["origin", sha]
+    assert checkout[-1] == "FETCH_HEAD"

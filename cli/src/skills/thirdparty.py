@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -41,7 +42,8 @@ def clone_thirdparty_plugins_from_env(
 
     A resolved root is either the folder containing ``.claude-plugin/
     plugin.json`` (the dedicated-plugin-folder layout), or, when a spec
-    carries a ``skills`` allowlist instead, a synthetic shim folder built by
+    carries a ``skills`` allowlist instead (paths relative to the plugin
+    root, as in Claude Code), a synthetic shim folder built by
     ``_materialize_skills_shim`` — for marketplaces where several plugins
     share one source root and are told apart only by which ``skills/<name>``
     folders they list.
@@ -75,11 +77,18 @@ def clone_thirdparty_plugins_from_env(
         if not git_url:
             continue
         ref = spec.get("ref")
+        sha = spec.get("sha")
         subpath = spec.get("plugin_subpath")
         display_name = spec.get("display_name") or git_url
 
         try:
-            clone_root = clone_repo(git_url, workspace / ".thirdparty-plugins" / str(idx), ref=ref)
+            # A sha outlives the branch or tag it was cut from, so clone the
+            # default branch and fetch the commit rather than trust ``ref``.
+            clone_root = clone_repo(
+                git_url, workspace / ".thirdparty-plugins" / str(idx), ref=None if sha else ref
+            )
+            if sha:
+                _checkout_sha(clone_root, sha)
         except Exception:
             logger.warning(
                 "failed to clone third-party plugin %s (%s)", display_name, git_url, exc_info=True
@@ -87,13 +96,18 @@ def clone_thirdparty_plugins_from_env(
             continue
 
         plugin_root = (clone_root / subpath) if subpath else clone_root
+        if not _is_within(plugin_root, clone_root):
+            logger.warning(
+                "third-party plugin %s path %r leaves its repo — skipping", display_name, subpath
+            )
+            continue
         if (plugin_root / ".claude-plugin" / "plugin.json").is_file():
             roots.append(plugin_root)
             continue
 
         shim_root = _materialize_skills_shim(
             workspace / ".thirdparty-plugins" / f"{idx}-shim",
-            clone_root,
+            plugin_root,
             spec.get("skills"),
             display_name,
         )
@@ -110,8 +124,20 @@ def clone_thirdparty_plugins_from_env(
     return roots
 
 
+def _checkout_sha(clone_root: Path, sha: str) -> None:
+    for cmd in (
+        ["git", "-C", str(clone_root), "fetch", "--quiet", "--depth", "1", "origin", sha],
+        ["git", "-C", str(clone_root), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+    ):
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    return path.resolve().is_relative_to(root.resolve())
+
+
 def _materialize_skills_shim(
-    shim_root: Path, clone_root: Path, skill_relpaths: object, display_name: str
+    shim_root: Path, plugin_root: Path, skill_relpaths: object, display_name: str
 ) -> Path | None:
     """Build a synthetic plugin folder for a marketplace entry that shares its
     source with sibling plugins and is scoped only via a ``skills`` allowlist
@@ -132,7 +158,14 @@ def _materialize_skills_shim(
     for rel in skill_relpaths:
         if not isinstance(rel, str) or not rel.strip():
             continue
-        src = clone_root / rel
+        src = plugin_root / rel
+        if not _is_within(src, plugin_root):
+            logger.warning(
+                "third-party plugin %s skill %r leaves its plugin root — skipping",
+                display_name,
+                rel,
+            )
+            continue
         if not (src / "SKILL.md").is_file():
             logger.warning(
                 "third-party plugin %s lists skill %r with no SKILL.md at %s — skipping",

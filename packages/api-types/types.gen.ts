@@ -1357,6 +1357,11 @@ export type MarketplacePluginEntry = {
      * Installed
      */
     installed?: boolean;
+    /**
+     * Unsupported Reason
+     * Why this plugin can't be installed, when its source type isn't supported
+     */
+    unsupported_reason?: string | null;
 };
 
 /**

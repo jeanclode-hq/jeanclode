@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import posixpath
 import re
 from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import urlparse
@@ -16,9 +17,13 @@ from pydantic import ValidationError
 
 from .schemas import (
     GitHubLocator,
+    GitLabLocator,
     MarketplaceFetchError,
     MarketplaceManifest,
+    MarketplacePlugin,
+    PluginCloneTarget,
     ResolvedPluginSpec,
+    UnsupportedPluginSourceError,
 )
 
 if TYPE_CHECKING:
@@ -74,17 +79,57 @@ def parse_github_url(git_url: str) -> GitHubLocator | None:
     return GitHubLocator(owner=owner, repo=repo, ref=ref)
 
 
-def gitlab_project_path(git_url: str) -> str | None:
-    """Extract the ``namespace/project`` path from a GitLab-style git URL."""
-    parsed = urlparse(git_url.rstrip("/").removesuffix(".git"))
-    if not parsed.path:
-        return None
-    parts = [p for p in parsed.path.split("/") if p]
+def parse_gitlab_url(git_url: str) -> GitLabLocator | None:
+    """Parse a GitLab repo URL into ``(project_path, ref)``.
+
+    Understands the web UI's ``/-/tree/<ref>`` and ``/-/blob/<ref>/...`` forms
+    as well as plain clone URLs (``https://`` or ``git@``).
+    """
+    git_url = git_url.strip()
+    ssh_match = re.match(r"^git@[^:]+:(.+?)(\.git)?/?$", git_url)
+    if ssh_match:
+        path = ssh_match.group(1).strip("/")
+        return GitLabLocator(project_path=path) if "/" in path else None
+
+    path = urlparse(git_url).path
+    ref: str | None = None
+    if "/-/" in path:
+        path, _, rest = path.partition("/-/")
+        kind, _, ref_part = rest.partition("/")
+        if kind == "tree" and ref_part:
+            ref = ref_part.strip("/")
+        elif kind == "blob" and ref_part:
+            ref = ref_part.split("/", 1)[0]
+    parts = [p for p in path.split("/") if p]
+    if len(parts) >= 4 and parts[-2] in ("tree", "blob"):
+        ref = ref or parts[-1]
+        parts = parts[:-2]
     if len(parts) < 2:
         return None
-    if len(parts) >= 4 and parts[-2] in ("tree", "blob"):
-        parts = parts[:-2]
-    return "/".join(parts)
+    return GitLabLocator(project_path="/".join(parts).removesuffix(".git"), ref=ref)
+
+
+def gitlab_project_path(git_url: str) -> str | None:
+    """Extract the ``namespace/project`` path from a GitLab-style git URL."""
+    loc = parse_gitlab_url(git_url)
+    return loc.project_path if loc else None
+
+
+def marketplace_clone_target(git_url: str) -> tuple[str, str | None]:
+    """The clonable URL and ref behind a marketplace URL.
+
+    A marketplace may be connected by its web UI link (``.../tree/<ref>``),
+    which ``git clone`` can't fetch, so relative-path plugins clone from the
+    bare repo URL at that ref instead.
+    """
+    gh = parse_github_url(git_url)
+    if gh is not None:
+        return f"https://github.com/{gh.owner}/{gh.repo}", gh.ref
+    parsed = urlparse(git_url.strip())
+    gl = parse_gitlab_url(git_url)
+    if gl is None or parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return git_url, None
+    return f"{parsed.scheme}://{parsed.netloc}/{gl.project_path}", gl.ref
 
 
 # ---------------------------------------------------------------------------
@@ -129,34 +174,129 @@ def parse_marketplace_response(status: int, text: str, git_url: str) -> Marketpl
 # ---------------------------------------------------------------------------
 
 
-def _normalize_subpath(raw: str) -> str | None:
-    """Strip a source path down to ``None`` for anything meaning "repo root".
+_GITHUB_SHORTHAND_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_REMOTE_PLUGIN_SOURCES = ("github", "url", "git-subdir")
+_SUPPORTED_SOURCES_HINT = "relative path, github, url or git-subdir"
 
-    ``"./"`` and ``"."`` (both common ways to spell "this repo") only have
-    their ``/`` stripped by a plain ``.strip("/")``, leaving a truthy ``"."``
-    that would otherwise be treated as a real subdirectory name.
+
+def _normalize_subpath(raw: str) -> str | None:
+    """Normalize a source path inside a repo, ``None`` meaning the repo root.
+
+    Refuses ``..`` so a manifest can't point the clone outside its own repo.
     """
-    subpath = raw.strip("/")
-    return None if subpath in ("", ".") else subpath
+    subpath = posixpath.normpath("/" + raw.strip()).strip("/")
+    if ".." in raw.replace("\\", "/").split("/"):
+        raise UnsupportedPluginSourceError(f"path {raw!r} must not contain '..'")
+    return subpath or None
+
+
+def _https_git_url(raw: str) -> str:
+    """Rewrite an SSH git URL to HTTPS: the sandbox only reaches git through
+    the HTTPS proxy, which is also where credentials are injected."""
+    raw = raw.strip()
+    scp = re.match(r"^[\w.-]+@([^:/]+):(.+)$", raw)
+    if scp:
+        return f"https://{scp.group(1)}/{scp.group(2).lstrip('/')}"
+    parsed = urlparse(raw)
+    if parsed.scheme == "ssh" and parsed.hostname:
+        return f"https://{parsed.hostname}{parsed.path}"
+    if parsed.scheme == "https" and parsed.hostname:
+        return raw
+    raise UnsupportedPluginSourceError(
+        f"git URL {raw!r} is not supported — use https:// (or git@host:path)"
+    )
+
+
+def _git_pin(source: dict) -> tuple[str | None, str | None]:
+    ref = source.get("ref")
+    sha = source.get("sha")
+    if ref is not None and (not isinstance(ref, str) or not ref.strip()):
+        raise UnsupportedPluginSourceError("'ref' must be a non-empty string")
+    if sha is not None and (not isinstance(sha, str) or not _SHA_RE.match(sha)):
+        raise UnsupportedPluginSourceError("'sha' must be a full 40-character lowercase commit SHA")
+    return (ref.strip() if ref else None), sha
+
+
+def _relative_target(
+    raw: str, marketplace_git_url: str, plugin_root: str | None
+) -> PluginCloneTarget:
+    if plugin_root and raw and "/" not in raw and raw not in (".", ".."):
+        raw = f"{plugin_root.rstrip('/')}/{raw}"
+    git_url, ref = marketplace_clone_target(marketplace_git_url)
+    return PluginCloneTarget(git_url=git_url, subpath=_normalize_subpath(raw), ref=ref)
 
 
 def resolve_plugin_clone_target(
-    source: dict | str | None, marketplace_git_url: str
-) -> tuple[str, str | None] | None:
-    """Map a marketplace.json plugin ``source`` field to ``(git_url, subpath)``."""
+    source: dict | str | None,
+    marketplace_git_url: str,
+    *,
+    plugin_root: str | None = None,
+) -> PluginCloneTarget:
+    """Map a marketplace.json plugin ``source`` to the repo and folder to clone.
+
+    Follows Claude Code's plugin source schema. Raises
+    ``UnsupportedPluginSourceError`` for anything that can't be cloned with
+    git (``npm``, ``archive``, ``command``) or is malformed.
+    """
     if source is None:
-        return marketplace_git_url, None
+        return _relative_target("", marketplace_git_url, plugin_root)
     if isinstance(source, str):
-        return marketplace_git_url, _normalize_subpath(source)
-    if isinstance(source, dict):
-        if source.get("type") == "github" and source.get("repo"):
-            repo = str(source["repo"]).strip("/")
-            url = f"https://github.com/{repo}"
-            subpath = source.get("path")
-            return url, _normalize_subpath(str(subpath)) if subpath else None
-        nested = source.get("source")
-        if isinstance(nested, str):
-            return marketplace_git_url, _normalize_subpath(nested)
+        return _relative_target(source, marketplace_git_url, plugin_root)
+    if not isinstance(source, dict):
+        raise UnsupportedPluginSourceError(f"source must be a string or object, got {source!r}")
+
+    # ``type`` predates Claude Code's ``source`` key and stays for old manifests.
+    kind = source.get("source", source.get("type"))
+    if isinstance(kind, str) and kind not in _REMOTE_PLUGIN_SOURCES:
+        if kind.startswith((".", "/")):
+            return _relative_target(kind, marketplace_git_url, plugin_root)
+        raise UnsupportedPluginSourceError(
+            f"source type {kind!r} is not supported (supported: {_SUPPORTED_SOURCES_HINT})"
+        )
+    if kind is None:
+        raise UnsupportedPluginSourceError("source object has no 'source' type")
+
+    ref, sha = _git_pin(source)
+    subpath = source.get("path")
+    if subpath is not None and not isinstance(subpath, str):
+        raise UnsupportedPluginSourceError("'path' must be a string")
+
+    if kind == "github":
+        repo = str(source.get("repo") or "").strip().strip("/").removesuffix(".git")
+        if not _GITHUB_SHORTHAND_RE.match(repo):
+            raise UnsupportedPluginSourceError(
+                f"github source needs repo 'owner/repo', got {repo!r}"
+            )
+        git_url = f"https://github.com/{repo}"
+    else:
+        raw_url = source.get("url")
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            raise UnsupportedPluginSourceError(f"{kind} source needs a 'url'")
+        if kind == "git-subdir" and _GITHUB_SHORTHAND_RE.match(raw_url.strip()):
+            git_url = f"https://github.com/{raw_url.strip()}"
+        else:
+            git_url = _https_git_url(raw_url)
+        if kind == "git-subdir" and not (subpath and subpath.strip("./")):
+            raise UnsupportedPluginSourceError("git-subdir source needs a 'path'")
+
+    return PluginCloneTarget(
+        git_url=git_url,
+        subpath=_normalize_subpath(subpath) if subpath else None,
+        ref=ref,
+        sha=sha,
+    )
+
+
+def plugin_unsupported_reason(
+    plugin: MarketplacePlugin, manifest: MarketplaceManifest, marketplace_git_url: str
+) -> str | None:
+    try:
+        resolve_plugin_clone_target(
+            plugin.source, marketplace_git_url, plugin_root=manifest.plugin_root
+        )
+    except UnsupportedPluginSourceError as e:
+        return str(e)
     return None
 
 
@@ -294,15 +434,25 @@ async def resolve_plugin_specs(
             )
             continue
 
-        target = resolve_plugin_clone_target(entry.source, git_url_source)
-        if target is None:
+        try:
+            target = resolve_plugin_clone_target(
+                entry.source, git_url_source, plugin_root=manifest.plugin_root
+            )
+        except UnsupportedPluginSourceError as e:
+            logger.error(
+                "Plugin %r in marketplace %s has an unsupported source, not loading it: %s",
+                row.plugin_name,
+                git_url_source,
+                e,
+            )
             continue
-        git_url, plugin_subpath = target
+        # An install pin overrides whatever the manifest pins.
         specs.append(
             ResolvedPluginSpec(
-                git_url=git_url,
-                ref=row.pinned_ref or None,
-                plugin_subpath=plugin_subpath,
+                git_url=target.git_url,
+                ref=row.pinned_ref or target.ref,
+                sha=None if row.pinned_ref else target.sha,
+                plugin_subpath=target.subpath,
                 display_name=row.display_name,
                 skills=entry.skills,
             )
@@ -328,10 +478,19 @@ async def resolve_plugin_specs_for_org(
     return await resolve_plugin_specs(rows, auth_token=auth_token)
 
 
+async def fetch_marketplace_manifest(
+    git_url: str, *, auth_token: str | None = None
+) -> MarketplaceManifest:
+    """Fetch and parse marketplace.json at the ref the URL names, if any."""
+    from api.context import get_current_app
+
+    status, text = await _fetch_marketplace_file(get_current_app(), git_url, auth_token=auth_token)
+    return parse_marketplace_response(status, text, git_url)
+
+
 async def _fetch_marketplace_file(
     app: object, git_url: str, *, auth_token: str | None
 ) -> tuple[int, str]:
-    """Fetch marketplace.json via the right git plugin. Used by the resolver."""
     from api.app import Application
 
     assert isinstance(app, Application)
@@ -350,12 +509,13 @@ async def _fetch_marketplace_file(
         )
     if not app.gitlab:
         raise MarketplaceFetchError("GitLab plugin is not enabled")
-    project_path = gitlab_project_path(git_url)
-    if not project_path:
+    gl = parse_gitlab_url(git_url)
+    if gl is None:
         raise MarketplaceFetchError(f"unrecognized git URL: {git_url}")
     return await app.gitlab.fetch_repo_file_text(
-        project_path,
+        gl.project_path,
         ".claude-plugin/marketplace.json",
+        ref=gl.ref,
         auth_token=auth_token,
     )
 

@@ -62,7 +62,7 @@ function installedCount(market: MarketplaceEntry): number {
 
 function installableCount(market: MarketplaceEntry): number {
   const set = installedByMarket.value.get(market.id)
-  return (market.plugins ?? []).filter((p) => !set?.has(p.name)).length
+  return (market.plugins ?? []).filter((p) => !set?.has(p.name) && !p.unsupported_reason).length
 }
 
 // Accordion — one open at a time
@@ -130,7 +130,7 @@ async function installOne(market: MarketplaceEntry, plugin: MarketplacePluginEnt
 }
 
 async function installAll(market: MarketplaceEntry) {
-  const names = (market.plugins ?? []).filter((p) => !p.installed).map((p) => p.name)
+  const names = (market.plugins ?? []).filter((p) => !p.installed && !p.unsupported_reason).map((p) => p.name)
   if (!names.length) return
   installingAllMarket.value = market.id
   try {
@@ -379,6 +379,17 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
                       @click="uninstallOne(market, plugin.name)"
                     />
                   </template>
+                  <UTooltip
+                    v-else-if="plugin.unsupported_reason"
+                    :text="plugin.unsupported_reason"
+                  >
+                    <UBadge
+                      :label="t('plugins.unsupported')"
+                      color="warning"
+                      variant="subtle"
+                      size="sm"
+                    />
+                  </UTooltip>
                   <UButton
                     v-else
                     :label="t('plugins.install')"
