@@ -972,10 +972,14 @@ async def add_plugin_marketplace_credentials(
     with db_plugin.session() as db:
         org = db_get_org_by_id(db, git_org_id)
         provider = org.provider if org else None
+        base_url = org.base_url if org else None
 
     if provider not in ("github", "gitlab"):
         logger.info("plugin marketplace creds skipped: org %s provider=%s", git_org_id, provider)
         return
+    # A marketplace manifest can point a plugin at any git host, so the org's
+    # token only goes to the org's own host.
+    token_host = "github.com" if provider == "github" else host_or("gitlab.com", base_url)
 
     token = await _get_dispatch_git_token(git_org_id)
     if not token:
@@ -992,6 +996,14 @@ async def add_plugin_marketplace_credentials(
         host = (parsed.hostname or "").lower()
         repo_path = parsed.path.removesuffix(".git").strip("/")
         if not host or not repo_path:
+            continue
+        if host != token_host:
+            logger.info(
+                "plugin marketplace creds: not sending org %s's token to %s (%s)",
+                git_org_id,
+                host,
+                git_url,
+            )
             continue
         path_prefix = f"/{repo_path}/"
         if (host, path_prefix) in seen:
