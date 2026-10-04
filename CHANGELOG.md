@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.9.0...v1.10.0) (2026-10-04)
+
+
+### Features
+
+* **plugins:** support any GitHub/GitLab skill source and every git-based marketplace plugin source ([#61](https://github.com/jeanclode-hq/jeanclode/issues/61)) ([36981a1](https://github.com/jeanclode-hq/jeanclode/commit/36981a167548a73798d92bf8cd2bb4dcdd1340fe))
+
 ## [1.9.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.8.1...v1.9.0) (2026-10-01)
 
 
