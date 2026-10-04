@@ -90,7 +90,17 @@ function expandAdd() {
 function collapseAdd() {
   addExpanded.value = false
   addUrl.value = ''
+  connectError.value = null
 }
+
+const connectError = ref<string | null>(null)
+watch(addUrl, () => { connectError.value = null })
+
+const sourceExamples = computed(() => [
+  { value: 'anthropics/skills', label: t('plugins.accepts.shorthand') },
+  { value: 'https://gitlab.example.com/team/skills', label: t('plugins.accepts.repo') },
+  { value: 'https://github.com/org/repo/tree/main/.claude/skills', label: t('plugins.accepts.folder') },
+])
 
 // Per-item loading state
 const installingNames = ref(new Set<string>())
@@ -104,7 +114,10 @@ async function submitConnect() {
     toast.add({ title: t('plugins.toast.marketplaceConnected'), color: 'success' })
     collapseAdd()
   } catch (e) {
-    toast.add({ title: t('plugins.toast.connectFailed'), description: extractApiError(e, t('plugins.toast.connectFailed')), color: 'error' })
+    // Kept next to the input too: the reason ("no SKILL.md found", "not a GitHub owner/repo")
+    // is what tells the user what to paste instead.
+    connectError.value = extractApiError(e, t('plugins.toast.connectFailed'))
+    toast.add({ title: t('plugins.toast.connectFailed'), description: connectError.value, color: 'error' })
   }
 }
 
@@ -225,6 +238,37 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
       {{ t('plugins.subtitle') }}
     </p>
 
+    <!-- What the connect box accepts, shown while it's open -->
+    <div
+      v-if="addExpanded"
+      class="mb-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400"
+    >
+      <p class="mb-1 font-medium text-neutral-700 dark:text-neutral-300">
+        {{ t('plugins.accepts.title') }}
+      </p>
+      <ul class="space-y-0.5">
+        <li
+          v-for="example in sourceExamples"
+          :key="example.value"
+        >
+          <button
+            type="button"
+            class="font-mono text-neutral-800 dark:text-neutral-200 hover:underline cursor-pointer"
+            @click="addUrl = example.value"
+          >
+            {{ example.value }}
+          </button>
+          <span class="text-neutral-500"> — {{ example.label }}</span>
+        </li>
+      </ul>
+      <p
+        v-if="connectError"
+        class="mt-2 text-red-600 dark:text-red-400"
+      >
+        {{ connectError }}
+      </p>
+    </div>
+
     <!-- Loading -->
     <div
       v-if="isLoading && !overview"
@@ -318,7 +362,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
 
         <div v-if="expandedId === market.id">
           <div
-            v-if="market.plugins === null"
+            v-if="!market.plugins"
             class="px-4 py-3 text-xs text-red-600 dark:text-red-400 border-t border-neutral-200 dark:border-neutral-700"
           >
             {{ market.last_sync_error ?? t('plugins.fetchFailed') }}

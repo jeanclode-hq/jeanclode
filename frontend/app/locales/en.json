@@ -429,8 +429,14 @@
     }
   },
   "plugins": {
-    "title": "Plugins",
-    "subtitle": "Connect a Claude Code marketplace or any GitHub/GitLab repo of SKILL.md folders, then install the skills the agent should use.",
+    "title": "Skills",
+    "subtitle": "Connect a repo that holds skills — a Claude Code marketplace, or any GitHub or GitLab repo with SKILL.md folders — then install the ones Jeanclode should use. Installed skills follow the repo's default branch unless the link or the marketplace pins a version.",
+    "accepts": {
+      "title": "You can paste:",
+      "shorthand": "a GitHub repo, like npx skills add",
+      "repo": "any GitHub or GitLab repo URL (https, ssh or git{'@'})",
+      "folder": "a link to a folder or a SKILL.md, to offer only what's inside"
+    },
     "empty": "No skill sources connected. Connect one to browse and install skills.",
     "connectMarketplace": "Connect source",
     "urlPlaceholder": "owner/repo or a GitHub/GitLab URL",
@@ -439,23 +445,23 @@
     "install": "Install",
     "unsupported": "Unsupported source",
     "installAll": "Install all",
-    "uninstallAll": "Uninstall plugins",
+    "uninstallAll": "Uninstall all",
     "disconnect": "Disconnect",
     "unreachable": "Unreachable",
     "fetchFailed": "Failed to read this source.",
-    "emptyManifest": "This marketplace has no plugins.",
+    "emptyManifest": "This source has nothing to install.",
     "addAuth": "Add auth",
     "toast": {
-      "marketplaceConnected": "Marketplace connected",
-      "marketplaceDisconnected": "Marketplace disconnected",
-      "pluginInstalled": "Plugin installed",
-      "allInstalled": "All plugins installed",
-      "pluginUninstalled": "Plugin uninstalled",
-      "allUninstalled": "All plugins uninstalled",
-      "connectFailed": "Failed to connect marketplace",
-      "disconnectFailed": "Failed to disconnect marketplace",
-      "installFailed": "Failed to install plugin",
-      "uninstallFailed": "Failed to uninstall plugin"
+      "marketplaceConnected": "Source connected",
+      "marketplaceDisconnected": "Source disconnected",
+      "pluginInstalled": "Installed",
+      "allInstalled": "All installed",
+      "pluginUninstalled": "Uninstalled",
+      "allUninstalled": "All uninstalled",
+      "connectFailed": "Couldn't connect this source",
+      "disconnectFailed": "Couldn't disconnect this source",
+      "installFailed": "Couldn't install",
+      "uninstallFailed": "Couldn't uninstall"
     }
   },
   "connectors": {
@@ -652,6 +658,11 @@
         "title": "Project webhooks (GitLab Free)",
         "hint": "Only needed on GitLab Free.",
         "body": "Jeanclode normally listens to your whole GitLab group at once. GitLab Free can't do that, so turn this on and Jeanclode connects to each project one by one. This needs a token with Maintainer access."
+      },
+      "gitSkills": {
+        "title": "Skills",
+        "hint": "Teach Jeanclode how your team works.",
+        "body": "A skill is a folder with a SKILL.md that explains how to do one thing, like your deploy steps or your framework's conventions. Paste a repo here, as owner/repo or a GitHub or GitLab link, then install the skills you want. Jeanclode reads them before it works, and always uses their latest version."
       },
       "gitTools": {
         "title": "Extra tools",
