@@ -21,6 +21,7 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
+import pyotp
 from pydantic import BaseModel, Field
 
 from api.context import get_current_app
@@ -1226,8 +1227,33 @@ def _wire_static_credential(
     )
 
 
+def totp_uri(raw: str) -> str:
+    """A base32 seed or an ``otpauth://totp/`` URI, as the URI the proxy reads.
+
+    Raises ValueError for anything that can't produce a code.
+    """
+    raw = raw.strip()
+    if raw.startswith("otpauth://"):
+        totp = pyotp.parse_uri(raw)
+        if not isinstance(totp, pyotp.TOTP):
+            raise ValueError("not a TOTP URI")
+    else:
+        seed = re.sub(r"[\s=-]", "", raw).upper()
+        if not seed:
+            raise ValueError("empty TOTP seed")
+        totp = pyotp.TOTP(seed)
+    totp.now()
+    return totp.provisioning_uri(name="jeanclode")
+
+
 def _wire_body_credential(
-    inputs: DispatchInputs, *, env_var_name: str, host: str, value: str, cred_id: UUID
+    inputs: DispatchInputs,
+    *,
+    env_var_name: str,
+    host: str,
+    value: str,
+    cred_id: UUID,
+    totp: bool = False,
 ) -> None:
     """A secret the agent puts in a request body (a login form, a JSON login
     call) as a placeholder, which the proxy swaps for the real value on
@@ -1243,7 +1269,9 @@ def _wire_body_credential(
     inputs.secrets[sidecar_key] = value
     inputs.public_env[env_var_name] = placeholder
     inputs.upstreams.append(
-        UpstreamCredential(secret_key=sidecar_key, host=host, body_placeholder=placeholder)
+        UpstreamCredential(
+            secret_key=sidecar_key, host=host, body_placeholder=placeholder, body_totp=totp
+        )
     )
 
 
@@ -1473,12 +1501,30 @@ def _wire_skill_credential(
             "Skipping credential %s for skill %s — secret.name missing", cred.id, install_id
         )
         return
-    if settings.get("inject") == "body" and cred.auth_type in (
+    inject = settings.get("inject")
+    if inject in ("body", "totp") and cred.auth_type in (
         AuthType.API_KEY.value,
         AuthType.JWT.value,
     ):
+        value = secret["key"]
+        if inject == "totp":
+            try:
+                value = totp_uri(value)
+            except ValueError:
+                # A bad seed would fail the sidecar's config load, and the run with it.
+                logger.warning(
+                    "Skipping credential %s for skill %s — not a TOTP seed or otpauth URI",
+                    cred.id,
+                    install_id,
+                )
+                return
         _wire_body_credential(
-            inputs, env_var_name=env_var_name, host=host, value=secret["key"], cred_id=cred.id
+            inputs,
+            env_var_name=env_var_name,
+            host=host,
+            value=value,
+            cred_id=cred.id,
+            totp=inject == "totp",
         )
         return
     _wire_static_credential(

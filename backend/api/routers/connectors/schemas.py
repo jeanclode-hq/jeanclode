@@ -56,13 +56,15 @@ class ApiKeySecret(BaseModel):
 
 
 class ApiKeySettings(BaseModel):
-    inject: Literal["header", "body"] = Field(
+    inject: Literal["header", "body", "totp"] = Field(
         default="header",
         description=(
             "``body`` is for a skill that sends the secret in a request body (a "
             "login form, a JSON login call): the env var holds a placeholder the "
-            "proxy swaps for the real value on ``host``. ``header`` and "
-            "``value_prefix`` are then unused."
+            "proxy swaps for the real value on ``host``. ``totp`` is the same "
+            "with a TOTP seed (base32, or an ``otpauth://`` URI) as the secret: "
+            "the placeholder becomes the code current when the request goes out. "
+            "``header`` and ``value_prefix`` are then unused."
         ),
     )
     header: str = Field(default="Authorization")

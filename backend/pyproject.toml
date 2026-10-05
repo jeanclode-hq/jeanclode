@@ -44,6 +44,7 @@ dependencies = [
     "sentry-sdk>=2.43.0",
     # Configuration
     "pyyaml>=6.0.2",
+    "pyotp>=2.9,<3",
 ]
 
 [project.optional-dependencies]

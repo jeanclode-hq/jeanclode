@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AuthType, CredentialStatus, SubjectType } from '@jeanclode/api-types'
+import { Secret, TOTP, URI } from 'otpauth'
 
 const props = defineProps<{
   orgId: string
@@ -76,11 +77,34 @@ const showAdvanced = ref(false)
 const header = ref('Authorization')
 const valuePrefix = ref('Bearer ')
 // Only a skill can take a secret in a body: it's the one that writes the request.
-const inject = ref<'header' | 'body'>('header')
+const inject = ref<'header' | 'body' | 'totp'>('header')
 const injectTargets = computed(() => [
   { value: 'header', label: t('connectors.form.sentInHeader') },
   { value: 'body', label: t('connectors.form.sentInBody') },
+  { value: 'totp', label: t('connectors.form.sentInTotp') },
 ])
+
+// The current code for a pasted seed, computed here and never sent: lets the
+// user finish the app's 2FA enrolment without a phone.
+const now = ref(Date.now())
+const clock = setInterval(() => (now.value = Date.now()), 1000)
+onBeforeUnmount(() => clearInterval(clock))
+const totpPreview = computed(() => {
+  const raw = key.value.trim()
+  if (inject.value !== 'totp' || !raw) return null
+  try {
+    const seed = raw.replace(/[\s=-]/g, '').toUpperCase()
+    if (!raw.startsWith('otpauth://') && !seed) return { error: true }
+    const totp = raw.startsWith('otpauth://')
+      ? URI.parse(raw)
+      : new TOTP({ secret: Secret.fromBase32(seed) })
+    if (!(totp instanceof TOTP)) return { error: true }
+    const remaining = totp.period - Math.floor(now.value / 1000) % totp.period
+    return { code: totp.generate({ timestamp: now.value }), remaining }
+  } catch {
+    return { error: true }
+  }
+})
 
 // basic_auth
 const username = ref('')
@@ -130,7 +154,7 @@ watch(
     showAdvanced.value = false
     const s = (c?.settings ?? {}) as Record<string, unknown>
     authType.value = c?.auth_type ?? 'api_key'
-    inject.value = s.inject === 'body' ? 'body' : 'header'
+    inject.value = s.inject === 'body' || s.inject === 'totp' ? s.inject : 'header'
     header.value = typeof s.header === 'string' ? s.header : 'Authorization'
     valuePrefix.value = typeof s.value_prefix === 'string' ? s.value_prefix : 'Bearer '
     host.value = typeof s.host === 'string' ? s.host : ''
@@ -168,8 +192,8 @@ async function submit() {
     // fill in a stable placeholder rather than asking the user for a
     // value that means nothing to them.
     secret = { name: isSkill.value ? name.value : authType.value, key: key.value }
-    settings = isSkill.value && inject.value === 'body'
-      ? { inject: 'body' }
+    settings = isSkill.value && inject.value !== 'header'
+      ? { inject: inject.value }
       : { header: header.value, value_prefix: valuePrefix.value }
   } else if (authType.value === 'basic_auth') {
     secret = { username: username.value, password: password.value }
@@ -302,6 +326,24 @@ async function remove() {
         />
       </UFormField>
       <UFormField
+        v-if="isSkill && inject === 'totp'"
+        :label="t('connectors.form.totpSeed')"
+        :help="totpPreview?.code
+          ? t('connectors.form.totpCurrentCode', { code: totpPreview.code, seconds: totpPreview.remaining })
+          : t('connectors.form.totpSeedHelp')"
+        :error="totpPreview?.error ? t('connectors.form.totpSeedInvalid') : undefined"
+        required
+      >
+        <UInput
+          v-model="key"
+          size="xs"
+          class="w-full"
+          type="password"
+          placeholder="JBSWY3DPEHPK3PXP or otpauth://totp/…"
+        />
+      </UFormField>
+      <UFormField
+        v-else
         :label="authType === 'jwt' ? t('connectors.authType.jwt') : t('connectors.form.token')"
         :help="authType === 'jwt' ? t('connectors.form.tokenHelpJwt') : t('connectors.form.tokenHelpApiKey')"
         required

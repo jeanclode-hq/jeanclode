@@ -64,6 +64,8 @@ class UpstreamCredential(BaseModel):
             instead of a header: the proxy swaps this placeholder (which the
             agent holds in place of the secret) for the real value on
             ``host``. ``header`` and ``bearer`` are then unused.
+        body_totp: The secret is a TOTP seed: the placeholder becomes the
+            current code, computed when the request goes out.
     """
 
     secret_key: str
@@ -74,6 +76,7 @@ class UpstreamCredential(BaseModel):
     path_pattern: str | None = None
     methods: list[str] | None = None
     body_placeholder: str | None = None
+    body_totp: bool = False
 
 
 class OAuthUpstream(BaseModel):
@@ -170,18 +173,20 @@ def _serialize_upstreams(
     on the same host) produce separate objects so the proxy can route each
     token to the correct namespace. ``extra_hosts`` are emitted with empty
     inject maps so the proxy allows them through without modifying headers.
-    A ``body_placeholder`` rule lands in the entry's ``body`` map instead of
-    ``inject``.
+    A ``body_placeholder`` rule lands in the entry's ``body`` map (``totp``
+    for a TOTP seed) instead of ``inject``.
     """
     Key = tuple[str, str | None, str | None, tuple[str, ...]]
     by_key: dict[Key, dict[str, str]] = defaultdict(dict)
     bodies: dict[Key, dict[str, str]] = defaultdict(dict)
+    totps: dict[Key, dict[str, str]] = defaultdict(dict)
     for rule in upstreams:
         methods = tuple(sorted(m.upper() for m in rule.methods or ()))
         key = (rule.host, rule.path_prefix, rule.path_pattern, methods)
         if rule.body_placeholder is not None:
             by_key.setdefault(key, {})
-            bodies[key][rule.body_placeholder] = f"${{{rule.secret_key}}}"
+            target = totps if rule.body_totp else bodies
+            target[key][rule.body_placeholder] = f"${{{rule.secret_key}}}"
             continue
         value = f"Bearer ${{{rule.secret_key}}}" if rule.bearer else f"${{{rule.secret_key}}}"
         by_key[key][rule.header] = value
@@ -197,6 +202,8 @@ def _serialize_upstreams(
         entry: dict[str, object] = {"host": host, "inject": dict(sorted(headers.items()))}
         if bodies.get(key):
             entry["body"] = dict(sorted(bodies[key].items()))
+        if totps.get(key):
+            entry["totp"] = dict(sorted(totps[key].items()))
         if path_prefix is not None:
             entry["path_prefix"] = path_prefix
         if path_pattern is not None:

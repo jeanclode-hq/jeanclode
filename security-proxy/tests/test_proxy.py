@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -1471,3 +1472,81 @@ def test_responses_from_other_hosts_stream_untouched() -> None:
     flow.response = Response.make(200, b"")
     proxy.responseheaders(flow)
     assert flow.response.stream is True
+
+
+# ---------------------------------------------------------------------------
+# TOTP — a placeholder the proxy turns into the code current at send time
+# ---------------------------------------------------------------------------
+
+TOTP_PLACEHOLDER = "jcsecret_QA_TOTP_0123abcd"
+# RFC 6238 appendix B's SHA1 seed ("12345678901234567890").
+RFC_SEED = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+
+
+def totp_config(uri: str = f"otpauth://totp/jeanclode?secret={RFC_SEED}") -> Config:
+    return Config(
+        execution_id="exec_test",
+        upstreams=[
+            Upstream(host="auth.example.com", totp={TOTP_PLACEHOLDER: uri}),
+            Upstream(host="api.github.com", inject={"authorization": "Bearer ghs"}),
+        ],
+    )
+
+
+def test_totp_placeholder_becomes_the_current_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(time, "time", lambda: 59)
+    proxy = SecurityProxy(totp_config())
+    flow = post_flow(
+        "https://auth.example.com/2fa",
+        b"code=" + TOTP_PLACEHOLDER.encode(),
+        "application/x-www-form-urlencoded",
+    )
+    asyncio.run(proxy.request(flow))
+    # RFC 6238 test vector: T=59 -> 94287082, last six digits.
+    assert flow.request.content == b"code=287082"
+
+
+def test_totp_uri_parameters_are_honoured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(time, "time", lambda: 59)
+    proxy = SecurityProxy(totp_config(f"otpauth://totp/x?secret={RFC_SEED}&digits=8"))
+    flow = post_flow(
+        "https://auth.example.com/2fa", TOTP_PLACEHOLDER.encode(), "text/plain"
+    )
+    asyncio.run(proxy.request(flow))
+    assert flow.request.content == b"94287082"
+
+
+def test_totp_placeholder_sent_to_another_host_stays_a_placeholder() -> None:
+    proxy = SecurityProxy(totp_config())
+    body = TOTP_PLACEHOLDER.encode()
+    flow = post_flow("https://api.github.com/user", body, "text/plain")
+    asyncio.run(proxy.request(flow))
+    assert flow.request.content == body
+
+
+def test_load_config_reads_totp_and_rejects_a_bad_one(tmp_path: Path) -> None:
+    def write(uri: str) -> Path:
+        path = tmp_path / "config.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "execution_id": "e",
+                    "upstreams": [
+                        {
+                            "host": "auth.example.com",
+                            "inject": {},
+                            "totp": {TOTP_PLACEHOLDER: "${S}"},
+                        }
+                    ],
+                }
+            )
+        )
+        return path
+
+    uri = f"otpauth://totp/jeanclode?secret={RFC_SEED}"
+    cfg = load_config(write(uri), {"S": uri})
+    assert cfg.upstreams[0].totp == {TOTP_PLACEHOLDER: uri}
+    with pytest.raises(ValueError):
+        load_config(write(uri), {"S": "otpauth://hotp/x?secret=AAAA&counter=0"})

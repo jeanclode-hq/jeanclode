@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN pip install --no-cache-dir "mitmproxy==11.1.3" "pydantic>=2.7,<3"
+RUN pip install --no-cache-dir "mitmproxy==11.1.3" "pydantic>=2.7,<3" "pyotp>=2.9,<3"
 
 WORKDIR /app
 COPY proxy.py /app/proxy.py

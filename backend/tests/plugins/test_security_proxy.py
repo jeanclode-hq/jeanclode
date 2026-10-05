@@ -75,6 +75,25 @@ def test_body_placeholder_lands_in_body_not_inject() -> None:
     assert "hunter2" not in spec.config_json
 
 
+def test_totp_placeholder_lands_in_its_own_map() -> None:
+    spec = build_proxy_spec(
+        secret_env={"SKILL_BODY_CD34": "otpauth://totp/jeanclode?secret=JBSWY3DPEHPK3PXP"},
+        upstreams=[
+            UpstreamCredential(
+                secret_key="SKILL_BODY_CD34",
+                host="auth.example.com",
+                body_placeholder="jcsecret_QA_TOTP_00ff",
+                body_totp=True,
+            )
+        ],
+        image="img",
+        execution_id="exec-1",
+    )
+    (entry,) = json.loads(spec.config_json)["upstreams"]
+    assert entry["totp"] == {"jcsecret_QA_TOTP_00ff": "${SKILL_BODY_CD34}"}
+    assert "body" not in entry
+
+
 def test_header_only_upstream_has_no_body_key() -> None:
     spec = build_proxy_spec(
         secret_env={"GH_TOKEN": "ghs"}, upstreams=[_github()], image="img", execution_id="e"

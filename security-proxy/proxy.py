@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, quote_plus, unquote, urlencode
 
+import pyotp
 from mitmproxy import http
 from pydantic import BaseModel, Field
 
@@ -61,6 +62,8 @@ class Upstream(BaseModel):
     inject: dict[str, str] = Field(default_factory=dict)
     # Placeholder -> real secret, swapped into request bodies on this host.
     body: dict[str, str] = Field(default_factory=dict)
+    # Placeholder -> ``otpauth://`` URI; swapped for the code current at send time.
+    totp: dict[str, str] = Field(default_factory=dict)
 
     def matches_pattern(self, method: str, path: str) -> bool:
         if self.path_pattern is None:
@@ -188,6 +191,15 @@ class Config(BaseModel):
                 found.update(upstream.body)
         return found
 
+    def totp_codes(self, host: str) -> dict[str, str]:
+        """The current code for every TOTP seed bound to ``host``."""
+        return {
+            placeholder: pyotp.parse_uri(uri).at(time.time())
+            for upstream in self.upstreams
+            if upstream.totp and _host_matches(upstream.host, host)
+            for placeholder, uri in upstream.totp.items()
+        }
+
 
 def _host_matches(pattern: str, host: str) -> bool:
     """True if ``host`` is covered by ``pattern``.
@@ -297,6 +309,11 @@ def load_config(path: str | os.PathLike[str], env: dict[str, str]) -> Config:
             if not placeholder:
                 raise ValueError(f"empty body placeholder for {host} in config")
             upstream.body[placeholder] = expand_env(value_template, env)
+        for placeholder, value_template in (entry.get("totp") or {}).items():
+            uri = expand_env(value_template, env)
+            if not placeholder or not isinstance(pyotp.parse_uri(uri), pyotp.TOTP):
+                raise ValueError(f"bad TOTP entry for {host} in config")
+            upstream.totp[placeholder] = uri
 
     oauth_upstreams: list[OAuthUpstream] = []
     for entry in raw.get("oauth_upstreams", []):
@@ -669,6 +686,8 @@ class SecurityProxy:
                 flow.metadata["jc_scrub"] = list(body_secrets.values())
             if _substitute_body_secrets(flow, body_secrets):
                 injected.append("body")
+            if _substitute_body_secrets(flow, self.config.totp_codes(host)):
+                injected.append("totp")
             if self._reveal_cookies(flow, host):
                 injected.append("cookie")
             flow.metadata["jc_injected"] = bool(injected)
