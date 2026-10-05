@@ -657,7 +657,7 @@
       "gitDemoVideos": {
         "title": "Demo videos",
         "hint": "See a UI fix working without checking it out.",
-        "body": "When Jeanclode fixes an issue that changes your app's screens, it starts the app with fake data and shows the change on the real page: screenshots, or a short video when the change is about an interaction. They go at the top of the PR, so a reviewer can see the change before reading the code. You can also ask for one on any PR by mentioning @jeanclode-bot. Turn this off to skip both."
+        "body": "When Jeanclode fixes an issue that changes your app's screens, it starts the app with fake data and shows the change on the real page: screenshots, or a short video when the change is about an interaction. They go at the top of the PR, so a reviewer can see the change before reading the code. You can also ask for one on any PR by mentioning {'@'}jeanclode-bot. Turn this off to skip both."
       },
       "gitWebhooks": {
         "title": "Project webhooks (GitLab Free)",
