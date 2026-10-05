@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 from claude_agent_sdk import ResultMessage
 
+from src.activities.demo import DEMO_END, DEMO_START
 from src.activities.summary import (
     FILES_MARKER,
     FileLine,
@@ -687,3 +688,34 @@ async def test_workflow_recovers_when_issue_explorer_fails(tmp_path: Path) -> No
     assert result.status == "success"
     body = run_mock.call_args.args[0][-1]
     assert "#### Linked issues" not in body  # no refs → section omitted
+
+
+async def test_workflow_keeps_the_demo_block_out_of_the_model_and_on_top(tmp_path: Path) -> None:
+    demo = f"{DEMO_START}\n#### Demo\n\n![demo](https://x/demo.gif)\n{DEMO_END}"
+    _write_pr_context(tmp_path, pr_description=f"{demo}\n\nDoes things", diff=_REAL_DIFF)
+    ctx, _ = _ctx(tmp_path)
+    calls: list[tuple[str, Any]] = []
+
+    sq = _ScriptedQuery()
+    sq.add("technical documentation assistant", "", {"description": "- a"})
+    sq.add("expert editor", "", {"description": "- a"})
+
+    def query_side_effect(*, prompt: str, options: Any) -> Any:
+        calls.append((prompt, options))
+        if "one-line changelog entry" in prompt:
+            raise RuntimeError("file summarizer down")
+        return sq(prompt=prompt, options=options)
+
+    with (
+        patch("src.agents.base.query", side_effect=query_side_effect),
+        patch("src.activities.summary.update_description.subprocess.run") as run_mock,
+    ):
+        run_mock.return_value = _completed(0)
+        await PRSummaryWorkflow().run(ctx)
+
+    body = run_mock.call_args.args[0][-1]
+    assert body.startswith(demo)
+    assert "- a" in body
+    for prompt, options in calls:
+        assert "demo.gif" not in prompt
+        assert "demo.gif" not in (options.system_prompt or "")

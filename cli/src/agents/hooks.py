@@ -41,6 +41,11 @@ reports success and the gap only shows up in production.
   creation is deferred until there's something real to open it for. One
   instance guards one target repo; a multi-repo fix registers one pair
   (this + ``require_pushed_fix_hook``) per repo on the same fixer session.
+- ``require_demo_hook`` (PreToolUse on ``StructuredOutput``) — once CI
+  lets the fixer through, a separate demo agent records the UI change
+  working; any verdict but ``ok`` goes back to the fixer. ``GateResults``
+  makes it wait for the CI gates on the same call, and
+  ``forbid_publishing_hook`` keeps the demo agent from committing or pushing.
 - ``require_threaded_gitlab_reply_hook`` (PreToolUse) — the respond
   planner types its own ``glab`` commands, and the flat
   ``glab issue note`` / ``glab mr note`` shortcuts post a disconnected
@@ -58,7 +63,7 @@ import logging
 import re
 import shlex
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -66,8 +71,21 @@ from urllib.parse import quote
 from claude_agent_sdk import HookContext, HookMatcher, PreToolUseHookInput, StopHookInput
 
 from src.activities.ci_watch import check_ci
+from src.activities.demo import (
+    BYPASS_FILE,
+    DEMO_DIR,
+    HINTS_FILE,
+    DemoGateState,
+    DemoRound,
+    git_status,
+    reset_demo_dir,
+    restore_setup,
+    stash_setup,
+)
+from src.activities.demo.checkout import head_sha
+from src.activities.demo.processes import running_pids, stop_new_processes
 from src.activities.git.ops import fix_missing_reason
-from src.activities.git.schemas import PRRef
+from src.activities.git.schemas import PRRef, WorktreePath
 from src.activities.respond.schemas import MentionContext
 from src.runtime.context import RunContext
 from src.runtime.events import ActivityEnd, ActivityStart, Panel
@@ -314,6 +332,332 @@ def require_pushed_and_ci_pass_hook(
         return _deny_structured_output(result.summary_text)
 
     return HookMatcher(matcher=_STRUCTURED_OUTPUT_TOOL, hooks=[_hook], timeout=_CI_HOOK_TIMEOUT)
+
+
+# --------------------------------------------------------------------------
+# Demo gate
+# --------------------------------------------------------------------------
+
+MAX_DEMO_ROUNDS = _MAX_BLOCKS
+
+# One demo session's budget: installing a frontend from scratch, starting it and
+# recording. Past it the round counts as failed and the fixer decides what next.
+DEMO_AGENT_TIMEOUT_S = 2400
+
+# Waits out the CI gates on the same call first, then runs one demo session.
+_DEMO_HOOK_TIMEOUT = _CI_HOOK_TIMEOUT + DEMO_AGENT_TIMEOUT_S + 300
+
+_DEMO_NEXT_STEP = {
+    "broken": (
+        "Fix the code so the change does what the issue asks, push, and finish again: "
+        "a new round runs on your new commit."
+    ),
+    "unavailable": (
+        "The demo agent couldn't get the app running. If you know what it's missing "
+        "(env vars, how to log in, the start command, which page shows the change), "
+        "write it to {hints} and finish again."
+    ),
+    "nothing_to_show": (
+        "The demo agent found nothing visible to show. If the change is visible "
+        "somewhere it didn't look (a page, a state, a click path), write that to "
+        "{hints} and finish again."
+    ),
+}
+
+
+def _is_deny(result: dict[str, Any] | None) -> bool:
+    if not result:
+        return False
+    specific = result.get("hookSpecificOutput") or {}
+    return specific.get("permissionDecision") == "deny" or result.get("decision") == "block"
+
+
+class GateResults:
+    """What the CI gates answered on each ``StructuredOutput`` call.
+
+    The CLI runs every hook matching a tool call in parallel, so the demo gate
+    can't just sit after the CI gates in the list: it waits here until each one
+    has answered the same call, and stands down if any of them denied it.
+    """
+
+    def __init__(self) -> None:
+        self._expected = 0
+        self._denied: dict[str, list[bool]] = {}
+        self._changed = asyncio.Condition()
+
+    def track(self, matcher: HookMatcher) -> HookMatcher:
+        """Return ``matcher`` with its callbacks reporting here."""
+        self._expected += len(matcher.hooks)
+        return HookMatcher(
+            matcher=matcher.matcher,
+            hooks=[self._wrap(h) for h in matcher.hooks],
+            timeout=matcher.timeout,
+        )
+
+    def _wrap(self, hook: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+        async def _tracked(
+            hook_input: PreToolUseHookInput, tool_use_id: str | None, context: HookContext
+        ) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            try:
+                result = await hook(hook_input, tool_use_id, context)
+                return result
+            finally:
+                await self._record(_call_id(hook_input, tool_use_id), _is_deny(result))
+
+        return _tracked
+
+    async def _record(self, call: str, denied: bool) -> None:
+        async with self._changed:
+            self._denied.setdefault(call, []).append(denied)
+            self._changed.notify_all()
+
+    async def any_denied(self, call: str) -> bool:
+        async with self._changed:
+            await self._changed.wait_for(lambda: len(self._denied.get(call, [])) >= self._expected)
+            return any(self._denied.pop(call, []))
+
+
+def _call_id(hook_input: PreToolUseHookInput, tool_use_id: str | None) -> str:
+    return tool_use_id or str(hook_input.get("tool_use_id") or "")
+
+
+def demo_bypass_reason(demo_dir: Path) -> str:
+    path = demo_dir / BYPASS_FILE
+    if not path.exists():
+        return ""
+    return path.read_text(errors="replace").strip() or "no reason given"
+
+
+def _pushed(wt: WorktreePath) -> bool:
+    try:
+        return fix_missing_reason(wt.path, wt.branch, wt.placeholder_sha) is None
+    except RuntimeError:
+        return False
+
+
+def _demo_feedback(demo: DemoRound, round_no: int, demo_dir: Path) -> str:
+    hints = demo_dir / HINTS_FILE
+    lines = [
+        f"Demo round {round_no} of {MAX_DEMO_ROUNDS}: the demo agent's verdict is "
+        f"`{demo.verdict}`, so you can't finish yet.",
+        "",
+        demo.evidence.strip() or "(no explanation given)",
+    ]
+    if demo.screenshots:
+        lines += ["", "Screenshots (open them with Read and judge for yourself):"]
+        lines += [f"- {shot}" for shot in demo.screenshots]
+    lines += [
+        "",
+        _DEMO_NEXT_STEP[demo.verdict].format(hints=hints),
+        "",
+        "Never change product code just to make the demo run: no mock modes, auth "
+        "bypass flags or fake-data switches in your commits. Setting up the app is "
+        "the demo agent's job. If a demo genuinely can't work here, write the reason "
+        f"to {demo_dir / BYPASS_FILE} and finish again.",
+    ]
+    return "\n".join(lines)
+
+
+def _dirty_feedback(dirty: dict[str, str], demo_dir: Path) -> str:
+    listing = "\n".join(f"{path}:\n{status.rstrip()}" for path, status in dirty.items())
+    return (
+        "The demo can't run on a checkout with uncommitted changes: everything left "
+        "over after a demo round is cleared away as the demo's own setup, and yours "
+        f"would go with it. `git status --porcelain` shows:\n\n{listing}\n\n"
+        "Commit and push what belongs in the fix, delete the rest (build output, "
+        "scratch files), then finish again. If a demo genuinely can't work here, write "
+        f"the reason to {demo_dir / BYPASS_FILE} and finish again."
+    )
+
+
+def _crash_feedback(error: str, round_no: int, demo_dir: Path) -> str:
+    left = MAX_DEMO_ROUNDS - round_no
+    return (
+        f"Demo round {round_no} of {MAX_DEMO_ROUNDS}: the demo agent failed before giving "
+        f"a verdict.\n\n{error}\n\n"
+        f"Each round gets {DEMO_AGENT_TIMEOUT_S // 60} minutes to install, start and record "
+        f"the app; {left} round(s) left. If this looks transient (a timeout on a slow "
+        "install, a rate limit, a network blip), finish again to retry, and write anything "
+        f"that would speed the next round up (the start command, what to skip) to "
+        f"{demo_dir / HINTS_FILE}. If it will keep failing here, write the reason to "
+        f"{demo_dir / BYPASS_FILE} and finish again."
+    )
+
+
+def require_demo_hook(
+    worktrees: list[WorktreePath],
+    run_demo: Callable[[int], Awaitable[DemoRound]],
+    state: DemoGateState,
+    *,
+    ctx: RunContext,
+    ci_gates: GateResults | None = None,
+    demo_dir: Path = DEMO_DIR,
+) -> HookMatcher:
+    """PreToolUse(``StructuredOutput``) hook: once CI lets the fixer through,
+    record the change working before it can finish.
+
+    ``run_demo(round)`` runs the demo agent in its own session, on the run's
+    default model credential, and returns its verdict. Each round:
+
+    1. Every worktree has to be clean (the fixer just pushed, so it normally
+       is): the stash below has to hold only the demo's edits. A dirty one is
+       sent back to the fixer to commit or delete.
+    2. Pop the previous round's demo setup back.
+    3. Run the demo agent.
+    4. Stop every process the round started, then stash whatever it left,
+       so the fixer gets its clean checkout back.
+    5. ``ok`` passes; any other verdict, or the demo agent failing or running
+       past ``DEMO_AGENT_TIMEOUT_S``, is denied back to the fixer.
+
+    Bounded at ``MAX_DEMO_ROUNDS`` rounds, and the fixer can stand it down by
+    writing a reason to ``demo_dir / BYPASS_FILE``. ``state`` collects the
+    rounds for the runner, which posts the last ``ok`` once the fixer is done.
+    Register it after the CI gates, so a CLI that ran hooks one by one would
+    still reach them first.
+    """
+
+    async def _hook(
+        hook_input: PreToolUseHookInput, tool_use_id: str | None, _context: HookContext
+    ) -> dict[str, Any]:
+        if hook_input.get("tool_name") != _STRUCTURED_OUTPUT_TOOL:
+            return {}
+        if ci_gates is not None and await ci_gates.any_denied(_call_id(hook_input, tool_use_id)):
+            return {}
+        if state.bypass_reason:
+            return {}
+        if reason := demo_bypass_reason(demo_dir):
+            state.bypass_reason = reason
+            ctx.emit(Panel(title="Demo Bypass", content=reason, style="yellow"))
+            return {}
+
+        pushed = [wt for wt in worktrees if _pushed(wt)]
+        if not pushed:
+            return {}
+        heads = {str(wt.path): head_sha(wt.path) for wt in pushed}
+        if state.ok is not None and state.ok.heads == heads:
+            return {}
+        if state.rounds >= MAX_DEMO_ROUNDS:
+            return {}
+        dirty = {str(wt.path): status for wt in worktrees if (status := git_status(wt.path))}
+        if dirty:
+            state.rounds += 1
+            state.dirty = sorted(dirty)
+            return _deny_structured_output(_dirty_feedback(dirty, demo_dir))
+
+        state.rounds += 1
+        state.dirty = []
+        reset_demo_dir(demo_dir)
+        for wt in worktrees:
+            restore_setup(wt.path)
+
+        ctx.emit(ActivityStart(name="demo"))
+        started = time.monotonic()
+        before = running_pids()
+        demo: DemoRound | None = None
+        error = ""
+        try:
+            demo = await asyncio.wait_for(run_demo(state.rounds), DEMO_AGENT_TIMEOUT_S)
+        except TimeoutError:
+            error = f"It ran past its {DEMO_AGENT_TIMEOUT_S // 60}-minute budget and was stopped."
+        except Exception as exc:
+            logger.warning("require_demo_hook: demo agent failed", exc_info=True)
+            error = f"{type(exc).__name__}: {exc}"
+        finally:
+            # Before the stash: a server still running would write into the checkout after it.
+            await asyncio.to_thread(stop_new_processes, before)
+            for wt in worktrees:
+                stash_setup(wt.path)
+            ctx.emit(
+                ActivityEnd(
+                    name="demo",
+                    ok=demo is not None and demo.verdict == "ok",
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+            )
+        if demo is None:
+            state.error = error
+            ctx.emit(Panel(title="Demo Failed", content=error, style="yellow"))
+            return _deny_structured_output(_crash_feedback(error, state.rounds, demo_dir))
+
+        demo = demo.model_copy(update={"heads": heads})
+        state.last = demo
+        state.error = ""
+        ctx.emit(
+            Panel(
+                title=f"Demo: {demo.verdict}",
+                content=demo.evidence,
+                style="green" if demo.verdict == "ok" else "yellow",
+            )
+        )
+        if demo.verdict == "ok":
+            state.ok = demo
+            return {}
+        return _deny_structured_output(_demo_feedback(demo, state.rounds, demo_dir))
+
+    return HookMatcher(matcher=_STRUCTURED_OUTPUT_TOOL, hooks=[_hook], timeout=_DEMO_HOOK_TIMEOUT)
+
+
+def _git_subcommand(tokens: list[str]) -> str:
+    """The subcommand of a ``git`` invocation, past ``-C <dir>``/``-c <k=v>`` and flags."""
+    rest = tokens[1:]
+    while rest:
+        token = rest.pop(0)
+        if token in ("-C", "-c", "--git-dir", "--work-tree", "--namespace"):
+            if rest:
+                rest.pop(0)
+            continue
+        if token.startswith("-"):
+            continue
+        return token
+    return ""
+
+
+_FORBIDDEN_GIT = frozenset({"push", "commit", "stash"})
+
+
+def _publishes(tokens: list[str]) -> bool:
+    if not tokens:
+        return False
+    tool = Path(tokens[0]).name
+    if tool == "git":
+        return _git_subcommand(tokens) in _FORBIDDEN_GIT
+    if tool == "gh":
+        return tokens[1:2] == ["pr"]
+    if tool == "glab":
+        return tokens[1:2] == ["mr"]
+    return False
+
+
+def forbid_publishing_hook() -> HookMatcher:
+    """PreToolUse(Bash) hook for the demo agent: no commit, push, stash or PR/MR.
+
+    The stash the demo gate takes after each round is what really keeps the
+    demo's setup out of the PR; this stops the agent working against it.
+    """
+
+    async def _hook(
+        hook_input: PreToolUseHookInput, _tool_use_id: str | None, _context: HookContext
+    ) -> dict[str, Any]:
+        if hook_input.get("tool_name") != "Bash":
+            return {}
+        command = (hook_input.get("tool_input") or {}).get("command") or ""
+        if not isinstance(command, str):
+            return {}
+        if not any(_publishes(segment) for segment in _command_segments(command)):
+            return {}
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    "The demo agent never commits, pushes, stashes or touches a PR/MR: your "
+                    "setup is collected for you after this round and kept out of the change."
+                ),
+            }
+        }
+
+    return HookMatcher(matcher="Bash", hooks=[_hook])
 
 
 # --------------------------------------------------------------------------

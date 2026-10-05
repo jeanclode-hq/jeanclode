@@ -669,59 +669,27 @@ def test_response_preserves_normal_headers() -> None:
 
 
 @pytest.mark.parametrize(
-    "path",
-    [
-        "/jdoe/webshop/info/refs?service=git-upload-pack",
-        "/jdoe/webshop.git/info/refs?service=git-upload-pack",
-        "/jdoe/webshop.git/git-upload-pack",
-        "/jdoe/webshop/git-receive-pack",
-    ],
-)
-def test_responseheaders_streams_git_smart_http_paths(path: str) -> None:
-    """The packfile body is what OOM-killed the sidecar on a 1GB+ shallow
-    clone — these paths must stream instead of buffering into memory."""
-    proxy = SecurityProxy(make_config())
-    flow = make_flow(f"https://api.github.com{path}")
-    flow.response = Response.make(200, b"pack-bytes")
-    proxy.responseheaders(flow)
-    assert flow.response.stream is True
-
-
-@pytest.mark.parametrize(
     "url",
     [
-        "https://gitlab.example.com/api/v4/projects/jdoe%2Fwebshop/repository/archive.zip?sha=abc123",
-        "https://gitlab.example.com/api/v4/projects/42/repository/archive",
-        "https://gitlab.example.com/api/v4/projects/42/repository/archive.tar.gz?sha=abc123",
-        "https://api.github.com/repos/jdoe/webshop/zipball/abc123",
-        "https://api.github.com/repos/jdoe/webshop/tarball",
+        # A 1GB+ shallow clone's packfile.
+        "https://gitlab.example.com/jdoe/webshop.git/git-upload-pack",
+        # A 394MB MR archive.
+        "https://gitlab.example.com/api/v4/projects/42/repository/archive.zip?sha=abc123",
         "https://codeload.github.com/jdoe/webshop/legacy.zip/abc123",
-        "https://codeload.github.com/jdoe/webshop/zip/refs/heads/main",
+        # What a demo round installs.
+        "https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz",
+        "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-15.0.0.tgz",
+        "https://gitlab.example.com/api/v4/projects/7/packages/npm/@acme/ui/-/@acme/ui-1.2.0.tgz",
+        "https://api.github.com/repos/foo/bar/issues/10",
     ],
 )
-def test_responseheaders_streams_repo_archives(url: str) -> None:
-    """A 394MB MR archive OOM-killed the 256MiB sidecar mid-download."""
+def test_responseheaders_streams_every_response(url: str) -> None:
+    """Nothing reads a body, so nothing gets buffered whole in the 256MiB sidecar."""
     proxy = SecurityProxy(make_config())
     flow = make_flow(url)
-    flow.response = Response.make(200, b"zip-bytes")
+    flow.response = Response.make(200, b"bytes")
     proxy.responseheaders(flow)
     assert flow.response.stream is True
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://api.github.com/repos/foo/bar/issues/10",
-        "https://gitlab.example.com/api/v4/projects/42/repository/archived_files",
-        "https://api.github.com/repos/foo/bar/contents/docs/zipball.md",
-    ],
-)
-def test_responseheaders_does_not_stream_ordinary_api_paths(url: str) -> None:
-    proxy = SecurityProxy(make_config())
-    flow = make_flow(url)
-    flow.response = Response.make(200, b"{}")
-    proxy.responseheaders(flow)
-    assert not flow.response.stream
 
 
 # ---------------------------------------------------------------------------
@@ -1039,3 +1007,86 @@ def test_oauth_token_cache_different_keys_mint_independently() -> None:
 
     assert tok_a == "tok-a"
     assert tok_b == "tok-b"
+
+
+# ---------------------------------------------------------------------------
+# path_pattern rules: GitLab's npm registry
+# ---------------------------------------------------------------------------
+
+_NPM_PATTERN = r"^/api/v4/(projects/\d+/)?packages/npm/"
+
+
+def _npm_config() -> Config:
+    return Config(
+        execution_id="exec_test",
+        upstreams=[
+            Upstream(
+                host="gitlab.acme.com",
+                path_prefix="/acme/",
+                inject={"private-token": "ns-token"},
+            ),
+            Upstream(
+                host="gitlab.acme.com",
+                path_prefix="/api/v4/projects/42/",
+                inject={"private-token": "project-token"},
+            ),
+            Upstream(
+                host="gitlab.acme.com",
+                path_pattern=_NPM_PATTERN,
+                methods=["GET"],
+                inject={"private-token": "npm-token"},
+            ),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v4/packages/npm/@acme%2fui",
+        "/api/v4/projects/977/packages/npm/@acme/ui/-/@acme/ui-1.2.0.tgz",
+    ],
+)
+def test_npm_registry_reads_get_the_pattern_token(path: str) -> None:
+    upstream = _npm_config().match("gitlab.acme.com", path, "GET")
+    assert upstream is not None and upstream.inject == {"private-token": "npm-token"}
+
+
+def test_npm_pattern_is_get_only() -> None:
+    assert _npm_config().match("gitlab.acme.com", "/api/v4/packages/npm/@acme%2fui", "PUT") is None
+
+
+def test_a_tracked_prefix_still_wins_over_the_pattern() -> None:
+    upstream = _npm_config().match(
+        "gitlab.acme.com", "/api/v4/projects/42/packages/npm/@acme/ui/-/ui-1.0.0.tgz", "GET"
+    )
+    assert upstream is not None and upstream.inject == {"private-token": "project-token"}
+
+
+def test_load_config_reads_pattern_rules(tmp_path: Path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "execution_id": "e",
+                "upstreams": [
+                    {
+                        "host": "gitlab.acme.com",
+                        "path_pattern": _NPM_PATTERN,
+                        "methods": ["get"],
+                        "inject": {"PRIVATE-TOKEN": "${TOKEN}"},
+                    }
+                ],
+            }
+        )
+    )
+    cfg = load_config(path, {"TOKEN": "t"})
+    assert cfg.upstreams[0].methods == ["GET"]
+    assert cfg.upstreams[0].inject == {"private-token": "t"}
+
+
+def test_npm_publish_is_denied_end_to_end() -> None:
+    proxy = SecurityProxy(_npm_config())
+    flow = make_flow("https://gitlab.acme.com/api/v4/projects/977/packages/npm/@acme%2fui", "PUT")
+    asyncio.run(proxy.request(flow))
+    assert flow.response is not None and flow.response.status_code == 403

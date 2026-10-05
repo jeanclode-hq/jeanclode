@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from src.activities.issue.schemas import IssueContext
+from src.agents.demo.schemas import DemoOutput
 from src.agents.issue.schemas import IssueFixerOutput, TriageOutput
 from src.agents.schemas import AgentResult
 
@@ -38,6 +39,8 @@ def format_triage_panel(output: TriageOutput, issue_url: str = "") -> str:
         lines.append(f"target repos: [bold]{', '.join(output.target_repos)}[/]")
     if output.base_branch:
         lines.append(f"base branch: [bold]{output.base_branch}[/]")
+    if output.kind == "proceed" and output.code_change and output.demo_plan:
+        lines.append("demo: [bold]recorded before review[/]")
     if output.reasoning:
         lines.append(f"\n{output.reasoning}")
     if output.comment_body and output.kind != "proceed":
@@ -145,6 +148,10 @@ def parse_triage_output(result: AgentResult) -> TriageOutput | None:
 def parse_fixer_output(result: AgentResult) -> IssueFixerOutput | None:
     """Extract a validated ``IssueFixerOutput`` from an ``AgentResult``."""
     return _parse_output(result, IssueFixerOutput)
+
+
+def parse_demo_output(result: AgentResult) -> DemoOutput | None:
+    return _parse_output(result, DemoOutput)
 
 
 def _parse_output[T: BaseModel](result: AgentResult, model: type[T]) -> T | None:

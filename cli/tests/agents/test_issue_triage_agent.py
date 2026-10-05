@@ -179,3 +179,22 @@ async def test_triage_agent_all_7_outcomes_reachable(tmp_path: Path, kind: str) 
     assert result.structured is not None
     output = TriageOutput.model_validate(result.structured)
     assert output.kind == kind
+
+
+def test_triage_prompt_only_mentions_demos_when_enabled() -> None:
+    from src.agents.issue import TriageAgent, TriageInput
+
+    assert "demo_plan" in TriageAgent()._render(TriageInput(demo_enabled=True))
+    assert "demo" not in TriageAgent()._render(TriageInput(demo_enabled=False)).lower()
+
+
+def test_fixer_prompt_only_mentions_demos_with_a_demo_dir() -> None:
+    from src.agents.issue import IssueFixerAgent, IssueFixerInput
+
+    repos = [{"name": "app", "path": "/w/app", "ci_bypass_path": "/w/app.ci-bypass"}]
+    with_demo = IssueFixerAgent()._render(
+        IssueFixerInput(repos=repos, demo_dir="/tmp/jeanclode-demo")
+    )
+    without = IssueFixerAgent()._render(IssueFixerInput(repos=repos))
+    assert "/tmp/jeanclode-demo/bypass" in with_demo
+    assert "demo" not in without.lower()

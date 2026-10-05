@@ -31,6 +31,7 @@ from api.plugins.container.dispatch_inputs import (
     LLMSelectionResult,
     add_agent_tooling_hosts,
     add_connectors_to_inputs,
+    add_demo_to_inputs,
     add_git_platform_to_inputs,
     add_llm_to_inputs,
     add_memory_to_inputs,
@@ -354,6 +355,7 @@ async def launch_issue_resolve_container(
         repo_token_override_encrypted=(repo.auth_token_encrypted if repo else None),
     )
     add_agent_tooling_hosts(inputs)
+    add_demo_to_inputs(inputs, git_org_id=org_id)
 
     plugins = await resolve_third_party_plugins_env_for_org(
         org_id, workflow=ExecutionWorkflow.ISSUE_RESOLVE.value
@@ -478,6 +480,7 @@ async def launch_respond_container(
         repo_token_override_encrypted=(repo.auth_token_encrypted if repo else None),
     )
     add_agent_tooling_hosts(inputs)
+    add_demo_to_inputs(inputs, git_org_id=org_id)
 
     add_notify_to_inputs(inputs, git_org_id=org_id)
 

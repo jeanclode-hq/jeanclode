@@ -21,6 +21,10 @@ a turn that pushed code, before the planner is allowed to finalize (see
 ``agents.hooks``). The planner may well have already replied by then —
 that's deliberate, the relabel below sends the fixed push back through
 review anyway, and a still-red result never blocks it.
+
+On a PR/MR a third one is the demo gate: a final output carrying a
+``demo_plan`` records the branch working (see ``.demo``), and the outcome
+goes into the description before the relabel, so ``pr_summary`` keeps it.
 """
 
 from __future__ import annotations
@@ -31,6 +35,8 @@ from typing import ClassVar
 from claude_agent_sdk import HookMatcher
 from claude_agent_sdk.types import HookEvent
 
+from src.activities.demo import DEMO_START, post_demos
+from src.activities.git import WorktreePath
 from src.activities.notify import post_ready_notice
 from src.activities.respond import (
     MentionContext,
@@ -42,8 +48,10 @@ from src.agents.respond import PlannerAgent, PlannerInput
 from src.runtime.context import RunContext
 from src.runtime.events import Panel
 from src.workflows.base import register
+from src.workflows.jeanclode_respond.demo import RespondDemo
 from src.workflows.jeanclode_respond.utils import (
     branch_was_pushed,
+    exclude_context_dir,
     load_mention_context,
     load_pr_snapshot,
     parse_planner_output,
@@ -97,6 +105,8 @@ class JeanclodeRespondWorkflow:
             else None
         )
 
+        if mention.pr:
+            exclude_context_dir(ctx.cwd)
         planner_input = self._planner_input(mention, ctx)
         pretool: list[HookMatcher] = []
         # Deterministic guard: the planner types its own `glab` commands, and
@@ -108,8 +118,25 @@ class JeanclodeRespondWorkflow:
         # Passing starting_sha as the placeholder is what makes this no-op on a
         # turn that pushed nothing — the hook skips its check when HEAD hasn't moved.
         ci_pr = pr_ref_from_mention(mention, branch)
+        demo = (
+            RespondDemo(
+                WorktreePath(path=ctx.cwd, branch=branch),
+                starting_sha,
+                mention,
+                ci_pr.url,
+                planner_input.pr_description,
+                planner_input.diff,
+                planner_input.discussions,
+                ctx=ctx,
+            )
+            if ci_pr and ctx.demo_enabled
+            else None
+        )
         if ci_pr:
-            pretool.append(require_ci_pass_hook(ctx.cwd, branch, starting_sha, ci_pr, ctx=ctx))
+            ci_hook = require_ci_pass_hook(ctx.cwd, branch, starting_sha, ci_pr, ctx=ctx)
+            pretool.append(demo.ci_gates.track(ci_hook) if demo else ci_hook)
+        if demo:
+            pretool.append(demo.hook())
         extra_hooks: dict[HookEvent, list[HookMatcher]] | None = (
             {"PreToolUse": pretool} if pretool else None
         )
@@ -129,6 +156,13 @@ class JeanclodeRespondWorkflow:
                 style="cyan",
             )
         )
+
+        demo_outcome = ""
+        if demo and ci_pr and demo.plan:
+            # Before the relabel: pr_summary has to find the demo block to keep it.
+            demo_outcome = post_demos(
+                {mention.repo: ci_pr}, demo.state, ctx=ctx, cwds={mention.repo: ctx.cwd}
+            )[mention.repo]
 
         relabeled = False
         notified = False
@@ -178,6 +212,7 @@ class JeanclodeRespondWorkflow:
                 "actions_taken": output.actions_taken,
                 "relabeled": relabeled,
                 "notified": notified,
+                **({"demo": demo_outcome} if demo_outcome else {}),
             },
         )
 
@@ -209,4 +244,6 @@ class JeanclodeRespondWorkflow:
             pr_description=pr_description,
             diff=diff,
             discussions=discussions,
+            demo_enabled=ctx.demo_enabled,
+            has_demo=DEMO_START in pr_description,
         )

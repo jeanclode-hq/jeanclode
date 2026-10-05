@@ -61,6 +61,7 @@ def _triage(
     findings: str = "",
     code_change: bool = True,
     base_branch: str = "",
+    demo_plan: str | None = None,
 ) -> AgentResult:
     return AgentResult(
         text="",
@@ -72,6 +73,7 @@ def _triage(
             findings=findings,
             code_change=code_change,
             base_branch=base_branch,
+            demo_plan=demo_plan,
         ).model_dump(),
     )
 
@@ -434,6 +436,101 @@ async def test_proceed_invokes_fixer_with_triage_findings(ctx: RunContext) -> No
             "ci_bypass_path": f"{expected_path}.ci-bypass",
         }
     ]
+
+
+def _fixer_capturing(calls: list[tuple[Any, dict[str, Any]]]) -> AsyncMock:
+    async def fixer_side(inp: Any, _run_ctx: Any, **kwargs: Any) -> AgentResult:
+        calls.append((inp, kwargs))
+        return AgentResult(text="")
+
+    return AsyncMock(side_effect=fixer_side)
+
+
+async def test_demo_plan_adds_the_demo_gate_after_ci_and_posts_before_labels(
+    ctx: RunContext,
+) -> None:
+    calls: list[tuple[Any, dict[str, Any]]] = []
+    order: list[str] = []
+
+    def _post_demos(prs: dict[str, Any], *_a: Any, **_k: Any) -> dict[str, str]:
+        order.append("post_demos")
+        return dict.fromkeys(prs, "posted")
+
+    with (
+        _patch_workflow(triage=_triage(kind="proceed", demo_plan="open /orders, click Save")),
+        patch(
+            "src.workflows.issue_resolve.runner.IssueFixerAgent",
+            return_value=MagicMock(invoke=_fixer_capturing(calls)),
+        ),
+        patch("src.workflows.issue_resolve.runner.fresh_demo_dir"),
+        patch(
+            "src.workflows.issue_resolve.runner.post_demos",
+            side_effect=_post_demos,
+        ),
+        patch(
+            "src.workflows.issue_resolve.runner.attach_label",
+            side_effect=lambda *_a, **_k: order.append("attach_label"),
+        ),
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+
+    fixer_input, kwargs = calls[0]
+    assert fixer_input.demo_dir == "/tmp/jeanclode-demo"
+    pretool = kwargs["extra_hooks"]["PreToolUse"]
+    assert [m.timeout for m in pretool][-1] > pretool[0].timeout
+    assert order == ["post_demos", "attach_label", "attach_label"]
+    assert result.data["repos"][_PRIMARY_NAME]["demo"] == "posted"
+
+
+async def test_demo_switch_off_runs_as_without_demos(ctx: RunContext) -> None:
+    calls: list[tuple[Any, dict[str, Any]]] = []
+    triage_inputs: list[Any] = []
+
+    async def triage_side(inp: Any, _ctx: Any, **_k: Any) -> AgentResult:
+        triage_inputs.append(inp)
+        return _triage(kind="proceed", demo_plan="open /orders")
+
+    off = ctx.model_copy(update={"demo_enabled": False})
+    with (
+        _patch_workflow(triage=_triage(kind="proceed")),
+        patch(
+            "src.workflows.issue_resolve.runner.TriageAgent",
+            return_value=MagicMock(invoke=AsyncMock(side_effect=triage_side)),
+        ),
+        patch(
+            "src.workflows.issue_resolve.runner.IssueFixerAgent",
+            return_value=MagicMock(invoke=_fixer_capturing(calls)),
+        ),
+        patch("src.workflows.issue_resolve.runner.fresh_demo_dir") as fresh,
+        patch("src.workflows.issue_resolve.runner.post_demos") as post_demos,
+    ):
+        await IssueResolveWorkflow().run(off)
+
+    assert triage_inputs[0].demo_enabled is False
+    fixer_input, kwargs = calls[0]
+    assert fixer_input.demo_dir == ""
+    assert len(kwargs["extra_hooks"]["PreToolUse"]) == 1
+    fresh.assert_not_called()
+    post_demos.assert_not_called()
+
+
+async def test_no_demo_plan_means_no_demo_gate(ctx: RunContext) -> None:
+    calls: list[tuple[Any, dict[str, Any]]] = []
+    with (
+        _patch_workflow(triage=_triage(kind="proceed")),
+        patch(
+            "src.workflows.issue_resolve.runner.IssueFixerAgent",
+            return_value=MagicMock(invoke=_fixer_capturing(calls)),
+        ),
+        patch("src.workflows.issue_resolve.runner.post_demos") as post_demos,
+    ):
+        result = await IssueResolveWorkflow().run(ctx)
+
+    fixer_input, kwargs = calls[0]
+    assert fixer_input.demo_dir == ""
+    assert len(kwargs["extra_hooks"]["PreToolUse"]) == 1
+    post_demos.assert_not_called()
+    assert "demo" not in result.data["repos"][_PRIMARY_NAME]
 
 
 async def test_proceed_opens_pr_against_triage_base_branch(ctx: RunContext) -> None:

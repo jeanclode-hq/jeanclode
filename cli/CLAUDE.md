@@ -68,9 +68,9 @@ env vars that platform's tools need.
 |---|---|
 | `sentry_fix` | fetch → parallel triage (triage *is* the planner) → deterministic filter/route → synthesis when several issues are actionable → per group: worktree + PR per target repo, one fixer session across them |
 | `code_review` | IssueExplorer → 2× Analyzer (parallel) → Synthesizer → Deduplicator → FactChecker → Guardrail → Styler → post inline comments |
-| `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit; with `code_change=False` the fixer answers in an issue comment instead |
+| `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit, then the demo gate when triage set `demo_plan`; with `code_change=False` the fixer answers in an issue comment instead |
 | `pr_summary` | Summarizer → Parser, File Summarizer started 3s after the Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
-| `jeanclode_respond` | one planner agent acting via Bash, plus two deterministic post-turn checks against provider state |
+| `jeanclode_respond` | one planner agent acting via Bash, the demo gate when its output carries a `demo_plan`, plus two deterministic post-turn checks against provider state |
 | `memory_curate` | due entries in batches of 20 → one curator session per batch (memory tool only, no built-in tools) → mark the batch curated; every due entry in one run |
 | `_smoke/echo` | internal smoke test, no external calls |
 
@@ -104,6 +104,10 @@ sessions:
   own CI has to be green (or absent, or already red on the default branch)
   before the fixer finalizes. Bounded at six rounds; a bypass marker file
   lets the agent opt out when the failure isn't its to fix.
+- `require_demo_hook` — once CI lets the fixer through, the demo agent has
+  to record the UI change working (see "Demo gate" below).
+- `forbid_publishing_hook` — the demo agent never commits, pushes, stashes
+  or touches a PR/MR.
 - `require_threaded_gitlab_reply_hook` — keeps a respond reply inside the
   discussion the mention came from.
 
@@ -130,6 +134,62 @@ clone with `fixer_answer.md` (picked by `IssueFixerInput.code_change`). Its
 normal fix path a non-empty `comment_body` is posted too, for issues that
 want both. The push decision stays with triage, never the fixer, so
 `require_pushed_fix_hook` keeps guarding real fixes.
+
+### Demo gate
+
+Per org, the git integration's "Demo videos" switch (`demo_videos`, on by
+default) gates all of it: off, the backend sends `JEANCLODE_DEMO_ENABLED=0`
+(`ctx.demo_enabled`), triage's prompt drops the demo section, and the run
+is exactly as without demos. On, triage's `demo_plan` (`None` = no demo)
+switches it on for `issue_resolve`.
+`require_demo_hook` is its own `PreToolUse(StructuredOutput)` matcher with
+its own timeout, registered after the CI gates. The CLI runs every matching
+hook in parallel, so `GateResults` wraps the CI gates and the demo hook
+waits for their answers on the same call, standing down if any denied it.
+
+Each round needs a clean checkout; a dirty one goes back to the fixer to
+commit or delete (it counts as a round). Then: pop the previous round's demo setup
+(`git stash`, message `jeanclode-demo`), run `DemoAgent` in its own session
+on the run's default credential, then stop every process the round started and stash
+whatever it left so the fixer gets its clean tree back. `ok` passes; `broken` / `unavailable` /
+`nothing_to_show` are denied back to the fixer with the evidence and
+screenshot paths, and so is a demo agent that crashes or runs past
+`DEMO_AGENT_TIMEOUT_S` (the fixer retries or bypasses). Six rounds at most; the fixer stands it down by writing a
+reason to `/tmp/jeanclode-demo/bypass`, and leaves the demo agent hints in
+`/tmp/jeanclode-demo/hints.md`. The demo agent captures with
+`src/agents/demo/browser.py` (Playwright, Chromium headless shell, only
+`localhost` resolves) and keeps per-repo launch recipes in memory. It picks
+the medium (`media`): screenshots of the real page for a static change, a
+video only for an interaction, cut to start at the script's `ready(page)`
+(or the first page load) so it doesn't open on the app loading. Setup it
+keeps outside the checkouts goes in `/tmp/jeanclode-demo/setup/`, kept
+across rounds. Only the screenshots or video are posted, never the setup.
+
+After the fixer, `post_demos` writes the last `ok` round into the PR/MR of
+the repo the demo agent launched the app from (`app_repo`; every PR when
+it's unknown or has none), and a link to it into the fix's other PRs, inside `<!-- jeanclode:demo -->…<!-- /jeanclode:demo -->`
+(GitLab: project uploads; GitHub: the PNGs, or the video as a GIF, in a
+parentless commit under `refs/jeanclode/demo-<n>`), before the review/summary labels. `pr_summary`
+lifts that block out in code before the model sees the description and puts
+it back on top.
+
+`jeanclode_respond` runs the same gate on a PR/MR mention
+(`workflows/jeanclode_respond/demo.py`). The planner arms it by returning a
+`demo_plan` (with `demo` in `actions_taken`): when someone asks for a demo,
+alone or with a change, or when it pushed a UI change to a PR/MR whose
+description already has a demo block (`PlannerInput.has_demo`). The hook
+reads the plan off the `StructuredOutput` call itself, so a turn without one
+finishes as before. The checkout is the PR's own clone (`WorktreePath` with
+no placeholder), the demo agent gets `source="pr"`, and verdicts go back to
+the planner. `post_demos` then writes the outcome before the relabel. On an
+issue the planner never demos: it posts `@jeanclode-bot add a demo of this` on
+the issue's open PR/MR (the one self-mention it may write), or asks whether
+to start resolve. Respond excludes `.context/` through `.git/info/exclude`, so
+the cache neither dirties the gate's checkout nor gets committed.
+
+The root filesystem is read-only at run time, so mise lives under
+`/tmp/mise` (`MISE_*_DIR` in the Dockerfile) and the demo prompt keeps every
+other install under `/tmp`.
 
 ### Fixer LLM choice
 
@@ -163,7 +223,8 @@ cd cli && uv run pytest -v
 `tests/eval/` holds LLM-judged agent evals; they are slower and hit the
 API, so they're separate from the unit suite (`make eval`).
 `tests/eval/agents/test_triage_fixer_llm.py` covers the fixer LLM choice,
-`tests/eval/agents/test_triage_code_change.py` the `code_change` decision.
+`tests/eval/agents/test_triage_code_change.py` the `code_change` decision,
+`tests/eval/agents/test_respond_planner_demo.py` the respond planner's `demo` action.
 `tests/eval/agents/test_memory_curator.py` runs the curator against an
 in-memory fake of the memory API (`tests/eval/memory_store.py`) and asserts
 on what's left in the store.

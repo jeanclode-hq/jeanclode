@@ -13,7 +13,7 @@ import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from claude_agent_sdk import ResultMessage
@@ -25,6 +25,7 @@ from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
 from src.runtime.events import AgentStart, Event, Panel
 from src.workflows import WORKFLOWS, find_workflow
+from src.workflows.jeanclode_respond.demo import RespondDemo
 from src.workflows.jeanclode_respond.runner import JeanclodeRespondWorkflow
 from src.workflows.jeanclode_respond.utils import (
     load_mention_context,
@@ -370,9 +371,10 @@ def _write_gitlab_issue_context(cwd: Path, *, thread_id: str) -> None:
     (base / "mention_body").write_text("@jeanclode-bot how are you\n")
 
 
-async def _run_capturing_options(tmp_path: Path) -> Any:
+async def _run_capturing_options(tmp_path: Path, *, demo_enabled: bool = True) -> Any:
     """Run the workflow, returning the ``ClaudeAgentOptions`` the planner got."""
     ctx, _ = _ctx(tmp_path)
+    ctx = ctx.model_copy(update={"demo_enabled": demo_enabled})
     captured: list[Any] = []
     sq = _ScriptedQuery()
     sq.add("JeanClode", {"actions_taken": ["handle"], "summary": "Replied."})
@@ -630,10 +632,13 @@ def test_pr_ref_from_mention_needs_a_pr_and_a_branch() -> None:
     assert pr_ref_from_mention(pr, "") is None
 
 
+def _structured_output_matchers(options: Any) -> list[Any]:
+    return [m for m in options.hooks["PreToolUse"] if m.matcher == "StructuredOutput"]
+
+
 def _ci_hook(options: Any) -> Any:
-    matchers = [m for m in options.hooks["PreToolUse"] if m.matcher == "StructuredOutput"]
-    assert len(matchers) == 1
-    return matchers[0].hooks[0]
+    # The CI gate comes first; the demo gate after it waits on its answer.
+    return _structured_output_matchers(options)[0].hooks[0]
 
 
 async def _fire_ci_hook(hook: Any) -> dict:
@@ -654,6 +659,22 @@ async def test_pr_mention_wires_the_ci_gate(tmp_path: Path) -> None:
     _write_context(tmp_path)
     options = await _run_capturing_options(tmp_path)
     assert _ci_hook(options) is not None
+
+
+@pytest.mark.asyncio
+async def test_pr_mention_wires_the_demo_gate_after_the_ci_gate(tmp_path: Path) -> None:
+    _write_context(tmp_path)
+    options = await _run_capturing_options(tmp_path)
+    timeouts = [m.timeout for m in _structured_output_matchers(options)]
+    assert len(timeouts) == 2
+    assert timeouts[1] > timeouts[0]
+
+
+@pytest.mark.asyncio
+async def test_no_demo_gate_when_the_org_turned_demos_off(tmp_path: Path) -> None:
+    _write_context(tmp_path)
+    options = await _run_capturing_options(tmp_path, demo_enabled=False)
+    assert len(_structured_output_matchers(options)) == 1
 
 
 @pytest.mark.asyncio
@@ -707,3 +728,45 @@ async def test_ci_gate_lets_a_green_pipeline_through(tmp_path: Path) -> None:
         patch("src.agents.hooks.check_ci", return_value=green),
     ):
         assert await _fire_ci_hook(hook) == {}
+
+
+@pytest.mark.asyncio
+async def test_a_requested_demo_is_posted_before_the_relabel(tmp_path: Path) -> None:
+    """pr_summary, which the relabel's review loop leads to, keeps the demo block
+    only if it's already in the description."""
+    _write_context(tmp_path)
+    ctx, _ = _ctx(tmp_path)
+    sq = _ScriptedQuery()
+    sq.add(
+        "JeanClode",
+        {"actions_taken": ["handle", "demo"], "summary": "Fixed and recorded", "demo_plan": "x"},
+    )
+    fake_run, _ = _git_fake_run(tip="new-sha")
+    order: list[str] = []
+
+    def _post_demos(prs: dict[str, Any], *_a: Any, **_k: Any) -> dict[str, str]:
+        order.append("post_demos")
+        return dict.fromkeys(prs, "posted")
+
+    def _relabel(*_a: Any, **_k: Any) -> Any:
+        order.append("relabel")
+        return MagicMock(relabeled=True)
+
+    real_init = RespondDemo.__init__
+
+    def _armed(self: RespondDemo, *a: Any, **k: Any) -> None:
+        real_init(self, *a, **k)
+        self.plan = "x"
+
+    with (
+        patch("src.agents.base.query", side_effect=sq),
+        patch("src.workflows.jeanclode_respond.utils.subprocess.run", side_effect=fake_run),
+        patch.object(RespondDemo, "__init__", _armed),
+        patch("src.workflows.jeanclode_respond.runner.post_demos", side_effect=_post_demos),
+        patch("src.workflows.jeanclode_respond.runner.relabel_pr", side_effect=_relabel),
+    ):
+        result = await JeanclodeRespondWorkflow().run(ctx)
+
+    assert order == ["post_demos", "relabel"]
+    assert result.data["demo"] == "posted"
+    assert result.data["actions_taken"] == ["handle", "demo"]

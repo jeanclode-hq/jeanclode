@@ -17,7 +17,10 @@ classifiers = [
 dependencies = [
     "claude-agent-sdk>=0.2.161",
     "httpx>=0.28.0",
+    "imageio-ffmpeg==0.6.0",
     "jinja2>=3.1.0",
+    # Pinned with PLAYWRIGHT_VERSION in the Dockerfile: the browser it installs must match.
+    "playwright==1.63.0",
     "pydantic>=2.9.0",
     "rich>=13.0.0",
 ]

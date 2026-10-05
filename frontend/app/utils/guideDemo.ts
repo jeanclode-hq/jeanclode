@@ -255,6 +255,7 @@ const gitSettings: GitOrgSettings = {
   notify: { on_ready: [`${MARKER}-alice`, `${MARKER}-bob`] },
   related_repos: { always_include: [repos[3]!.id], pack_subgroup: true, excluded_subgroups: [] },
   manage_project_webhooks: false,
+  demo_videos: true,
 }
 
 const sentrySettings: SentryOrgSettingsOutput = {

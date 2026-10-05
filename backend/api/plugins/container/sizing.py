@@ -36,8 +36,9 @@ logger = logging.getLogger(__name__)
 MARGIN_PER_REPO_MI = 250
 
 # Smallest /tmp ever handed out. With real measurements this is only the
-# backstop for a group whose sizes could not be resolved at all.
-FLOOR_MI = 3072
+# backstop for a group whose sizes could not be resolved at all. Sized for a
+# demo round, whose frontend `node_modules` alone can run ~700MB.
+FLOOR_MI = 5120
 
 
 async def resolve_tmp_size_limit(

@@ -35,6 +35,26 @@ FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates curl unzip && rm -rf /var/lib/apt/lists/*
 
+# Demo gate (issue-resolve). Early and pinned so nodes keep these layers across
+# releases. Chromium headless shell records the demo; PLAYWRIGHT_VERSION must
+# match the `playwright` pin in pyproject.toml, which drives it.
+ARG PLAYWRIGHT_VERSION=1.63.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" && \
+    playwright install --with-deps --only-shell chromium && \
+    pip uninstall -y playwright && \
+    rm -rf /var/lib/apt/lists/* && chmod -R a+rX /ms-playwright
+
+# mise installs whatever Node a repo pins, at run time. No Node is preinstalled:
+# most frontends pin their own, and every other workflow would carry it for nothing.
+# Its dirs are under /tmp: the root filesystem is read-only at run time.
+ARG MISE_VERSION=v2026.10.2
+ENV MISE_DATA_DIR=/tmp/mise \
+    MISE_CONFIG_DIR=/tmp/mise/config \
+    MISE_CACHE_DIR=/tmp/mise/cache \
+    MISE_STATE_DIR=/tmp/mise/state
+RUN curl -fsSL https://mise.run | MISE_VERSION=${MISE_VERSION} MISE_INSTALL_PATH=/usr/local/bin/mise sh
+
 # Bun + Claude Code CLI (SDK spawns claude-code as subprocess)
 ARG BUN_VERSION=1.2.5
 RUN DPKG_ARCH=$(dpkg --print-architecture) && \
@@ -69,7 +89,7 @@ ENV JEANCLODE_CONTAINER_MODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app" \
-    PATH="/app/.venv/bin:${PATH}" \
+    PATH="/app/.venv/bin:/tmp/mise/shims:${PATH}" \
     GH_CONFIG_DIR="/tmp/gh" \
     GLAB_CONFIG_DIR="/tmp/glab"
 
