@@ -24,6 +24,7 @@ class TriageInput(BaseModel):
     issue_title: str = ""
     issue_body: str = ""
     comments: str = ""
+    demo_enabled: bool = True
 
 
 class TriageOutput(BaseModel):
@@ -69,6 +70,10 @@ class TriageOutput(BaseModel):
     fixer_llm_credential: str = ""
     fixer_llm_tier: Literal["high", "heavy"] = "high"
     fixer_llm_reason: str = ""
+    # Populated only for "proceed" with a visible UI change: what the demo
+    # agent should show (pages, steps, data states to fake, what "working"
+    # looks like). None means no demo gate.
+    demo_plan: str | None = None
 
 
 class IssueFixerInput(BaseModel):
@@ -91,6 +96,9 @@ class IssueFixerInput(BaseModel):
     # actually lives.
     repos: list[dict[str, str]] = Field(default_factory=list)
     code_change: bool = True
+    # Set when triage asked for a demo; the fixer prompt then explains the
+    # demo gate and where hints and the bypass file go.
+    demo_dir: str = ""
 
 
 class IssueFixerOutput(BaseModel):

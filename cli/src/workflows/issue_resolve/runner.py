@@ -55,6 +55,7 @@ from collections.abc import Callable
 from typing import ClassVar
 
 from src.activities.ci_watch import check_ci
+from src.activities.demo import DEMO_DIR, DemoGateState, fresh_demo_dir
 from src.activities.git import (
     PRRef,
     WorktreePath,
@@ -68,7 +69,10 @@ from src.activities.git import (
 )
 from src.activities.issue import IssueContext, fetch_issue_context, post_issue_comment
 from src.agents.hooks import (
+    MAX_DEMO_ROUNDS,
+    GateResults,
     bypass_marker_path,
+    require_demo_hook,
     require_pushed_and_ci_pass_hook,
     require_pushed_fix_hook,
 )
@@ -83,6 +87,7 @@ from src.runtime.context import RunContext
 from src.runtime.events import Panel
 from src.runtime.llm_options import FixerLLMChoice, apply_fixer_llm, resolve_fixer_llm
 from src.workflows.base import register
+from src.workflows.issue_resolve.demo import make_run_demo, post_demos
 from src.workflows.issue_resolve.utils import (
     format_triage_panel,
     issue_branch,
@@ -166,6 +171,7 @@ class IssueResolveWorkflow:
                 issue_title=issue_ctx.issue_title,
                 issue_body=issue_ctx.issue_body,
                 comments=issue_ctx.comments,
+                demo_enabled=ctx.demo_enabled,
             ),
             repo_ctx,
         )
@@ -328,6 +334,8 @@ class IssueResolveWorkflow:
             fixer_cwd = parent_dir if multi else next(iter(worktrees.values())).path
             fixer_ctx = apply_fixer_llm(ctx.with_cwd(fixer_cwd), fixer_llm)
 
+            demo = DemoGateState() if ctx.demo_enabled and triage_output.demo_plan else None
+            ci_gates = GateResults() if demo is not None else None
             stop_hooks = []
             pretool_hooks = []
             for name, _target_ctx in targets:
@@ -338,13 +346,33 @@ class IssueResolveWorkflow:
                 # Stop — a Stop block lands after the schema-bound fixer has
                 # already finalized its turn and the CLI drops it (see
                 # src/agents/hooks.py module docstring / ADR-008).
+                ci_hook = require_pushed_and_ci_pass_hook(
+                    wt.path,
+                    branch,
+                    wt.placeholder_sha,
+                    make_open_pr(name),
+                    ctx=wt_ctx,
+                )
+                pretool_hooks.append(ci_gates.track(ci_hook) if ci_gates else ci_hook)
+            if demo is not None:
+                fresh_demo_dir(DEMO_DIR)
+                # The demo agent runs on the run's default credential, not the fixer's.
+                demo_ctx = ctx.with_cwd(fixer_cwd)
                 pretool_hooks.append(
-                    require_pushed_and_ci_pass_hook(
-                        wt.path,
-                        branch,
-                        wt.placeholder_sha,
-                        make_open_pr(name),
-                        ctx=wt_ctx,
+                    require_demo_hook(
+                        list(worktrees.values()),
+                        make_run_demo(
+                            worktrees,
+                            issue_url,
+                            issue_ctx,
+                            triage_output,
+                            DEMO_DIR,
+                            MAX_DEMO_ROUNDS,
+                            ctx=demo_ctx,
+                        ),
+                        demo,
+                        ctx=demo_ctx,
+                        ci_gates=ci_gates,
                     )
                 )
 
@@ -361,6 +389,7 @@ class IssueResolveWorkflow:
                         }
                         for n, _ in targets
                     ],
+                    demo_dir=str(DEMO_DIR) if demo is not None else "",
                 ),
                 fixer_ctx,
                 extra_hooks={"Stop": stop_hooks, "PreToolUse": pretool_hooks},
@@ -397,9 +426,20 @@ class IssueResolveWorkflow:
                     continue
                 pr = prs.get(name) or make_open_pr(name)()
                 ci_result = await asyncio.to_thread(check_ci, pr, cwd=wt.path)
+                repo_results[name] = {"pr_url": pr.url, "ci": ci_result.outcome}
+
+            pushed_prs = {name: prs[name] for name in repo_results}
+            if demo is not None:
+                # Before the labels: pr_summary has to find the demo block to keep it.
+                outcomes = post_demos(
+                    pushed_prs, demo, ctx=ctx, cwds={n: worktrees[n].path for n in pushed_prs}
+                )
+                for name, outcome in outcomes.items():
+                    repo_results[name]["demo"] = outcome
+            for name, pr in pushed_prs.items():
+                wt_ctx = ctx.with_cwd(worktrees[name].path)
                 attach_label(pr, REVIEW_LABEL, ctx=wt_ctx)
                 attach_label(pr, SUMMARY_LABEL, ctx=wt_ctx)
-                repo_results[name] = {"pr_url": pr.url, "ci": ci_result.outcome}
 
             pr_urls = [r["pr_url"] for r in repo_results.values()]
 

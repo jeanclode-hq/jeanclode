@@ -91,6 +91,9 @@ const settingsMutation = useUpdateOrgSettingsMutation()
 const manageProjectWebhooks = computed(
   () => (settings.value as { manage_project_webhooks?: boolean } | undefined)?.manage_project_webhooks ?? false,
 )
+const demoVideos = computed(
+  () => (settings.value as { demo_videos?: boolean } | undefined)?.demo_videos ?? true,
+)
 
 // -- Who can trigger @jeanclode-bot --
 // Mirrors GitHub/GitLab's own "needs write/Developer+ access to trigger CI
@@ -203,6 +206,17 @@ function addAlwaysInclude(repoId: string) {
 
 function removeAlwaysInclude(repoId: string) {
   updateRelatedRepos({ always_include: alwaysInclude.value.filter((id) => id !== repoId) })
+}
+
+async function updateDemoVideos(value: boolean) {
+  try {
+    await settingsMutation.mutateAsync({
+      orgId: props.org.id,
+      settings: { demo_videos: value },
+    })
+  } catch {
+    toast.add({ title: 'Failed to save', description: 'Could not update settings', color: 'error' })
+  }
 }
 
 async function updateManageProjectWebhooks(value: boolean) {
@@ -686,6 +700,35 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
             {{ oversizedSubgroupCount === 1 ? 'subgroup is' : 'subgroups are' }}
             already over the {{ maxPackSize }}-repository limit and never packed.
           </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Demo videos (issue-resolve records UI fixes before review) -->
+    <section
+      v-if="settings"
+      data-guide="gitDemoVideos"
+    >
+      <h4 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
+        Demo videos
+      </h4>
+      <div class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden">
+        <div class="px-4 py-3.5 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm text-neutral-900 dark:text-neutral-100">
+              Record UI fixes before review
+            </p>
+            <p class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+              When an issue fix changes the UI, Jeanclode runs the app with fake data and puts a
+              short video of the change working in the {{ org.provider === 'github' ? 'PR' : 'MR' }} description.
+            </p>
+          </div>
+          <USwitch
+            :model-value="demoVideos"
+            size="sm"
+            class="mt-0.5 shrink-0"
+            @update:model-value="updateDemoVideos($event)"
+          />
         </div>
       </div>
     </section>

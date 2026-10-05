@@ -68,7 +68,7 @@ env vars that platform's tools need.
 |---|---|
 | `sentry_fix` | fetch → parallel triage (triage *is* the planner) → deterministic filter/route → synthesis when several issues are actionable → per group: worktree + PR per target repo, one fixer session across them |
 | `code_review` | IssueExplorer → 2× Analyzer (parallel) → Synthesizer → Deduplicator → FactChecker → Guardrail → Styler → post inline comments |
-| `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit; with `code_change=False` the fixer answers in an issue comment instead |
+| `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit, then the demo gate when triage set `demo_plan`; with `code_change=False` the fixer answers in an issue comment instead |
 | `pr_summary` | Summarizer → Parser, File Summarizer started 3s after the Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
 | `jeanclode_respond` | one planner agent acting via Bash, plus two deterministic post-turn checks against provider state |
 | `memory_curate` | due entries in batches of 20 → one curator session per batch (memory tool only, no built-in tools) → mark the batch curated; every due entry in one run |
@@ -104,6 +104,10 @@ sessions:
   own CI has to be green (or absent, or already red on the default branch)
   before the fixer finalizes. Bounded at six rounds; a bypass marker file
   lets the agent opt out when the failure isn't its to fix.
+- `require_demo_hook` — once CI lets the fixer through, the demo agent has
+  to record the UI change working (see "Demo gate" below).
+- `forbid_publishing_hook` — the demo agent never commits, pushes, stashes
+  or touches a PR/MR.
 - `require_threaded_gitlab_reply_hook` — keeps a respond reply inside the
   discussion the mention came from.
 
@@ -130,6 +134,39 @@ clone with `fixer_answer.md` (picked by `IssueFixerInput.code_change`). Its
 normal fix path a non-empty `comment_body` is posted too, for issues that
 want both. The push decision stays with triage, never the fixer, so
 `require_pushed_fix_hook` keeps guarding real fixes.
+
+### Demo gate
+
+Per org, the git integration's "Demo videos" switch (`demo_videos`, on by
+default) gates all of it: off, the backend sends `JEANCLODE_DEMO_ENABLED=0`
+(`ctx.demo_enabled`), triage's prompt drops the demo section, and the run
+is exactly as without demos. On, triage's `demo_plan` (`None` = no demo)
+switches it on for `issue_resolve`.
+`require_demo_hook` is its own `PreToolUse(StructuredOutput)` matcher with
+its own timeout, registered after the CI gates. The CLI runs every matching
+hook in parallel, so `GateResults` wraps the CI gates and the demo hook
+waits for their answers on the same call, standing down if any denied it.
+
+Each round needs a clean checkout; a dirty one goes back to the fixer to
+commit or delete (it counts as a round). Then: pop the previous round's demo setup
+(`git stash`, message `jeanclode-demo`), run `DemoAgent` in its own session
+on the run's default credential, then stash whatever it left so the fixer
+gets its clean tree back. `ok` passes; `broken` / `unavailable` /
+`nothing_to_show` are denied back to the fixer with the evidence and
+screenshot paths, and so is a demo agent that crashes or runs past
+`DEMO_AGENT_TIMEOUT_S` (the fixer retries or bypasses). Six rounds at most; the fixer stands it down by writing a
+reason to `/tmp/jeanclode-demo/bypass`, and leaves the demo agent hints in
+`/tmp/jeanclode-demo/hints.md`. The demo agent records with
+`src/agents/demo/browser.py` (Playwright, Chromium headless shell, only
+`localhost` resolves) and keeps per-repo launch recipes in memory.
+
+After the fixer, `post_demos` writes the last `ok` round into the PR/MR of
+the repo the demo agent launched the app from (`app_repo`; every PR when
+it's unknown or has none), and a link to it into the fix's other PRs, inside `<!-- jeanclode:demo -->…<!-- /jeanclode:demo -->`
+(GitLab: project upload; GitHub: a GIF in a parentless commit under
+`refs/jeanclode/demo-<n>`), before the review/summary labels. `pr_summary`
+lifts that block out in code before the model sees the description and puts
+it back on top.
 
 ### Fixer LLM choice
 

@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 
 from api.plugins.container.dispatch_inputs import (
+    GITLAB_NPM_PATH_PATTERN,
     DispatchInputs,
     add_connectors_to_inputs,
     add_gitlab_workspace_credentials,
@@ -17,7 +18,11 @@ from api.plugins.container.dispatch_inputs import (
     add_plugin_marketplace_credentials,
     resolve_memory_workspace_id,
 )
-from api.plugins.container.security_proxy import CredentialKey, build_proxy_spec
+from api.plugins.container.security_proxy import (
+    CredentialKey,
+    UpstreamCredential,
+    build_proxy_spec,
+)
 
 _ORG_BY_ID = "api.database.organization.db_get_org_by_id"
 _ORGS_BY_WS = "api.database.organization.db_get_orgs_by_workspace"
@@ -62,6 +67,11 @@ def _make_app() -> MagicMock:
 
 
 @pytest.mark.asyncio
+def _scoped(inputs: DispatchInputs) -> list[UpstreamCredential]:
+    """The per-namespace/per-project rules, without the npm registry's pattern rule."""
+    return [u for u in inputs.upstreams if u.path_pattern is None]
+
+
 async def test_unrelated_org_in_same_workspace_is_excluded() -> None:
     """An org sharing only a workspace_id — no hierarchy or repo-link relation
     to the trigger org — must not be pulled into the dispatch.
@@ -89,7 +99,7 @@ async def test_unrelated_org_in_same_workspace_is_excluded() -> None:
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    prefixes = {u.path_prefix for u in inputs.upstreams}
+    prefixes = {u.path_prefix for u in _scoped(inputs)}
     assert prefixes == {"/company/backend/"}
 
 
@@ -123,7 +133,7 @@ async def test_org_related_via_hierarchy_is_included() -> None:
         image="img",
         execution_id="exec-1",
     )
-    upstreams = json.loads(spec.config_json)["upstreams"]
+    upstreams = [u for u in json.loads(spec.config_json)["upstreams"] if "path_pattern" not in u]
     # 2 (host, prefix) pairs: each coalesces PRIVATE-TOKEN + Authorization into one entry
     assert len(upstreams) == 2
     prefixes = {u["path_prefix"] for u in upstreams}
@@ -177,7 +187,7 @@ async def test_org_related_via_explicit_repo_link_is_included() -> None:
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    prefixes = {u.path_prefix for u in inputs.upstreams}
+    prefixes = {u.path_prefix for u in _scoped(inputs)}
     assert prefixes == {
         "/company/backend/",
         "/design-team/assets/icons/",
@@ -235,7 +245,7 @@ async def test_linked_repos_owning_org_other_repos_are_not_pulled_in() -> None:
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    prefixes = {u.path_prefix for u in inputs.upstreams}
+    prefixes = {u.path_prefix for u in _scoped(inputs)}
     assert prefixes == {
         "/team-platform/",
         "/orders-api2/",
@@ -258,8 +268,8 @@ async def test_no_workspace_id_uses_trigger_org_only() -> None:
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    assert len(inputs.upstreams) == 2
-    assert all(u.path_prefix == "/solo/project/" for u in inputs.upstreams)
+    assert len(_scoped(inputs)) == 2
+    assert all(u.path_prefix == "/solo/project/" for u in _scoped(inputs))
 
 
 @pytest.mark.asyncio
@@ -308,8 +318,8 @@ async def test_org_with_no_token_is_skipped() -> None:
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
     # Only the trigger org's 2 upstreams (tokenless_org has no repos → skipped)
-    assert len(inputs.upstreams) == 2
-    assert all(u.path_prefix == "/ns/a/" for u in inputs.upstreams)
+    assert len(_scoped(inputs)) == 2
+    assert all(u.path_prefix == "/ns/a/" for u in _scoped(inputs))
 
 
 @pytest.mark.asyncio
@@ -349,8 +359,8 @@ async def test_workspace_lookup_includes_placeholder_orgs() -> None:
 
     assert captured["require_token"] is False
     # The placeholder org's own repo token must still surface as credentials.
-    assert len(inputs.upstreams) == 2
-    assert all(u.path_prefix == "/jdoe/orders-api/" for u in inputs.upstreams)
+    assert len(_scoped(inputs)) == 2
+    assert all(u.path_prefix == "/jdoe/orders-api/" for u in _scoped(inputs))
 
 
 @pytest.mark.asyncio
@@ -381,16 +391,16 @@ async def test_repo_level_token_also_gets_numeric_id_prefix_entry() -> None:
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    prefixes = {u.path_prefix for u in inputs.upstreams}
+    prefixes = {u.path_prefix for u in _scoped(inputs)}
     assert prefixes == {"/jdoe/webshop/", "/api/v4/projects/252/"}
     for prefix in prefixes:
-        headers = {u.header for u in inputs.upstreams if u.path_prefix == prefix}
+        headers = {u.header for u in _scoped(inputs) if u.path_prefix == prefix}
         assert headers == {"PRIVATE-TOKEN", "Authorization"}
 
     spec = build_proxy_spec(
         secret_env=inputs.secrets, upstreams=inputs.upstreams, image="img", execution_id="exec-1"
     )
-    upstreams = json.loads(spec.config_json)["upstreams"]
+    upstreams = [u for u in json.loads(spec.config_json)["upstreams"] if "path_pattern" not in u]
     # Each prefix gets its own ${VAR} secret reference, but every one must
     # resolve to the same underlying repo token.
     tokens = {
@@ -425,8 +435,8 @@ async def test_repo_without_external_id_gets_no_numeric_id_prefix_entry() -> Non
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    assert len(inputs.upstreams) == 2
-    assert all(u.path_prefix == "/jdoe/webshop/" for u in inputs.upstreams)
+    assert len(_scoped(inputs)) == 2
+    assert all(u.path_prefix == "/jdoe/webshop/" for u in _scoped(inputs))
 
 
 @pytest.mark.asyncio
@@ -456,7 +466,7 @@ async def test_org_level_token_gets_per_repo_numeric_id_entries_but_not_redundan
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    prefixes = {u.path_prefix for u in inputs.upstreams}
+    prefixes = {u.path_prefix for u in _scoped(inputs)}
     assert prefixes == {
         "/company/backend/",
         "/api/v4/projects/10/",
@@ -466,7 +476,7 @@ async def test_org_level_token_gets_per_repo_numeric_id_entries_but_not_redundan
     spec = build_proxy_spec(
         secret_env=inputs.secrets, upstreams=inputs.upstreams, image="img", execution_id="exec-1"
     )
-    upstreams = json.loads(spec.config_json)["upstreams"]
+    upstreams = [u for u in json.loads(spec.config_json)["upstreams"] if "path_pattern" not in u]
     # Each prefix gets its own ${VAR} secret reference, but every one must
     # resolve to the same underlying org token.
     tokens = {
@@ -510,7 +520,7 @@ async def test_many_repos_same_org_token_writes_secret_once_not_per_repo() -> No
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
     # 1 namespace prefix + 300 numeric-id prefixes = 301 upstream rules...
-    assert len(inputs.upstreams) == 301 * 2  # PRIVATE-TOKEN + Authorization each
+    assert len(_scoped(inputs)) == 301 * 2  # PRIVATE-TOKEN + Authorization each
     # ...but the Secret itself holds the token exactly once.
     assert len(inputs.secrets) == 2
 
@@ -536,7 +546,7 @@ async def test_numeric_external_org_id_still_yields_namespace_prefixes() -> None
         inputs = DispatchInputs()
         await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
 
-    prefixes = {u.path_prefix for u in inputs.upstreams}
+    prefixes = {u.path_prefix for u in _scoped(inputs)}
     assert "/1114/" not in prefixes
     assert prefixes == {
         "/team-platform/orders-api/",
@@ -679,7 +689,7 @@ async def test_gitlab_token_placeholder_set_in_public_env() -> None:
 
     assert inputs.public_env.get("GITLAB_TOKEN") == "proxy-injected"
     # Proxy upstreams are unchanged — injection still goes through GITLAB_TOKEN_0
-    assert all(u.path_prefix is not None for u in inputs.upstreams)
+    assert all(u.path_prefix is not None for u in _scoped(inputs))
 
 
 @pytest.mark.asyncio
@@ -1704,3 +1714,101 @@ def test_add_llm_to_inputs_env_var_path_omits_model_env_when_unconfigured():
 
     assert "JEANCLODE_MODEL" not in inputs.public_env
     assert "JEANCLODE_SMALL_MODEL" not in inputs.public_env
+
+
+async def test_trigger_org_token_reads_the_npm_registry_get_only() -> None:
+    trigger_org = _make_org(external_org_id="company", workspace_id=uuid4())
+    app = _make_app()
+    with (
+        patch("api.plugins.container.dispatch_inputs.get_current_app", return_value=app),
+        patch(_ORG_BY_ID, return_value=trigger_org),
+        patch(_ORGS_BY_WS, return_value=[trigger_org]),
+        patch(_REPOS_BY_ORG, return_value=[]),
+    ):
+        inputs = DispatchInputs()
+        await add_gitlab_workspace_credentials(inputs, git_org_id=trigger_org.id)
+
+    npm = [u for u in inputs.upstreams if u.path_pattern is not None]
+    assert len(npm) == 1
+    assert npm[0].path_pattern == GITLAB_NPM_PATH_PATTERN
+    assert npm[0].methods == ["GET"]
+    assert npm[0].header == "PRIVATE-TOKEN"
+    assert npm[0].path_prefix is None
+    # Same token as the namespace rule, so no second copy in the secret.
+    namespace = next(u for u in inputs.upstreams if u.path_prefix == "/company/")
+    assert npm[0].secret_key == namespace.secret_key
+
+
+def test_pattern_rules_serialize_apart_from_the_host_rule() -> None:
+    spec = build_proxy_spec(
+        secret_env={"T": "t"},
+        upstreams=[
+            UpstreamCredential(
+                secret_key="T",
+                host="gitlab.acme.com",
+                header="PRIVATE-TOKEN",
+                path_pattern=GITLAB_NPM_PATH_PATTERN,
+                methods=["get"],
+            )
+        ],
+        image="img",
+        execution_id="exec-1",
+        extra_hosts=["gitlab.acme.com"],
+    )
+    upstreams = json.loads(spec.config_json)["upstreams"]
+    assert {"host": "gitlab.acme.com", "inject": {}} in upstreams
+    assert {
+        "host": "gitlab.acme.com",
+        "inject": {"PRIVATE-TOKEN": "${T}"},
+        "path_pattern": GITLAB_NPM_PATH_PATTERN,
+        "methods": ["GET"],
+    } in upstreams
+
+
+# ---------------------------------------------------------------------------
+# add_demo_to_inputs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("org_settings", "enabled"),
+    [({}, True), ({"demo_videos": True}, True), ({"demo_videos": False}, False)],
+)
+def test_add_demo_to_inputs_follows_the_org_switch(org_settings: dict, enabled: bool) -> None:
+    from api.plugins.container.dispatch_inputs import (
+        DEMO_ENABLED_ENV_VAR,
+        DEMO_TOOLING_HOSTS,
+        add_demo_to_inputs,
+    )
+
+    inputs = DispatchInputs()
+    org = _make_org()
+    with (
+        patch(
+            "api.plugins.container.dispatch_inputs.get_current_app",
+            return_value=_notify_app(),
+        ),
+        patch(_NOTIFY_ORG_BY_ID, return_value=org),
+        patch(_NOTIFY_SETTINGS, return_value=org_settings),
+    ):
+        add_demo_to_inputs(inputs, git_org_id=org.id)
+
+    assert (DEMO_ENABLED_ENV_VAR not in inputs.public_env) is enabled
+    assert set(DEMO_TOOLING_HOSTS) <= set(inputs.extra_hosts) if enabled else not inputs.extra_hosts
+
+
+def test_add_demo_to_inputs_keeps_the_default_when_the_lookup_fails() -> None:
+    from api.plugins.container.dispatch_inputs import DEMO_ENABLED_ENV_VAR, add_demo_to_inputs
+
+    inputs = DispatchInputs()
+    with (
+        patch(
+            "api.plugins.container.dispatch_inputs.get_current_app",
+            return_value=_notify_app(),
+        ),
+        patch(_NOTIFY_ORG_BY_ID, side_effect=RuntimeError("db down")),
+    ):
+        add_demo_to_inputs(inputs, git_org_id=uuid4())
+
+    assert DEMO_ENABLED_ENV_VAR not in inputs.public_env
+    assert "registry.npmjs.org" in inputs.extra_hosts

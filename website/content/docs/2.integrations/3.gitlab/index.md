@@ -82,6 +82,8 @@ Both tutorials use the same scopes:
 
 For **personal** access tokens, `api` alone already covers Git-over-HTTP. **Group and project** tokens don't, so `read_repository` / `write_repository` must be selected explicitly.
 
+The same token also reads your private packages from GitLab's npm registry, so an agent can install a frontend that depends on them (running its tests, or recording a demo). The proxy only ever sends it on `GET` requests to the npm registry paths, never to publish. `api` covers this; a token cut down further needs at least `read_api`, and it can only install packages from projects it can see.
+
 ## Who can trigger the bot
 
 Separate from the token above — this is about the *person* doing the mentioning.

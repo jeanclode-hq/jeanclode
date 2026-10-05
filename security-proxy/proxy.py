@@ -41,7 +41,20 @@ STRIPPED_RESPONSE_HEADERS: tuple[str, ...] = STRIPPED_HEADERS + ("set-cookie",)
 class Upstream(BaseModel):
     host: str
     path_prefix: str | None = None
+    # A second kind of rule, for paths no prefix can scope: matched against the
+    # raw path, and only for ``methods``. GitLab's npm registry is the case —
+    # its metadata path carries no project, and its tarball paths name the
+    # package's project, which this run doesn't track.
+    path_pattern: str | None = None
+    methods: list[str] | None = None
     inject: dict[str, str] = Field(default_factory=dict)
+
+    def matches_pattern(self, method: str, path: str) -> bool:
+        if self.path_pattern is None:
+            return False
+        if self.methods is not None and method.upper() not in self.methods:
+            return False
+        return re.search(self.path_pattern, path.split("?", 1)[0]) is not None
 
 
 class OAuthUpstream(BaseModel):
@@ -147,16 +160,27 @@ class Config(BaseModel):
             _host_matches(u.host, host) for u in self.oauth_upstreams
         )
 
-    def match(self, host: str, path: str) -> Upstream | None:
+    def match(self, host: str, path: str, method: str = "GET") -> Upstream | None:
         """Return the most specific upstream for this host/path.
 
         Multiple upstreams can share a host, scoped by ``path_prefix``
         (e.g. one GitLab token per namespace on the same host). An exact
         host match beats a ``*.example.com`` wildcard match, and within
         that tier the longest matching path prefix wins; an entry with no
-        prefix matches any path on that host as a fallback.
+        prefix matches any path on that host as a fallback. A
+        ``path_pattern`` rule sits between the two: a real prefix match
+        still wins over it, a host-wide fallback doesn't.
         """
-        return _longest_prefix_match(self.upstreams, host, path)
+        prefixed = [u for u in self.upstreams if u.path_pattern is None]
+        best = _longest_prefix_match(prefixed, host, path)
+        if best is not None and best.path_prefix is not None:
+            return best
+        for upstream in self.upstreams:
+            if _host_matches(upstream.host, host) and upstream.matches_pattern(
+                method, path
+            ):
+                return upstream
+        return best
 
     def match_oauth(self, host: str, path: str) -> OAuthUpstream | None:
         """Same longest-prefix rule as ``match``, over the oauth2 upstreams."""
@@ -242,15 +266,29 @@ def expand_env(template: str, env: dict[str, str]) -> str:
 
 def load_config(path: str | os.PathLike[str], env: dict[str, str]) -> Config:
     raw: dict[str, Any] = json.loads(Path(path).read_text())
-    by_key: dict[tuple[str, str | None], Upstream] = {}
+    by_key: dict[tuple[str, str | None, str | None, tuple[str, ...]], Upstream] = {}
     for entry in raw.get("upstreams", []):
         host = (entry.get("host") or "").strip().lower()
         if not host:
             raise ValueError("upstream with empty host in config")
         _validate_host_pattern(host)
         path_prefix = entry.get("path_prefix")
-        key = (host, path_prefix)
-        upstream = by_key.setdefault(key, Upstream(host=host, path_prefix=path_prefix))
+        path_pattern = entry.get("path_pattern")
+        methods = (
+            [m.upper() for m in entry["methods"]] if entry.get("methods") else None
+        )
+        if path_pattern is not None:
+            re.compile(path_pattern)
+        key = (host, path_prefix, path_pattern, tuple(methods or ()))
+        upstream = by_key.setdefault(
+            key,
+            Upstream(
+                host=host,
+                path_prefix=path_prefix,
+                path_pattern=path_pattern,
+                methods=methods,
+            ),
+        )
         for name, value_template in (entry.get("inject") or {}).items():
             upstream.inject[name.lower()] = expand_env(value_template, env)
 
@@ -448,7 +486,7 @@ class SecurityProxy:
         method = flow.request.method
         path = flow.request.path
 
-        upstream = self.config.match(host, path)
+        upstream = self.config.match(host, path, method)
         if upstream is not None:
             for header in STRIPPED_HEADERS:
                 if header in flow.request.headers:

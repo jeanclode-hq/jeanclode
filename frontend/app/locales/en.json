@@ -654,6 +654,11 @@
         "hint": "Let a fix see the other repos in the same folder.",
         "body": "In GitLab, repos are grouped in folders called subgroups. With this on, a fix can also look at the other repos in its subgroup. Very large subgroups are skipped because they would slow the fix down."
       },
+      "gitDemoVideos": {
+        "title": "Demo videos",
+        "hint": "See a UI fix working without checking it out.",
+        "body": "When Jeanclode fixes an issue that changes your app's screens, it starts the app with fake data, clicks through the change and records a short video. The video goes at the top of the PR, so a reviewer can watch it before reading the code. Turn this off to skip it."
+      },
       "gitWebhooks": {
         "title": "Project webhooks (GitLab Free)",
         "hint": "Only needed on GitLab Free.",

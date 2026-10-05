@@ -24,6 +24,7 @@ import contextlib
 import logging
 from typing import ClassVar
 
+from src.activities.demo import split_demo_block, with_demo_block
 from src.activities.summary import (
     FileLine,
     ParsedSummary,
@@ -74,7 +75,9 @@ class PRSummaryWorkflow:
                 summary="missing or invalid .context — cannot run summary",
             )
 
-        description = strip_files_dropdown(snapshot.pr_description)
+        # The demo block is the issue-resolve recording; the model never sees it, so it can't
+        # drop or rewrite it, and it goes back on top of the new description.
+        demo_block, description = split_demo_block(strip_files_dropdown(snapshot.pr_description))
         summarizing = asyncio.create_task(self._summarize(ctx, snapshot, description))
         # The summarizer's prompt cache is only readable once its response has begun.
         await asyncio.sleep(_CACHE_WARMUP_S)
@@ -91,6 +94,8 @@ class PRSummaryWorkflow:
         refined, files = await asyncio.gather(self._refine(ctx, draft), summarizing_files)
 
         payload = format_summary(ParsedSummary(description=refined, files=files), ctx=ctx)
+        if demo_block:
+            payload = payload.model_copy(update={"body": with_demo_block(payload.body, demo_block)})
         return await self._finalize(ctx, snapshot, payload)
 
     async def _summarize(self, ctx: RunContext, snap: PRSnapshot, description: str) -> str:

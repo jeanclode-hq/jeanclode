@@ -94,12 +94,12 @@ async def test_checkout_bytes_drive_the_size_not_the_packed_store():
     Pricing off the packed store is what evicted a pod mid-run.
     """
     repo = _make_repo(external_id="1")
-    app = _gitlab_app([repo], tree_bytes={"1": 5000 * MIB}, packed_bytes={"1": 100 * MIB})
+    app = _gitlab_app([repo], tree_bytes={"1": 7000 * MIB}, packed_bytes={"1": 100 * MIB})
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=_make_org()):
         result = await resolve_tmp_size_limit(repo)
 
-    assert result == f"{5000 + 100 + MARGIN_PER_REPO_MI}Mi"
+    assert result == f"{7000 + 100 + MARGIN_PER_REPO_MI}Mi"
 
 
 @pytest.mark.asyncio
@@ -157,12 +157,12 @@ async def test_every_repo_in_the_group_is_priced():
 @pytest.mark.asyncio
 async def test_repo_listed_twice_is_counted_once():
     repo = _make_repo(external_id="1")
-    app = _gitlab_app([repo], tree_bytes={"1": 4000 * MIB})
+    app = _gitlab_app([repo], tree_bytes={"1": 6000 * MIB})
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=_make_org()):
         result = await resolve_tmp_size_limit(repo, [repo])
 
-    assert result == f"{4000 + MARGIN_PER_REPO_MI}Mi"
+    assert result == f"{6000 + MARGIN_PER_REPO_MI}Mi"
 
 
 # -- Degradation ---------------------------------------------------------------
@@ -172,12 +172,12 @@ async def test_repo_listed_twice_is_counted_once():
 async def test_unavailable_tree_falls_back_to_packed_size(caplog):
     """Better a known-low estimate than none — but say so."""
     repo = _make_repo(external_id="1")
-    app = _gitlab_app([repo], tree_bytes={"1": None}, packed_bytes={"1": 5000 * MIB})
+    app = _gitlab_app([repo], tree_bytes={"1": None}, packed_bytes={"1": 7000 * MIB})
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=_make_org()):
         result = await resolve_tmp_size_limit(repo)
 
-    assert result == f"{5000 + MARGIN_PER_REPO_MI}Mi"
+    assert result == f"{7000 + MARGIN_PER_REPO_MI}Mi"
     assert "checkout size unavailable" in caplog.text
 
 
@@ -202,12 +202,12 @@ async def test_missing_statistics_is_reported_but_tree_still_counts(caplog):
     repo = _make_repo(external_id="1")
     app = _make_app([repo])
     app.gitlab.fetch_project = AsyncMock(return_value={"id": 1})
-    app.gitlab.fetch_project_tree_bytes = AsyncMock(return_value=4000 * MIB)
+    app.gitlab.fetch_project_tree_bytes = AsyncMock(return_value=6000 * MIB)
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=_make_org()):
         result = await resolve_tmp_size_limit(repo)
 
-    assert result == f"{4000 + MARGIN_PER_REPO_MI}Mi"
+    assert result == f"{6000 + MARGIN_PER_REPO_MI}Mi"
     assert "no statistics" in caplog.text
 
 
@@ -221,7 +221,7 @@ async def test_one_failing_repo_does_not_sink_the_group(caplog):
     async def tree(_t, external_id, *_a, **_kw):
         if external_id == "2":
             raise RuntimeError("boom")
-        return 4000 * MIB
+        return 6000 * MIB
 
     app.gitlab.fetch_project_tree_bytes = AsyncMock(side_effect=tree)
 
@@ -229,7 +229,7 @@ async def test_one_failing_repo_does_not_sink_the_group(caplog):
         result = await resolve_tmp_size_limit(good, [bad])
 
     # The failed repo still earns its margin, just not its measured size.
-    assert result == f"{4000 + MARGIN_PER_REPO_MI * 2}Mi"
+    assert result == f"{6000 + MARGIN_PER_REPO_MI * 2}Mi"
     assert "size lookup failed" in caplog.text
 
 
@@ -238,7 +238,7 @@ async def test_repo_token_is_preferred_over_its_org_token():
     """Cloning uses the repo-level token; sizing that reached for the org's
     instead priced such repos at zero."""
     repo = _make_repo(auth_token_encrypted="enc-repo", external_id="1")
-    app = _gitlab_app([repo], tree_bytes={"1": 4000 * MIB})
+    app = _gitlab_app([repo], tree_bytes={"1": 6000 * MIB})
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=_make_org()):
         await resolve_tmp_size_limit(repo)
@@ -259,12 +259,12 @@ async def test_github_adds_tree_bytes_to_packed_size():
     app.github.fetch_repository_by_id = AsyncMock(
         return_value={"size": 40 * 1024, "default_branch": "main"}
     )
-    app.github.fetch_repo_tree_bytes = AsyncMock(return_value=3000 * MIB)
+    app.github.fetch_repo_tree_bytes = AsyncMock(return_value=6000 * MIB)
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=org):
         result = await resolve_tmp_size_limit(repo)
 
-    assert result == f"{3000 + 40 + MARGIN_PER_REPO_MI}Mi"
+    assert result == f"{6000 + 40 + MARGIN_PER_REPO_MI}Mi"
 
 
 @pytest.mark.asyncio
@@ -276,14 +276,14 @@ async def test_github_truncated_tree_falls_back_to_packed_size(caplog):
     app = _make_app([repo])
     app.github.get_installation_access_token = AsyncMock(return_value="tok")
     app.github.fetch_repository_by_id = AsyncMock(
-        return_value={"size": 5000 * 1024, "default_branch": "main"}
+        return_value={"size": 7000 * 1024, "default_branch": "main"}
     )
     app.github.fetch_repo_tree_bytes = AsyncMock(return_value=None)
 
     with patch(_GET_APP, return_value=app), patch(_ORG_BY_ID, return_value=org):
         result = await resolve_tmp_size_limit(repo)
 
-    assert result == f"{5000 + MARGIN_PER_REPO_MI}Mi"
+    assert result == f"{7000 + MARGIN_PER_REPO_MI}Mi"
     assert "checkout size unavailable" in caplog.text
 
 

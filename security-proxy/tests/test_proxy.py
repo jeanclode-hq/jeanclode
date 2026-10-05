@@ -1039,3 +1039,86 @@ def test_oauth_token_cache_different_keys_mint_independently() -> None:
 
     assert tok_a == "tok-a"
     assert tok_b == "tok-b"
+
+
+# ---------------------------------------------------------------------------
+# path_pattern rules: GitLab's npm registry
+# ---------------------------------------------------------------------------
+
+_NPM_PATTERN = r"^/api/v4/(projects/\d+/)?packages/npm/"
+
+
+def _npm_config() -> Config:
+    return Config(
+        execution_id="exec_test",
+        upstreams=[
+            Upstream(
+                host="gitlab.acme.com",
+                path_prefix="/acme/",
+                inject={"private-token": "ns-token"},
+            ),
+            Upstream(
+                host="gitlab.acme.com",
+                path_prefix="/api/v4/projects/42/",
+                inject={"private-token": "project-token"},
+            ),
+            Upstream(
+                host="gitlab.acme.com",
+                path_pattern=_NPM_PATTERN,
+                methods=["GET"],
+                inject={"private-token": "npm-token"},
+            ),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v4/packages/npm/@acme%2fui",
+        "/api/v4/projects/977/packages/npm/@acme/ui/-/@acme/ui-1.2.0.tgz",
+    ],
+)
+def test_npm_registry_reads_get_the_pattern_token(path: str) -> None:
+    upstream = _npm_config().match("gitlab.acme.com", path, "GET")
+    assert upstream is not None and upstream.inject == {"private-token": "npm-token"}
+
+
+def test_npm_pattern_is_get_only() -> None:
+    assert _npm_config().match("gitlab.acme.com", "/api/v4/packages/npm/@acme%2fui", "PUT") is None
+
+
+def test_a_tracked_prefix_still_wins_over_the_pattern() -> None:
+    upstream = _npm_config().match(
+        "gitlab.acme.com", "/api/v4/projects/42/packages/npm/@acme/ui/-/ui-1.0.0.tgz", "GET"
+    )
+    assert upstream is not None and upstream.inject == {"private-token": "project-token"}
+
+
+def test_load_config_reads_pattern_rules(tmp_path: Path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "execution_id": "e",
+                "upstreams": [
+                    {
+                        "host": "gitlab.acme.com",
+                        "path_pattern": _NPM_PATTERN,
+                        "methods": ["get"],
+                        "inject": {"PRIVATE-TOKEN": "${TOKEN}"},
+                    }
+                ],
+            }
+        )
+    )
+    cfg = load_config(path, {"TOKEN": "t"})
+    assert cfg.upstreams[0].methods == ["GET"]
+    assert cfg.upstreams[0].inject == {"private-token": "t"}
+
+
+def test_npm_publish_is_denied_end_to_end() -> None:
+    proxy = SecurityProxy(_npm_config())
+    flow = make_flow("https://gitlab.acme.com/api/v4/projects/977/packages/npm/@acme%2fui", "PUT")
+    asyncio.run(proxy.request(flow))
+    assert flow.response is not None and flow.response.status_code == 403

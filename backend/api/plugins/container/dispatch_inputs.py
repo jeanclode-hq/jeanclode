@@ -50,6 +50,17 @@ logger = logging.getLogger(__name__)
 # returns on private repos — the redirect URL embeds a short-lived
 # signed token, so the proxy only needs to allow the host (no header
 # injection). Without this, PR-based workflows fail at the clone step.
+GITLAB_NPM_PATH_PATTERN = r"^/api/v4/(projects/\d+/)?packages/npm/"
+
+# What a demo agent (issue-resolve) needs to install and start a frontend:
+# Node through mise, the package manager through corepack, and packages.
+DEMO_TOOLING_HOSTS = (
+    "registry.npmjs.org",
+    "nodejs.org",
+    "mise-versions.jdx.dev",
+    "release-assets.githubusercontent.com",
+)
+
 AGENT_TOOLING_HOSTS = (
     "raw.githubusercontent.com",
     "github.com",
@@ -740,6 +751,7 @@ async def add_gitlab_workspace_credentials(
 
         workspace_id = trigger_org.workspace_id
         base_url = trigger_org.base_url
+        npm_token_encrypted = db_resolve_org_token(db, trigger_org)
 
         gitlab_orgs, linked_repos = _resolve_scoped_gitlab_orgs(db, trigger_org, workspace_id)
 
@@ -881,29 +893,33 @@ async def add_gitlab_workspace_credentials(
     # `Repository` field for each repo that token covers, so identical
     # ciphertext reliably means "the same token", not a coincidence.
     keys_by_token: dict[str, tuple[str, str]] = {}
-    for path_prefix, encrypted_token, host, label in cred_entries:
+
+    def token_keys(encrypted_token: str, label: str) -> tuple[str, str] | None:
         keys = keys_by_token.get(encrypted_token)
+        if keys is not None:
+            return keys
+        try:
+            token = db_plugin.decrypt(encrypted_token)
+        except Exception:
+            logger.exception(
+                "gitlab workspace creds: failed to decrypt token for %s (execution=%s)",
+                label,
+                execution_id,
+            )
+            return None
+        idx = len(keys_by_token)
+        token_key = f"GITLAB_TOKEN_{idx}"
+        git_auth_key = f"GITLAB_GIT_AUTH_{idx}"
+        gl_basic = base64.b64encode(f"oauth2:{token}".encode()).decode()
+        inputs.secrets[token_key] = token
+        inputs.secrets[git_auth_key] = f"Basic {gl_basic}"
+        keys_by_token[encrypted_token] = (token_key, git_auth_key)
+        return token_key, git_auth_key
+
+    for path_prefix, encrypted_token, host, label in cred_entries:
+        keys = token_keys(encrypted_token, label)
         if keys is None:
-            try:
-                token = db_plugin.decrypt(encrypted_token)
-            except Exception:
-                logger.exception(
-                    "gitlab workspace creds: failed to decrypt token for %s (execution=%s)",
-                    label,
-                    execution_id,
-                )
-                continue
-
-            idx = len(keys_by_token)
-            token_key = f"GITLAB_TOKEN_{idx}"
-            git_auth_key = f"GITLAB_GIT_AUTH_{idx}"
-            gl_basic = base64.b64encode(f"oauth2:{token}".encode()).decode()
-
-            inputs.secrets[token_key] = token
-            inputs.secrets[git_auth_key] = f"Basic {gl_basic}"
-            keys = (token_key, git_auth_key)
-            keys_by_token[encrypted_token] = keys
-
+            continue
         token_key, git_auth_key = keys
         inputs.upstreams.append(
             UpstreamCredential(
@@ -929,6 +945,26 @@ async def add_gitlab_workspace_credentials(
             host,
             path_prefix,
             execution_id,
+        )
+
+    # The npm registry's paths name no tracked project — metadata carries none,
+    # tarballs name the package's own project — so no prefix above covers them.
+    # GET-only: GitLab still enforces what the token can read, and nothing can
+    # publish with it. The token needs `read_api`.
+    npm_keys = (
+        token_keys(npm_token_encrypted, f"npm registry org={git_org_id}")
+        if npm_token_encrypted
+        else None
+    )
+    if npm_keys is not None:
+        inputs.upstreams.append(
+            UpstreamCredential(
+                secret_key=npm_keys[0],
+                host=host_or("gitlab.com", base_url),
+                header="PRIVATE-TOKEN",
+                path_pattern=GITLAB_NPM_PATH_PATTERN,
+                methods=["GET"],
+            )
         )
 
     # glab exits with "Unauthenticated." before making any HTTP request when
@@ -1051,6 +1087,38 @@ async def add_plugin_marketplace_credentials(
 def add_agent_tooling_hosts(inputs: DispatchInputs) -> None:
     """Allowlist the public hosts the Claude Code subprocess always touches."""
     inputs.extra_hosts.extend(AGENT_TOOLING_HOSTS)
+
+
+DEMO_ENABLED_ENV_VAR = "JEANCLODE_DEMO_ENABLED"
+
+
+def add_demo_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
+    """Apply the org's ``demo_videos`` switch to an issue-resolve dispatch.
+
+    On (the default): allowlist the hosts the demo gate installs a frontend
+    from. Off: tell the CLI, which then never asks triage for a demo plan.
+    Read through ``db_resolve_org_settings`` so a GitLab group's choice
+    reaches its subgroups. A lookup that fails keeps the default.
+    """
+    enabled = True
+    try:
+        app = get_current_app()
+        if app.database:
+            from api.database.organization import db_get_org_by_id, db_resolve_org_settings
+            from api.models.settings import GitOrgSettings
+
+            with app.database.session() as db:
+                org = db_get_org_by_id(db, git_org_id)
+                if org:
+                    settings = GitOrgSettings.model_validate(db_resolve_org_settings(db, org))
+                    enabled = settings.demo_videos
+    except Exception:
+        logger.exception("Failed to resolve demo setting for org %s", git_org_id)
+
+    if enabled:
+        inputs.extra_hosts.extend(DEMO_TOOLING_HOSTS)
+    else:
+        inputs.public_env[DEMO_ENABLED_ENV_VAR] = "0"
 
 
 # ---------------------------------------------------------------------------

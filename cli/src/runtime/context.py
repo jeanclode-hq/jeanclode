@@ -43,6 +43,8 @@ class RunContext(BaseModel):
     dry_run: bool = False
     debug: bool = False
     memory_enabled: bool = False
+    # The org's "demo videos" switch; off means triage never plans a demo.
+    demo_enabled: bool = True
 
     def with_cwd(self, cwd: Path) -> Self:
         """Return a context derived from this one but with a different cwd.

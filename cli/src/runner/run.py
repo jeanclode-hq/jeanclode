@@ -145,6 +145,8 @@ async def _run_workflow(
             logger.info("loaded %d org MCP server(s)", len(mcp_servers))
         # Set only when the workspace opted into memory — its presence is the on/off signal.
         memory_enabled = bool(os.environ.get("JEANCLODE_MEMORY_API_URL"))
+        # On unless the org turned demo videos off in its git integration settings.
+        demo_enabled = os.environ.get("JEANCLODE_DEMO_ENABLED", "1") != "0"
         notify_users = load_notify_users_from_env()
         llm_options = load_llm_options_from_env()
         if llm_options:
@@ -167,6 +169,7 @@ async def _run_workflow(
             dry_run=args.dry_run,
             debug=args.debug,
             memory_enabled=memory_enabled,
+            demo_enabled=demo_enabled,
         )
         result = await workflow_cls().run(ctx)
 

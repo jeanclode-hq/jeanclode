@@ -198,6 +198,10 @@ class GitOrgSettings(BaseModel):
     # see backend/CLAUDE.md. No-op for GitHub orgs.
     manage_project_webhooks: bool = Field(default=False)
     related_repos: RelatedRepoSettings = Field(default_factory=RelatedRepoSettings)
+    demo_videos: bool = Field(
+        default=True,
+        description="Record a demo video of UI fixes before review (issue-resolve)",
+    )
     trigger_permission: TriggerPermission = Field(
         default=TriggerPermission.DEVELOPER_ONLY,
         description="Who an @jeanclode-bot mention listens to: anyone, or collaborators with write+ access",

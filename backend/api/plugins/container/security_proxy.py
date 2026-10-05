@@ -55,6 +55,11 @@ class UpstreamCredential(BaseModel):
             Entries on the same host with different prefixes coalesce into
             separate upstream objects. Entries without a prefix continue
             to match all paths on that host (GitHub, Sentry, LLM).
+        path_pattern: A regex on the request path, for paths no prefix can
+            scope (GitLab's npm registry). A real ``path_prefix`` match on
+            the same host still wins over it.
+        methods: HTTP methods a ``path_pattern`` rule applies to; ``None``
+            means any.
     """
 
     secret_key: str
@@ -62,6 +67,8 @@ class UpstreamCredential(BaseModel):
     header: str
     bearer: bool = False
     path_prefix: str | None = None
+    path_pattern: str | None = None
+    methods: list[str] | None = None
 
 
 class OAuthUpstream(BaseModel):
@@ -159,21 +166,27 @@ def _serialize_upstreams(
     token to the correct namespace. ``extra_hosts`` are emitted with empty
     inject maps so the proxy allows them through without modifying headers.
     """
-    by_key: dict[tuple[str, str | None], dict[str, str]] = defaultdict(dict)
+    Key = tuple[str, str | None, str | None, tuple[str, ...]]
+    by_key: dict[Key, dict[str, str]] = defaultdict(dict)
     for rule in upstreams:
         value = f"Bearer ${{{rule.secret_key}}}" if rule.bearer else f"${{{rule.secret_key}}}"
-        by_key[(rule.host, rule.path_prefix)][rule.header] = value
+        methods = tuple(sorted(m.upper() for m in rule.methods or ()))
+        by_key[(rule.host, rule.path_prefix, rule.path_pattern, methods)][rule.header] = value
 
     for host in extra_hosts:
-        by_key.setdefault((host, None), {})
+        by_key.setdefault((host, None, None, ()), {})
 
     result = []
-    for (host, path_prefix), headers in sorted(
-        by_key.items(), key=lambda item: (item[0][0], item[0][1] or "")
+    for (host, path_prefix, path_pattern, methods), headers in sorted(
+        by_key.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][2] or "")
     ):
         entry: dict[str, object] = {"host": host, "inject": dict(sorted(headers.items()))}
         if path_prefix is not None:
             entry["path_prefix"] = path_prefix
+        if path_pattern is not None:
+            entry["path_pattern"] = path_pattern
+        if methods:
+            entry["methods"] = list(methods)
         result.append(entry)
     return result
 

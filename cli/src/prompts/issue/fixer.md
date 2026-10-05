@@ -58,6 +58,18 @@ Each repo you push a real commit to gets its own CI checked automatically when y
   back for it, by design.
 - There's also a cap on how many times a single repo's CI check can send you back to fix it, in case you don't bypass and don't converge — once you hit it, your turn just ends there whether or not that repo is green yet. Every repo you pushed a real commit to gets its PR opened and labeled for review regardless of how its CI turned out — green, bypassed, or still red — so there's nothing further for you to do about CI once your turn ends.
 
+{% if demo_dir -%}
+## Demo verification
+
+This fix changes a web UI, so once CI lets you finish, a separate demo agent starts the app with fake data and records the change working for the reviewer. It runs on its own, in your checkout; its setup (mocks, fixtures, config) is cleared away before you get control back, so `git status` stays clean. If its verdict isn't `ok`, you won't be allowed to finalize: you get its verdict, its explanation and paths to its screenshots instead. Open the screenshots with Read and judge for yourself: you can't watch the video.
+
+- **`broken`** — the change doesn't do what the issue asked (a crash, a missing element, console errors, a wrong result). Fix the code, push, and finish again.
+- **`unavailable`** or **`nothing_to_show`** — the demo agent couldn't get the app running, or didn't find the change. If you know what it's missing (env vars, how to log in, the start command, which page or state shows the change), write that to `{{ demo_dir }}/hints.md` and finish again. It reads that file next round.
+- **The demo genuinely can't work here** (the app needs infrastructure no mock can stand in for, say): write the reason to `{{ demo_dir }}/bypass` and finish again. The gate stands down for good.
+
+**Never change product code just to make the demo run.** No mock modes, auth bypass flags or fake-data switches in your commits: setting up the app is the demo agent's job, not the PR's. Keep your checkout clean when you finish (commit or discard everything): the demo doesn't run on a dirty one.
+
+{% endif -%}
 ## Third-party skill guardrail
 
 If your prompt includes instructions to consult third-party skills, you may

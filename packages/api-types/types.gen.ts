@@ -616,6 +616,11 @@ export type GitOrgSettings = {
     manage_project_webhooks?: boolean;
     related_repos?: RelatedRepoSettings;
     /**
+     * Demo Videos
+     * Record a demo video of UI fixes before review (issue-resolve)
+     */
+    demo_videos?: boolean;
+    /**
      * Who an @jeanclode-bot mention listens to: anyone, or collaborators with write+ access
      */
     trigger_permission?: TriggerPermission;
