@@ -267,6 +267,33 @@ def test_write_credential_rejects_a_second_auth_on_the_same_host() -> None:
     assert exc_info.value.status_code == 409
 
 
+def test_write_credential_puts_a_totp_code_next_to_a_password_on_one_host() -> None:
+    request = _skill_request(
+        AuthType.API_KEY,
+        {"name": "APP_TOTP", "key": "JBSWY3DPEHPK3PXP"},
+        {"host": "login.example.com", "header": "Authorization", "inject": "totp"},
+    )
+    password = _stored(request.org_id, request.subject_id, auth_type="api_key", host=None)
+    password.settings = {"host": "login.example.com", "inject": "body"}
+
+    calls = _write(request, [password])
+
+    calls["create"].assert_called_once()
+
+
+def test_write_credential_adds_a_body_secret_on_a_host_with_a_header_auth() -> None:
+    request = _skill_request(
+        AuthType.API_KEY,
+        {"name": "APP_PASSWORD", "key": "hunter2"},
+        {"host": "api.figma.com", "header": "Authorization", "inject": "body"},
+    )
+    first = _stored(request.org_id, request.subject_id, auth_type="api_key", host="api.figma.com")
+
+    calls = _write(request, [first])
+
+    calls["create"].assert_called_once()
+
+
 def test_write_credential_replaces_the_given_credential_on_its_own_host() -> None:
     first = _stored(uuid4(), uuid4(), auth_type="api_key", host="api.figma.com")
     request = _skill_request(

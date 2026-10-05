@@ -92,6 +92,10 @@ def _target_host(cred_settings: dict, server: McpServer | None) -> str | None:
     return _hostname(host) if host else None
 
 
+def _in_body(cred_settings: dict) -> bool:
+    return cred_settings.get("inject") in ("body", "totp")
+
+
 def _verify_subject(
     db: Session, *, subject_type: SubjectType, subject_id: uuid.UUID, org_id: uuid.UUID
 ) -> McpServer | None:
@@ -306,9 +310,17 @@ def write_credential(
             raise HTTPException(status_code=404, detail="Credential not found")
 
     # The proxy injects one header set per host, so two auths of one subject
-    # on the same host would silently overwrite each other.
-    host = _target_host(validated_settings.model_dump(), server)
-    if any(c is not target and _target_host(c.settings or {}, server) == host for c in existing):
+    # on the same host would silently overwrite each other. Body and TOTP
+    # secrets each swap their own placeholder, so they share a host freely
+    # (a login password and its 2FA code).
+    new_settings = validated_settings.model_dump()
+    host = _target_host(new_settings, server)
+    if not _in_body(new_settings) and any(
+        c is not target
+        and not _in_body(c.settings or {})
+        and _target_host(c.settings or {}, server) == host
+        for c in existing
+    ):
         raise HTTPException(
             status_code=409,
             detail=f"This {request.subject_type.value} already has an auth for {host}",
