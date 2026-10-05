@@ -19,7 +19,8 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-DEMO_DIR = Path("/tmp/jeanclode-demo")
+from src.activities.demo.checkout import DEMO_DIR
+
 VIEWPORT = {"width": 1280, "height": 720}
 
 # Only localhost resolves, and nothing goes through the egress proxy: whatever

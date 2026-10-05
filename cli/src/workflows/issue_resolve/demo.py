@@ -95,6 +95,11 @@ def demo_note(state: DemoGateState) -> str:
     """Why a PR/MR carries no demo, for its comment thread."""
     if state.bypass_reason:
         return f"No demo for this change: the fixer stood the demo gate down. {state.bypass_reason}"
+    if state.dirty:
+        return (
+            f"No demo for this change: after {state.rounds} round(s) the fixer's checkout "
+            f"still had uncommitted changes, so the demo couldn't run: {', '.join(state.dirty)}."
+        )
     if state.error:
         return (
             f"No demo for this change: after {state.rounds} round(s) the demo agent "

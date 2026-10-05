@@ -102,26 +102,6 @@ _GITLAB_API_PROJECT_RE = re.compile(r"^/api/v4/projects/([^/?]+)")
 # strip it so both forms match the same ``path_prefix``.
 _GIT_SUFFIX_RE = re.compile(r"\.git(?=/|$)")
 
-# git's smart-HTTP endpoints — the response to a clone/fetch is an
-# arbitrarily large packfile (a shallow clone of one production repo runs
-# 1GB+). mitmproxy buffers a flow's full body in memory to hand it to
-# addon hooks, which OOM-kills the sidecar on a repo that size; these paths
-# are streamed straight through instead (see ``responseheaders``).
-_GIT_SMART_HTTP_RE = re.compile(r"/(info/refs|git-upload-pack|git-receive-pack)$")
-
-# Repo snapshots the read-only workflows download instead of cloning — just as
-# large (a 394MB MR archive OOM-killed the 256MiB sidecar). GitLab serves them
-# from the API; GitHub's ``/zipball`` 302s to ``codeload.github.com``.
-_ARCHIVE_RE = re.compile(
-    r"/repository/archive(\.[a-z0-9.]+)?$|/(zipball|tarball)(/|$)|/(legacy\.)?(zip|tar\.gz)/"
-)
-
-
-def _is_streamed(path: str) -> bool:
-    bare = path.split("?", 1)[0]
-    return bool(_GIT_SMART_HTTP_RE.search(bare) or _ARCHIVE_RE.search(bare))
-
-
 def _gitlab_match_path(path: str) -> str:
     """Normalize a GitLab request path onto the ``/namespace/repo/...`` shape
     ``path_prefix`` values are expressed in, so both git smart-HTTP and REST
@@ -552,14 +532,19 @@ class SecurityProxy:
         """Fires once response headers arrive, before the body does — the
         only point where credential headers can still be stripped *and*
         streaming can still be enabled (both are no-ops once the body has
-        already been buffered, which is what ``response`` would see)."""
+        already been buffered, which is what ``response`` would see).
+
+        Every response streams: the proxy never reads a body, and mitmproxy
+        otherwise buffers each one whole in the 256MiB sidecar. Clone
+        packfiles, repo archives, Node downloads and npm tarballs fetched
+        16 at a time all OOM-killed it, or would.
+        """
         if flow.response is None:
             return
         for header in STRIPPED_RESPONSE_HEADERS:
             if header in flow.response.headers:
                 del flow.response.headers[header]
-        if _is_streamed(flow.request.path):
-            flow.response.stream = True
+        flow.response.stream = True
 
 
 addons = [SecurityProxy()]

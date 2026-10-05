@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -213,6 +214,56 @@ async def test_dirty_checkout_goes_back_to_the_fixer(
     assert ran == [] and state.rounds == 1
     # Left in place: the fixer decides whether it belongs in the fix.
     assert (worktree.path / "stray.txt").exists()
+
+
+@patch("src.agents.hooks.fix_missing_reason", return_value=None)
+async def test_dirty_rejection_is_recorded_until_a_round_runs(
+    _pushed: Any, worktree: WorktreePath, demo_dir: Path, tmp_path: Path
+) -> None:
+    stray = worktree.path / "stray.txt"
+    _write(stray, "uncommitted\n")
+    state = DemoGateState()
+    run, _ = _scripted("broken")
+    hook = require_demo_hook([worktree], run, state, ctx=_ctx(tmp_path), demo_dir=demo_dir)
+
+    await hook.hooks[0](_so_input("tu_1"), None, {"signal": None})
+    assert state.dirty == [str(worktree.path)]
+
+    stray.unlink()
+    await hook.hooks[0](_so_input("tu_2"), None, {"signal": None})
+    assert state.dirty == []
+
+
+@patch("src.agents.hooks.fix_missing_reason", return_value=None)
+async def test_processes_a_round_left_running_are_stopped(
+    _pushed: Any,
+    worktree: WorktreePath,
+    demo_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: list[asyncio.subprocess.Process] = []
+
+    # Only this test's own process is ever "new": nothing else on the machine gets signalled.
+    def _ours() -> set[int]:
+        return {os.getpid(), *(p.pid for p in started)}
+
+    monkeypatch.setattr("src.agents.hooks.running_pids", _ours)
+    monkeypatch.setattr("src.activities.demo.processes.running_pids", _ours)
+
+    async def _leaves_a_server(_round: int) -> DemoRound:
+        started.append(await asyncio.create_subprocess_exec("sleep", "60"))
+        raise RuntimeError("crashed with the dev server up")
+
+    state = DemoGateState()
+    hook = require_demo_hook(
+        [worktree], _leaves_a_server, state, ctx=_ctx(tmp_path), demo_dir=demo_dir
+    )
+    await hook.hooks[0](_so_input(), None, {"signal": None})
+
+    assert await asyncio.wait_for(started[0].wait(), 5) != 0
+    with pytest.raises(ProcessLookupError):
+        os.kill(started[0].pid, 0)
 
 
 @patch("src.agents.hooks.fix_missing_reason", return_value="not pushed")

@@ -74,6 +74,7 @@ from src.activities.ci_watch import check_ci
 from src.activities.demo import (
     BYPASS_FILE,
     DEMO_DIR,
+    HINTS_FILE,
     DemoGateState,
     DemoRound,
     git_status,
@@ -82,6 +83,7 @@ from src.activities.demo import (
     stash_setup,
 )
 from src.activities.demo.checkout import head_sha
+from src.activities.demo.processes import running_pids, stop_new_processes
 from src.activities.git.ops import fix_missing_reason
 from src.activities.git.schemas import PRRef, WorktreePath
 from src.activities.respond.schemas import MentionContext
@@ -435,7 +437,7 @@ def _pushed(wt: WorktreePath) -> bool:
 
 
 def _demo_feedback(demo: DemoRound, round_no: int, demo_dir: Path) -> str:
-    hints = demo_dir / "hints.md"
+    hints = demo_dir / HINTS_FILE
     lines = [
         f"Demo round {round_no} of {MAX_DEMO_ROUNDS}: the demo agent's verdict is "
         f"`{demo.verdict}`, so you can't finish yet.",
@@ -478,7 +480,7 @@ def _crash_feedback(error: str, round_no: int, demo_dir: Path) -> str:
         f"the app; {left} round(s) left. If this looks transient (a timeout on a slow "
         "install, a rate limit, a network blip), finish again to retry, and write anything "
         f"that would speed the next round up (the start command, what to skip) to "
-        f"{demo_dir / 'hints.md'}. If it will keep failing here, write the reason to "
+        f"{demo_dir / HINTS_FILE}. If it will keep failing here, write the reason to "
         f"{demo_dir / BYPASS_FILE} and finish again."
     )
 
@@ -503,7 +505,8 @@ def require_demo_hook(
        sent back to the fixer to commit or delete.
     2. Pop the previous round's demo setup back.
     3. Run the demo agent.
-    4. Stash whatever it left, so the fixer gets its clean checkout back.
+    4. Stop every process the round started, then stash whatever it left,
+       so the fixer gets its clean checkout back.
     5. ``ok`` passes; any other verdict, or the demo agent failing or running
        past ``DEMO_AGENT_TIMEOUT_S``, is denied back to the fixer.
 
@@ -539,15 +542,18 @@ def require_demo_hook(
         dirty = {str(wt.path): status for wt in worktrees if (status := git_status(wt.path))}
         if dirty:
             state.rounds += 1
+            state.dirty = sorted(dirty)
             return _deny_structured_output(_dirty_feedback(dirty, demo_dir))
 
         state.rounds += 1
+        state.dirty = []
         reset_demo_dir(demo_dir)
         for wt in worktrees:
             restore_setup(wt.path)
 
         ctx.emit(ActivityStart(name="demo"))
         started = time.monotonic()
+        before = running_pids()
         demo: DemoRound | None = None
         error = ""
         try:
@@ -558,6 +564,8 @@ def require_demo_hook(
             logger.warning("require_demo_hook: demo agent failed", exc_info=True)
             error = f"{type(exc).__name__}: {exc}"
         finally:
+            # Before the stash: a server still running would write into the checkout after it.
+            await asyncio.to_thread(stop_new_processes, before)
             diffs = {str(wt.path): stash_setup(wt.path) for wt in worktrees}
             ctx.emit(
                 ActivityEnd(

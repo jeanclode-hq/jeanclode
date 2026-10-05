@@ -29,3 +29,5 @@ class DemoGateState(BaseModel):
     bypass_reason: str = ""
     # The last round's failure, when the demo agent crashed or timed out.
     error: str = ""
+    # Worktrees the last round found uncommitted changes in, so it never ran.
+    dirty: list[str] = Field(default_factory=list)

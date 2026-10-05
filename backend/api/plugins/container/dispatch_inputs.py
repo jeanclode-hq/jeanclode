@@ -39,17 +39,8 @@ from api.services.memory_token import mint_memory_token
 logger = logging.getLogger(__name__)
 
 
-# Hosts the Claude Code subprocess and skill plugins need to reach
-# without auth: plugin manifests, public clones, and the GitHub REST
-# endpoint that ``gh repo clone`` consults before falling back to git.
-# When the dispatching org also has a ``GH_TOKEN`` resolved by
-# ``add_git_platform_to_inputs``, the per-host coalescing in
-# ``_serialize_upstreams`` keeps the token-injecting rule intact.
-#
-# ``codeload.github.com`` handles the 302 that ``gh api repos/.../zipball/<sha>``
-# returns on private repos — the redirect URL embeds a short-lived
-# signed token, so the proxy only needs to allow the host (no header
-# injection). Without this, PR-based workflows fail at the clone step.
+# GitLab's npm registry: its paths name no tracked project, so no `path_prefix` rule
+# covers them (see the npm upstream in add_gitlab_workspace_credentials).
 GITLAB_NPM_PATH_PATTERN = r"^/api/v4/(projects/\d+/)?packages/npm/"
 
 # What a demo agent (issue-resolve) needs to install and start a frontend:
@@ -61,6 +52,17 @@ DEMO_TOOLING_HOSTS = (
     "release-assets.githubusercontent.com",
 )
 
+# Hosts the Claude Code subprocess and skill plugins need to reach
+# without auth: plugin manifests, public clones, and the GitHub REST
+# endpoint that ``gh repo clone`` consults before falling back to git.
+# When the dispatching org also has a ``GH_TOKEN`` resolved by
+# ``add_git_platform_to_inputs``, the per-host coalescing in
+# ``_serialize_upstreams`` keeps the token-injecting rule intact.
+#
+# ``codeload.github.com`` handles the 302 that ``gh api repos/.../zipball/<sha>``
+# returns on private repos — the redirect URL embeds a short-lived
+# signed token, so the proxy only needs to allow the host (no header
+# injection). Without this, PR-based workflows fail at the clone step.
 AGENT_TOOLING_HOSTS = (
     "raw.githubusercontent.com",
     "github.com",

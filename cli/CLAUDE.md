@@ -150,8 +150,8 @@ waits for their answers on the same call, standing down if any denied it.
 Each round needs a clean checkout; a dirty one goes back to the fixer to
 commit or delete (it counts as a round). Then: pop the previous round's demo setup
 (`git stash`, message `jeanclode-demo`), run `DemoAgent` in its own session
-on the run's default credential, then stash whatever it left so the fixer
-gets its clean tree back. `ok` passes; `broken` / `unavailable` /
+on the run's default credential, then stop every process the round started and stash
+whatever it left so the fixer gets its clean tree back. `ok` passes; `broken` / `unavailable` /
 `nothing_to_show` are denied back to the fixer with the evidence and
 screenshot paths, and so is a demo agent that crashes or runs past
 `DEMO_AGENT_TIMEOUT_S` (the fixer retries or bypasses). Six rounds at most; the fixer stands it down by writing a

@@ -211,6 +211,21 @@ def test_post_demos_notes_why_there_is_no_demo_on_the_app_pr(tmp_path: Path) -> 
     assert "`unavailable`" in text and "pnpm install: 403" in text
 
 
+def test_post_demos_notes_a_checkout_left_dirty(tmp_path: Path) -> None:
+    ctx, cwds = _demo_ctx(tmp_path)
+    state = DemoGateState(
+        rounds=6,
+        last=DemoRound(verdict="broken", evidence="stale", app_repo="frontend"),
+        dirty=["/work/frontend"],
+    )
+    with patch("src.workflows.issue_resolve.demo.post_demo_note") as note:
+        post_demos(_prs(), state, ctx=ctx, cwds=cwds)
+
+    text = note.call_args.args[1]
+    assert "uncommitted changes" in text and "/work/frontend" in text
+    assert "stale" not in text
+
+
 def test_post_demos_notes_a_demo_agent_failure(tmp_path: Path) -> None:
     ctx, cwds = _demo_ctx(tmp_path)
     state = DemoGateState(rounds=6, error="It ran past its 40-minute budget and was stopped.")
