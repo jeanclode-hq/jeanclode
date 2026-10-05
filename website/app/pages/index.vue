@@ -226,6 +226,75 @@
       </div>
     </section>
 
+    <!-- ─── Demo ─── -->
+    <section class="scroll-mt-24 border-t border-[var(--ui-border)] py-24 md:py-32" id="demo">
+      <div class="mx-auto max-w-[88rem] px-6 md:px-10">
+        <div class="grid gap-12 md:grid-cols-12">
+          <div class="md:col-span-5">
+            <h2 class="text-[2rem] font-medium leading-[1.02] tracking-[-0.04em] text-[var(--ink)] md:text-[2.75rem]">
+              See it working before you check it out.
+            </h2>
+            <p class="mt-6 max-w-sm text-[15px] leading-relaxed text-[var(--ui-text-muted)]">
+              When a fix touches a UI, a separate agent runs the app with fake data, opens the page
+              the change lives on and records it: a screenshot for a static change, a short video for
+              an interaction. If the change doesn't hold up, it goes back to the fixer.
+            </p>
+            <p class="mt-4 max-w-sm text-[15px] leading-relaxed text-[var(--ui-text-muted)]">
+              Only the recording reaches the pull request. Ask for one on any PR with
+              <code class="font-mono text-[13px] text-[var(--ink)]">@jeanclode-bot add a demo</code>.
+            </p>
+          </div>
+
+          <div class="md:col-span-6 md:col-start-7">
+            <div class="overflow-hidden rounded-lg border border-[var(--ui-border)] bg-[var(--color-neutral-0)]">
+              <div class="flex items-center justify-between border-b border-[var(--ui-border)] px-5 py-3">
+                <span class="font-mono text-[11px] text-[var(--ui-text-muted)]">#317 fix: keep totals aligned</span>
+                <span class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[var(--ui-text-muted)]">
+                  <span class="size-1.5 rounded-full bg-[var(--accent)]"></span>demo
+                </span>
+              </div>
+              <div class="px-5 py-5">
+                <p class="text-sm font-medium text-[var(--ink)]">Demo</p>
+                <!-- an invented page, drawn in markup: never a capture of someone's real app -->
+                <div class="mt-3 overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)]" role="img" aria-label="A screenshot of an orders page, its totals column aligned and marked in red">
+                  <div class="flex items-center gap-1.5 border-b border-[var(--ui-border)] px-3 py-2">
+                    <span v-for="n in 3" :key="n" class="size-1.5 rounded-full bg-[var(--ui-border-accented)]"></span>
+                    <span class="ml-2 font-mono text-[10px] text-[var(--ui-text-dimmed)]">localhost:5173/orders</span>
+                  </div>
+                  <div class="flex">
+                    <div class="hidden w-20 shrink-0 space-y-2 border-r border-[var(--ui-border)] p-3 sm:block">
+                      <span v-for="w in [70, 85, 60, 75]" :key="w" class="block h-1.5 rounded-full bg-[var(--ui-bg-accented)]" :style="{ width: `${w}%` }"></span>
+                    </div>
+                    <div class="flex-1 p-3">
+                      <span class="block h-2 w-24 rounded-full bg-[var(--ui-border-accented)]"></span>
+                      <div class="relative mt-3">
+                        <div class="divide-y divide-[var(--ui-border)] font-mono text-[10px] text-[var(--ui-text-muted)]">
+                          <div v-for="order in demoOrders" :key="order.id" class="flex items-center gap-3 py-1.5">
+                            <span class="w-12 text-[var(--ui-text-dimmed)]">{{ order.id }}</span>
+                            <span class="block h-1.5 flex-1 rounded-full bg-[var(--ui-bg-elevated)]"></span>
+                            <span class="w-16 text-right tabular-nums text-[var(--ink)]">{{ order.total }}</span>
+                          </div>
+                        </div>
+                        <span class="pointer-events-none absolute -inset-y-1 -right-1.5 w-[4.75rem] rounded-sm ring-[1.5px] ring-[var(--accent)]" aria-hidden="true"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <ul class="border-t border-[var(--ui-border)] px-5 py-4 text-xs text-[var(--ui-text-muted)]">
+                <li v-for="fact in demoFacts" :key="fact.label" class="flex justify-between py-1">
+                  <span>{{ fact.label }}</span><span class="text-[var(--ink)]">{{ fact.value }}</span>
+                </li>
+                <li class="flex justify-between py-1 text-[var(--ui-text-dimmed)]">
+                  <span class="line-through">setup and mocks in the PR</span><span>never</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── Self-hosted ─── -->
     <section class="scroll-mt-24 border-t border-[var(--ui-border)] py-24 md:py-32" id="selfhost">
       <div class="mx-auto max-w-[88rem] px-6 md:px-10">
@@ -551,7 +620,7 @@ const workflows = [
     name: 'issue_resolve',
     art: '/ink/decides-thumb.webp',
     title: 'Resolve issues',
-    body: 'Triage reads the issue and explores the codebase itself, then hands its findings straight to the fixer. Every repository the fix touches gets its own PR, and each must pass its own CI first.',
+    body: 'Triage reads the issue and explores the codebase itself, then hands its findings straight to the fixer. Every repository the fix touches gets its own PR, and each must pass its own CI first. A UI fix comes with a recording of it working.',
     triggers: ['jeanclode:resolve'],
   },
   {
@@ -572,12 +641,25 @@ const workflows = [
     name: 'jeanclode_respond',
     art: '/ink/ships-thumb.webp',
     title: 'Answer mentions',
-    body: 'A planner reads the whole thread and either routes to the right pipeline or handles the ask itself with git, gh and glab: answer a question, edit scope, push a change, or refuse a destructive one.',
-    triggers: ['@jeanclode-bot'],
+    body: 'A planner reads the whole thread and either routes to the right pipeline or handles the ask itself with git, gh and glab: answer a question, edit scope, push a change, record a demo, or refuse a destructive one.',
+    triggers: ['@jeanclode-bot', '@jeanclode-bot add a demo'],
   },
 ]
 
 const droppedFindings = ['style nitpick', 'duplicate of #1', 'not in the diff']
+
+const demoOrders = [
+  { id: '#1042', total: '€1,280.00' },
+  { id: '#1041', total: '€96.50' },
+  { id: '#1040', total: '€12,004.10' },
+  { id: '#1039', total: '€7.00' },
+]
+
+const demoFacts = [
+  { label: 'the real page, in the running app', value: 'ok' },
+  { label: 'API faked from the repo\'s own fixtures', value: 'mocked' },
+  { label: 'a static change, so one screenshot', value: 'screenshot' },
+]
 
 const hostingFacts = [
   {

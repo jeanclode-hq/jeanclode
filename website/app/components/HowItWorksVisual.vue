@@ -133,7 +133,34 @@
       <p class="mono a-rise mt-4 text-center text-[var(--ui-text-dimmed)]" style="--d: 1.9s">all checks passed · agent allowed to finish</p>
     </template>
 
-    <!-- 06 · Review loop -->
+    <!-- 06 · Demo -->
+    <template v-else-if="step === 5">
+      <div class="card a-rise relative mx-auto w-full max-w-[340px] overflow-hidden" style="--d: 0.05s">
+        <div class="flex items-center gap-1.5 border-b border-[var(--ui-border)] px-3 py-2">
+          <span v-for="n in 3" :key="n" class="size-1.5 rounded-full bg-[var(--ui-border-accented)]"></span>
+          <span class="mono ml-2 text-[var(--ui-text-dimmed)]">localhost:3000/billing</span>
+          <span class="rec ml-auto"></span>
+        </div>
+        <div class="px-3.5 py-3">
+          <div class="flex items-center justify-between">
+            <span class="mono text-[var(--ui-text-muted)]">deleted-user@example.com</span>
+            <span class="btn mono">Open plan</span>
+          </div>
+          <div class="a-reveal mt-3 rounded-md border border-[var(--ui-border)] px-3 py-2.5" style="--d: 1.25s">
+            <p class="text-[13px] font-medium text-[var(--ui-text-highlighted)]">No active plan</p>
+            <p class="mono mt-1 text-[var(--ui-text-dimmed)]">nothing to charge · page loads</p>
+          </div>
+        </div>
+        <svg class="cursor" viewBox="0 0 12 16" aria-hidden="true"><path d="M1 1v12.5l3.2-3 2.2 4.8 1.9-.9-2.2-4.7H10z" /></svg>
+      </div>
+
+      <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
+        <span class="chip chip-picked a-stamp" style="--d: 1.9s"><UIcon name="i-lucide-check" class="size-3" />demo ok · 6s video</span>
+        <span class="chip a-rise" style="--d: 2.1s">→ #482 description</span>
+      </div>
+    </template>
+
+    <!-- 07 · Review loop -->
     <template v-else>
       <div class="relative mx-auto w-full max-w-[340px]">
         <div class="mb-4 flex justify-center gap-1.5">
@@ -408,7 +435,61 @@ const reviewLog = [
   85%, 100% { opacity: 1; background: #22c55e; }
 }
 
-/* 06 — the seven reviewers, then the loop */
+/* 06 — a cursor clicks through, the result appears, the recording light blinks */
+.rec {
+  height: 6px;
+  width: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0;
+}
+
+.is-active .rec { animation: breathe 1.2s ease-in-out 0.3s infinite; }
+
+.btn {
+  border-radius: 6px;
+  border: 1px solid var(--ui-border-accented);
+  padding: 2px 8px;
+  color: var(--ui-text-highlighted);
+}
+
+.is-active .btn { animation: press 0.25s ease-out 1.05s both; }
+
+@keyframes press {
+  50% { transform: scale(0.94); background: var(--ui-bg-elevated); }
+}
+
+.a-reveal { opacity: 0; }
+.is-active .a-reveal { animation: reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both; }
+
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(-6px); box-shadow: 0 0 0 1.5px transparent; }
+  to { opacity: 1; transform: none; box-shadow: 0 0 0 1.5px var(--accent); }
+}
+
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12px;
+  height: 16px;
+  fill: var(--ink);
+  stroke: var(--ui-bg);
+  stroke-width: 1;
+  opacity: 0;
+}
+
+.is-active .cursor { animation: cursor 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.3s both; }
+
+@keyframes cursor {
+  0% { opacity: 0; left: 35%; top: 85%; }
+  15% { opacity: 1; }
+  45%, 100% { opacity: 1; left: calc(100% - 44px); top: 46px; }
+  52% { transform: scale(0.85); }
+  60% { transform: none; }
+}
+
+/* 07 — the seven reviewers, then the loop */
 .agent-dot {
   height: 5px;
   width: 5px;
