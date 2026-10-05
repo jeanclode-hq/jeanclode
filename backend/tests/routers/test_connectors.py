@@ -9,6 +9,7 @@ belongs in a ``TestClient``-based suite once that's runnable here.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -196,7 +197,9 @@ def test_write_credential_oauth2_accepts_grant_with_required_fields(
     assert response.auth_type == AuthType.OAUTH2
 
 
-def _stored(org_id: object, subject_id: object, *, auth_type: str, host: str | None) -> MagicMock:
+def _stored(
+    org_id: object, subject_id: object, *, auth_type: str, host: str | None, name: str = "FIRST"
+) -> MagicMock:
     return MagicMock(
         id=uuid4(),
         org_id=org_id,
@@ -204,6 +207,7 @@ def _stored(org_id: object, subject_id: object, *, auth_type: str, host: str | N
         subject_id=subject_id,
         auth_type=auth_type,
         settings={"host": host} if host else {},
+        secret_encrypted=json.dumps({"name": name}),
     )
 
 
@@ -224,6 +228,7 @@ def _write(request: WriteCredentialRequest, existing: list[MagicMock]) -> dict[s
     install = MagicMock(org_id=request.org_id)
     app = MagicMock()
     app.database.encrypt.return_value = "encrypted-blob"
+    app.database.decrypt.side_effect = lambda blob: blob
 
     def saved(*_args: object, **kwargs: object) -> MagicMock:
         return MagicMock(
@@ -257,14 +262,52 @@ def test_write_credential_adds_a_second_auth_on_another_host() -> None:
     calls["replace"].assert_not_called()
 
 
-def test_write_credential_rejects_a_second_auth_on_the_same_host() -> None:
-    request = _skill_request(AuthType.NONE, {}, {"host": "https://API.figma.com/v1"})
+def test_write_credential_rejects_a_second_auth_setting_the_same_header() -> None:
+    request = _skill_request(
+        AuthType.API_KEY,
+        {"name": "FIGMA_TOKEN_2", "key": "figd_other"},
+        {"host": "https://API.figma.com/v1", "header": "authorization"},
+    )
     first = _stored(request.org_id, request.subject_id, auth_type="api_key", host="api.figma.com")
 
     with pytest.raises(HTTPException) as exc_info:
         _write(request, [first])
 
     assert exc_info.value.status_code == 409
+
+
+def test_write_credential_rejects_basic_auth_next_to_a_bearer_key() -> None:
+    request = _skill_request(
+        AuthType.BASIC_AUTH, {"username": "u", "password": "p"}, {"host": "api.figma.com"}
+    )
+    first = _stored(request.org_id, request.subject_id, auth_type="api_key", host="api.figma.com")
+
+    with pytest.raises(HTTPException) as exc_info:
+        _write(request, [first])
+
+    assert exc_info.value.status_code == 409
+
+
+def test_write_credential_adds_a_second_header_on_the_same_host() -> None:
+    request = _skill_request(
+        AuthType.API_KEY,
+        {"name": "APP_CLIENT_ID", "key": "client-1"},
+        {"host": "api.figma.com", "header": "X-Client-Id"},
+    )
+    first = _stored(request.org_id, request.subject_id, auth_type="api_key", host="api.figma.com")
+
+    calls = _write(request, [first])
+
+    calls["create"].assert_called_once()
+
+
+def test_write_credential_allowlists_a_host_that_already_has_an_auth() -> None:
+    request = _skill_request(AuthType.NONE, {}, {"host": "api.figma.com"})
+    first = _stored(request.org_id, request.subject_id, auth_type="api_key", host="api.figma.com")
+
+    calls = _write(request, [first])
+
+    calls["create"].assert_called_once()
 
 
 def test_write_credential_puts_a_totp_code_next_to_a_password_on_one_host() -> None:
@@ -292,6 +335,38 @@ def test_write_credential_adds_a_body_secret_on_a_host_with_a_header_auth() -> N
     calls = _write(request, [first])
 
     calls["create"].assert_called_once()
+
+
+def test_write_credential_takes_several_body_secrets_on_one_host() -> None:
+    request = _skill_request(
+        AuthType.API_KEY,
+        {"name": "APP_USERNAME", "key": "qa"},
+        {"host": "login.example.com", "inject": "body"},
+    )
+    password = _stored(
+        request.org_id, request.subject_id, auth_type="api_key", host=None, name="APP_PASSWORD"
+    )
+    password.settings = {"host": "login.example.com", "inject": "body"}
+
+    calls = _write(request, [password])
+
+    calls["create"].assert_called_once()
+
+
+def test_write_credential_rejects_an_env_var_name_already_taken() -> None:
+    request = _skill_request(
+        AuthType.API_KEY,
+        {"name": "APP_PASSWORD", "key": "other"},
+        {"host": "other.example.com", "inject": "body"},
+    )
+    first = _stored(
+        request.org_id, request.subject_id, auth_type="api_key", host="x.com", name="APP_PASSWORD"
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _write(request, [first])
+
+    assert exc_info.value.status_code == 409
 
 
 def test_write_credential_replaces_the_given_credential_on_its_own_host() -> None:

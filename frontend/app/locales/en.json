@@ -485,7 +485,7 @@
     "form": {
       "authType": "Auth type",
       "authTypeHelp": "API key / JWT: one static token sent in a header on every request. Basic auth: a username/password pair, sent Base64-encoded. OAuth2: Jeanclode mints and refreshes an access token itself from a client_id/client_secret — nothing to rotate by hand. No auth: the host is only made reachable from the sandbox, with nothing injected — for public endpoints (a package registry, a CDN a skill downloads from).",
-      "skillAuthTypesNote": "Skills support API key, JWT, Basic auth and No auth. Add one auth per host the skill calls.",
+      "skillAuthTypesNote": "Skills support API key, JWT, Basic auth and No auth. Add an auth for each value the skill needs; a host can take several, as long as no two set the same header and each env var name is unique.",
       "editingNote": "Editing an existing credential. The secret isn't shown back for editing — re-enter it below to save any change.",
       "envVarName": "Env var name",
       "envVarNameHelp": "The environment variable the skill's script reads this value as — check the skill's own instructions for the name it expects (e.g. OUTLINE_API_KEY).",

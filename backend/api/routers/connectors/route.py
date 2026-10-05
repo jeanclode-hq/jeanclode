@@ -92,8 +92,13 @@ def _target_host(cred_settings: dict, server: McpServer | None) -> str | None:
     return _hostname(host) if host else None
 
 
-def _in_body(cred_settings: dict) -> bool:
-    return cred_settings.get("inject") in ("body", "totp")
+def _injected_header(auth_type: str, cred_settings: dict) -> str | None:
+    """The header the proxy sets for a credential, lowercased; None when it sets none."""
+    if auth_type == AuthType.NONE.value or cred_settings.get("inject") in ("body", "totp"):
+        return None
+    if auth_type in (AuthType.BASIC_AUTH.value, AuthType.OAUTH2.value):
+        return "authorization"
+    return str(cred_settings.get("header") or "Authorization").lower()
 
 
 def _verify_subject(
@@ -309,26 +314,37 @@ def write_credential(
         if target is None:
             raise HTTPException(status_code=404, detail="Credential not found")
 
-    # The proxy injects one header set per host, so two auths of one subject
-    # on the same host would silently overwrite each other. Body and TOTP
-    # secrets each swap their own placeholder, so they share a host freely
-    # (a login password and its 2FA code).
+    # The proxy merges a host's credentials into one rule, so the only clash
+    # is two of them setting the same header there: the last would win.
     new_settings = validated_settings.model_dump()
     host = _target_host(new_settings, server)
-    if not _in_body(new_settings) and any(
+    header = _injected_header(request.auth_type.value, new_settings)
+    if header and any(
         c is not target
-        and not _in_body(c.settings or {})
         and _target_host(c.settings or {}, server) == host
+        and _injected_header(c.auth_type, c.settings or {}) == header
         for c in existing
     ):
         raise HTTPException(
             status_code=409,
-            detail=f"This {request.subject_type.value} already has an auth for {host}",
+            detail=f"This {request.subject_type.value} already sets {header} on {host}",
         )
 
     app = get_current_app()
     if not app.database:
         raise HTTPException(status_code=503, detail="Database not available")
+
+    # Each name becomes an env var on the agent, so a second one would hide the first.
+    env_name = getattr(validated_secret, "name", None)
+    if env_name and any(
+        c is not target
+        and json.loads(app.database.decrypt(c.secret_encrypted)).get("name") == env_name
+        for c in existing
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"This {request.subject_type.value} already has an auth named {env_name}",
+        )
 
     secret_encrypted = app.database.encrypt(json.dumps(validated_secret.model_dump()))
 
