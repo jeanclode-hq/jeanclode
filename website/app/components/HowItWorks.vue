@@ -13,7 +13,7 @@
         </h2>
         <p class="max-w-sm text-base leading-relaxed text-[var(--ui-text-muted)] md:col-span-4 md:col-start-9 md:self-end">
           Whatever the source, every event follows the same lifecycle: triage, decide, fix, verify,
-          review. No step waits on a human.
+          demo, review. No step waits on a human.
         </p>
       </motion.div>
     </div>
@@ -210,6 +210,12 @@ const steps = [
   },
   {
     number: '06',
+    icon: 'i-lucide-clapperboard',
+    title: 'Demo',
+    body: 'When the fix touches a UI, a separate agent runs the app with fake data and records the change on the real page. Anything short of working goes back to the fixer; the recording goes in the PR.',
+  },
+  {
+    number: '07',
     icon: 'i-lucide-refresh-cw',
     title: 'Review loop',
     body: 'Seven agents review the fix. The bot works through every finding and pushes, which sends the PR back through review. When a pass comes back clean, your team gets tagged.',
