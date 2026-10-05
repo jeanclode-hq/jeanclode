@@ -1,4 +1,5 @@
 import type {
+  CredentialStatus,
   GitOrgSettings,
   McpServerResponse,
   OrgMembersResponse,
@@ -298,6 +299,34 @@ const sentryProjects: SentryProjectResponse[] = [
 ]
 
 const skillsSourceId = `${MARKER}-skills-source`
+const installId = (name: string) => `${MARKER}-skill-${name}`
+
+function credential(
+  subjectId: string,
+  n: number,
+  authType: CredentialStatus['auth_type'],
+  settings: Record<string, unknown>,
+): CredentialStatus {
+  return {
+    id: `${subjectId}-auth-${n}`,
+    org_id: gitOrgId,
+    subject_type: 'plugin_installation',
+    subject_id: subjectId,
+    auth_type: authType,
+    settings,
+    created_at: ago(60 * 24 * 3),
+    updated_at: ago(60 * 24 * 3),
+  }
+}
+
+// A skill that logs in to a web app: its password and 2FA code on the login
+// host, and the app's own host allowed through.
+const qaLoginAuths = [
+  credential(installId('qa-login'), 1, 'api_key', { host: 'login.acme.dev', inject: 'body' }),
+  credential(installId('qa-login'), 2, 'api_key', { host: 'login.acme.dev', inject: 'totp' }),
+  credential(installId('qa-login'), 3, 'none', { host: 'staging.acme.dev' }),
+]
+
 const plugins: PluginsOverview = {
   marketplaces: [
     {
@@ -308,20 +337,21 @@ const plugins: PluginsOverview = {
       kind: 'skills',
       last_sync_status: 'ok',
       plugins: [
+        { name: 'qa-login', description: 'Log in to staging with the QA account and check the orders page.', installed: true },
         { name: 'deploy', description: 'How we ship a service: release tags, Helm values and the rollout checklist.', installed: true },
         { name: 'backend-conventions', description: 'Our FastAPI layout, error handling and migration rules.', installed: true },
         { name: 'frontend-conventions', description: 'Nuxt UI components, i18n and form validation the way we do it.', installed: false },
       ],
     },
   ],
-  installed: ['deploy', 'backend-conventions'].map((name) => ({
-    id: `${MARKER}-skill-${name}`,
+  installed: ['qa-login', 'deploy', 'backend-conventions'].map((name) => ({
+    id: installId(name),
     org_id: gitOrgId,
     marketplace_id: skillsSourceId,
     plugin_name: name,
     display_name: name,
     project_overrides: {},
-    credentials: [],
+    credentials: name === 'qa-login' ? qaLoginAuths : [],
   })),
 }
 
@@ -353,6 +383,7 @@ const ROUTES: [RegExp, (url: URL) => unknown][] = [
   [/\/sources\/sentry\/projects$/, () => sentryProjects],
   [/\/plugins$/, () => plugins],
   [/\/mcp-servers$/, () => mcpServers],
+  [/\/credentials$/, (url) => (url.searchParams.get('subject_id') === installId('qa-login') ? qaLoginAuths : [])],
 ]
 
 export function guideDemoResponse(request: Request): Response | null {

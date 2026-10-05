@@ -23,8 +23,7 @@ const deleteMutation = useDeleteCredentialMutation()
 
 const isSkill = computed(() => props.subjectType === 'plugin_installation')
 
-// One tab per stored auth (a subject holds one per target host), plus one
-// to add another.
+// One tab per stored auth, plus one to add another.
 const NEW_TAB = 'new'
 const selected = ref<string>(NEW_TAB)
 // Set once the user edits the new-auth tab, so a late credentials load
@@ -254,6 +253,7 @@ async function remove() {
       <UTabs
         v-if="credentials?.length"
         v-model="selected"
+        data-guide="skillsLogin"
         :items="tabs"
         :content="false"
         variant="link"
@@ -359,6 +359,7 @@ async function remove() {
 
       <UFormField
         v-if="isSkill"
+        data-guide="skillsSentIn"
         :label="t('connectors.form.sentIn')"
         :help="t('connectors.form.sentInHelp')"
       >
@@ -563,6 +564,7 @@ async function remove() {
     </template>
 
     <UFormField
+      data-guide="skillsHosts"
       :label="t('connectors.form.host')"
       :help="isSkill ? t('connectors.form.hostHelp') : t('connectors.form.hostHelpMcp')"
       :required="hostRequired"

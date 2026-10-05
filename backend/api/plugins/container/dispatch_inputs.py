@@ -1375,7 +1375,7 @@ async def add_connectors_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) 
     the wire for a matched upstream); the CLI needs no per-server env var,
     only ``auth_scheme`` to format a plausible-looking header.
 
-    A subject can hold several credentials, one per host. ``none`` rows only
+    A subject can hold several credentials, on one host or several. ``none`` rows only
     allowlist their host. On a skill, ``basic_auth`` takes an optional env
     var name and ``oauth2`` is skipped with a warning (not wired for skills
     yet); on an MCP server, a credential for a host other than the server's

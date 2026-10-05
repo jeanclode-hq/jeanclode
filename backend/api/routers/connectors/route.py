@@ -58,12 +58,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Connectors"])
 
-# The CLI always registers this name for the in-process memory MCP server
-# (cli/src/agents/memory_tool.py:MEMORY_SERVER_NAME). An org-registered MCP
-# server with the same name would silently overwrite it in the same
-# ClaudeAgentOptions.mcp_servers dict — reject it here rather than let that
-# collision happen at dispatch time.
-_RESERVED_MCP_SERVER_NAMES = frozenset({"memory"})
+# The CLI registers these names for its own MCP servers, the in-process memory
+# server (cli/src/agents/memory_tool.py:MEMORY_SERVER_NAME) and the built-in
+# browser (cli/src/runtime/browser_mcp.py:BROWSER_SERVER_NAME). An org server
+# with the same name would collide in ClaudeAgentOptions.mcp_servers — reject
+# it here rather than let that happen at dispatch time.
+_RESERVED_MCP_SERVER_NAMES = frozenset({"memory", "playwright"})
 
 
 def _reject_reserved_mcp_server_name(name: str | None) -> None:

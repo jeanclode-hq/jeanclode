@@ -152,6 +152,7 @@ function toggleAuthForm(id: string) {
           <div class="flex items-center gap-1 shrink-0">
             <UButton
               v-if="server.credential_count"
+              data-guide="mcpAuth"
               :label="t('connectors.authConfigured', server.credential_count)"
               color="success"
               variant="subtle"
