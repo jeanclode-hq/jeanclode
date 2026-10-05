@@ -56,6 +56,9 @@ logger = logging.getLogger(__name__)
 # backend's own sandbox) always bypasses this check.
 LOCAL_ALLOWED_WORKFLOWS = frozenset({"code-review", "pr-summary", "echo"})
 
+# Workflows whose agents get the built-in browser; the others skip its install.
+BROWSER_WORKFLOWS = frozenset({"issue-resolve", "jeanclode-respond"})
+
 
 async def run(args: CLIArgs) -> int:
     if args.command == "config":
@@ -132,7 +135,7 @@ async def _run_workflow(
 
     t0 = time.time()
     browser_mcp: asyncio.Task[BrowserMcp | None] | None = None
-    if os.environ.get("JEANCLODE_CONTAINER_MODE") == "1":
+    if os.environ.get("JEANCLODE_CONTAINER_MODE") == "1" and workflow_cls.name in BROWSER_WORKFLOWS:
         browser_mcp = asyncio.create_task(install_browser_mcp())
     try:
         skills = load_skills_from_env()
