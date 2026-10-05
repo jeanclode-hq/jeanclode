@@ -702,7 +702,7 @@
       "skillsLogin": {
         "title": "Logging in to a web app",
         "hint": "Password, 2FA code and the app's host.",
-        "body": "This skill logs in to staging: its password in the request body and its 2FA code on the login host, plus the app's own host with No auth. On a resolve or a `@jeanclode-bot` mention the agent has a browser and logs in like a person would. Session cookies stay in the proxy too, so the agent can act as the account but never read its session."
+        "body": "This skill logs in to staging: its password in the request body and its 2FA code on the login host, plus the app's own host with No auth. On a resolve or a `{'@'}jeanclode-bot` mention the agent has a browser and logs in like a person would. Session cookies stay in the proxy too, so the agent can act as the account but never read its session."
       },
       "mcpServers": {
         "title": "Extra tools (MCP)",
