@@ -14,10 +14,13 @@ class DemoRound(BaseModel):
     evidence: str = ""
     # The checkout the app was launched from: its PR/MR carries the video.
     app_repo: str = ""
+    media: Literal["screenshot", "video"] = "video"
     video_path: str = ""
     screenshots: list[str] = Field(default_factory=list)
     # `git stash show -p` of the demo's setup, keyed by worktree path.
     setup_diffs: dict[str, str] = Field(default_factory=dict)
+    # The setup it kept outside the checkouts (recording script, mocks), by path.
+    setup_files: dict[str, str] = Field(default_factory=dict)
     # HEAD of each worktree when the round ran: an `ok` stays valid until one moves.
     heads: dict[str, str] = Field(default_factory=dict)
 

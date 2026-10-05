@@ -29,6 +29,10 @@ class PlannerInput(BaseModel):
     pr_description: str = ""
     diff: str = ""
     discussions: str = ""
+    # The org's "demo videos" switch; off, the prompt drops the demo action.
+    demo_enabled: bool = True
+    # The PR/MR description already carries a demo, which a UI push makes stale.
+    has_demo: bool = False
 
 
 class PlannerOutput(BaseModel):
@@ -40,8 +44,13 @@ class PlannerOutput(BaseModel):
     on the value. The two are combinable in one turn (e.g. ``handle`` a
     reply, then ``route`` to an existing pipeline), same ordering
     discipline as before.
+
+    ``demo`` is the one action Python does carry out: ``demo_plan`` is what
+    the demo gate records once the planner finishes (see
+    ``workflows.jeanclode_respond.demo``).
     """
 
     model_config = ConfigDict(extra="ignore")
-    actions_taken: list[Literal["route", "handle"]] = Field(min_length=1)
+    actions_taken: list[Literal["route", "handle", "demo"]] = Field(min_length=1)
     summary: str = ""
+    demo_plan: str | None = None

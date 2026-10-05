@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # covers them (see the npm upstream in add_gitlab_workspace_credentials).
 GITLAB_NPM_PATH_PATTERN = r"^/api/v4/(projects/\d+/)?packages/npm/"
 
-# What a demo agent (issue-resolve) needs to install and start a frontend:
+# What a demo agent (issue-resolve, respond) needs to install and start a frontend:
 # Node through mise, the package manager through corepack, and packages.
 DEMO_TOOLING_HOSTS = (
     "registry.npmjs.org",
@@ -1095,7 +1095,7 @@ DEMO_ENABLED_ENV_VAR = "JEANCLODE_DEMO_ENABLED"
 
 
 def add_demo_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
-    """Apply the org's ``demo_videos`` switch to an issue-resolve dispatch.
+    """Apply the org's ``demo_videos`` switch to an issue-resolve or respond dispatch.
 
     On (the default): allowlist the hosts the demo gate installs a frontend
     from. Off: tell the CLI, which then never asks triage for a demo plan.

@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 DEMO_DIR = Path("/tmp/jeanclode-demo")
 HINTS_FILE = "hints.md"
 BYPASS_FILE = "bypass"
+# The demo's own setup outside the checkouts: shown under the demo, kept across rounds.
+SETUP_DIR = "setup"
+_MAX_SETUP_FILE_BYTES = 50_000
 STASH_MESSAGE = "jeanclode-demo"
 
 
@@ -88,12 +91,30 @@ def fresh_demo_dir(demo_dir: Path) -> None:
 
 
 def reset_demo_dir(demo_dir: Path) -> None:
-    """Clear the last round's recording, keeping the fixer's hints and bypass."""
+    """Clear the last round's recording, keeping the fixer's hints and bypass and the setup."""
     demo_dir.mkdir(parents=True, exist_ok=True)
     for entry in demo_dir.iterdir():
-        if entry.name in (HINTS_FILE, BYPASS_FILE):
+        if entry.name in (HINTS_FILE, BYPASS_FILE, SETUP_DIR):
             continue
         if entry.is_dir() and not entry.is_symlink():
             shutil.rmtree(entry, ignore_errors=True)
         else:
             entry.unlink(missing_ok=True)
+
+
+def read_setup_files(demo_dir: Path) -> dict[str, str]:
+    """The text files under ``demo_dir / SETUP_DIR``, by path relative to it."""
+    root = demo_dir / SETUP_DIR
+    if not root.is_dir():
+        return {}
+    files: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.stat().st_size > _MAX_SETUP_FILE_BYTES:
+            continue
+        if any(part in ("node_modules", "__pycache__") for part in path.parts):
+            continue
+        try:
+            files[str(path.relative_to(root))] = path.read_text()
+        except UnicodeDecodeError, OSError:
+            continue
+    return files

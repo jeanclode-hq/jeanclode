@@ -55,7 +55,7 @@ from collections.abc import Callable
 from typing import ClassVar
 
 from src.activities.ci_watch import check_ci
-from src.activities.demo import DEMO_DIR, DemoGateState, fresh_demo_dir
+from src.activities.demo import DEMO_DIR, DemoGateState, fresh_demo_dir, post_demos
 from src.activities.git import (
     PRRef,
     WorktreePath,
@@ -87,7 +87,7 @@ from src.runtime.context import RunContext
 from src.runtime.events import Panel
 from src.runtime.llm_options import FixerLLMChoice, apply_fixer_llm, resolve_fixer_llm
 from src.workflows.base import register
-from src.workflows.issue_resolve.demo import make_run_demo, post_demos
+from src.workflows.issue_resolve.demo import make_run_demo
 from src.workflows.issue_resolve.utils import (
     format_triage_panel,
     issue_branch,

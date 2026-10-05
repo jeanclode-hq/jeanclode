@@ -25,6 +25,16 @@ FAKE_GLAB_SCRIPT = Path(__file__).parent / "fixtures/fake_glab.sh"
 FAKE_GH_SCRIPT = Path(__file__).parent / "fixtures/fake_gh.sh"
 
 
+@pytest.fixture(autouse=True)
+def _no_commit_signing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Agents commit in eval repos; a host's ``commit.gpgsign`` would prompt or fail."""
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "commit.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "false")
+    monkeypatch.setenv("GIT_CONFIG_KEY_1", "tag.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_1", "false")
+
+
 @pytest.fixture(scope="session")
 def judge() -> GeminiJudge:
     return get_judge()

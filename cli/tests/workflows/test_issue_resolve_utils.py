@@ -6,12 +6,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from src.activities.demo import DemoGateState, DemoRound
+from src.activities.demo import DemoGateState, DemoRound, post_demos
 from src.activities.git import PRRef, resolve_target_repos
 from src.activities.issue.schemas import IssueContext
 from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
-from src.workflows.issue_resolve.demo import post_demos
 from src.workflows.issue_resolve.utils import pr_body, pr_title
 
 _ISSUE_URL = "https://github.com/org/repo/issues/42"
@@ -155,8 +154,8 @@ def test_post_demos_puts_the_video_on_the_app_pr_and_links_the_others(tmp_path: 
     ctx, cwds = _demo_ctx(tmp_path)
     prs = _prs()
     with (
-        patch("src.workflows.issue_resolve.demo.publish_demo") as publish,
-        patch("src.workflows.issue_resolve.demo.link_demo") as link,
+        patch("src.activities.demo.post.publish_demo") as publish,
+        patch("src.activities.demo.post.link_demo") as link,
     ):
         outcomes = post_demos(prs, _ok_state(tmp_path, "frontend"), ctx=ctx, cwds=cwds)
 
@@ -169,8 +168,8 @@ def test_post_demos_puts_the_video_on_the_app_pr_and_links_the_others(tmp_path: 
 def test_post_demos_without_a_known_app_puts_the_video_everywhere(tmp_path: Path) -> None:
     ctx, cwds = _demo_ctx(tmp_path)
     with (
-        patch("src.workflows.issue_resolve.demo.publish_demo") as publish,
-        patch("src.workflows.issue_resolve.demo.link_demo") as link,
+        patch("src.activities.demo.post.publish_demo") as publish,
+        patch("src.activities.demo.post.link_demo") as link,
     ):
         outcomes = post_demos(_prs(), _ok_state(tmp_path, "storybook"), ctx=ctx, cwds=cwds)
 
@@ -182,8 +181,8 @@ def test_post_demos_without_a_known_app_puts_the_video_everywhere(tmp_path: Path
 def test_post_demos_links_nothing_when_the_video_failed_to_post(tmp_path: Path) -> None:
     ctx, cwds = _demo_ctx(tmp_path)
     with (
-        patch("src.workflows.issue_resolve.demo.publish_demo", side_effect=RuntimeError("422")),
-        patch("src.workflows.issue_resolve.demo.link_demo") as link,
+        patch("src.activities.demo.post.publish_demo", side_effect=RuntimeError("422")),
+        patch("src.activities.demo.post.link_demo") as link,
     ):
         outcomes = post_demos(_prs(), _ok_state(tmp_path, "frontend"), ctx=ctx, cwds=cwds)
 
@@ -198,8 +197,8 @@ def test_post_demos_notes_why_there_is_no_demo_on_the_app_pr(tmp_path: Path) -> 
         last=DemoRound(verdict="unavailable", evidence="pnpm install: 403", app_repo="frontend"),
     )
     with (
-        patch("src.workflows.issue_resolve.demo.post_demo_note") as note,
-        patch("src.workflows.issue_resolve.demo.publish_demo") as publish,
+        patch("src.activities.demo.post.post_demo_note") as note,
+        patch("src.activities.demo.post.publish_demo") as publish,
     ):
         outcomes = post_demos(_prs(), state, ctx=ctx, cwds=cwds)
 
@@ -218,7 +217,7 @@ def test_post_demos_notes_a_checkout_left_dirty(tmp_path: Path) -> None:
         last=DemoRound(verdict="broken", evidence="stale", app_repo="frontend"),
         dirty=["/work/frontend"],
     )
-    with patch("src.workflows.issue_resolve.demo.post_demo_note") as note:
+    with patch("src.activities.demo.post.post_demo_note") as note:
         post_demos(_prs(), state, ctx=ctx, cwds=cwds)
 
     text = note.call_args.args[1]
@@ -229,7 +228,7 @@ def test_post_demos_notes_a_checkout_left_dirty(tmp_path: Path) -> None:
 def test_post_demos_notes_a_demo_agent_failure(tmp_path: Path) -> None:
     ctx, cwds = _demo_ctx(tmp_path)
     state = DemoGateState(rounds=6, error="It ran past its 40-minute budget and was stopped.")
-    with patch("src.workflows.issue_resolve.demo.post_demo_note") as note:
+    with patch("src.activities.demo.post.post_demo_note") as note:
         post_demos(_prs(), state, ctx=ctx, cwds=cwds)
 
     assert note.call_count == 2

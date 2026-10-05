@@ -60,7 +60,7 @@ async def test_notify_wired_only_for_loop_ending_workflows(workflow, expected):
 
 
 @pytest.mark.asyncio
-async def test_mention_driven_respond_container_wires_notify():
+async def test_mention_driven_respond_container_wires_notify_and_demo():
     """The mention path builds its own inputs rather than going through
     build_dispatch_inputs, so it needs the wiring in its own right — a
     resolve-only turn is one of the two places the notice can fire."""
@@ -98,6 +98,7 @@ async def test_mention_driven_respond_container_wires_notify():
         patch("api.plugins.gitlab.launch.ContainerRequest"),
         patch("api.plugins.gitlab.launch.build_container_labels", return_value={}),
         patch("api.plugins.gitlab.launch.add_notify_to_inputs") as notify_mock,
+        patch("api.plugins.gitlab.launch.add_demo_to_inputs") as demo_mock,
     ):
         await launch_respond_container(
             target_url="https://gitlab.example.com/group/app/-/merge_requests/42#note_1",
@@ -108,3 +109,5 @@ async def test_mention_driven_respond_container_wires_notify():
 
     assert notify_mock.called
     assert notify_mock.call_args.kwargs["git_org_id"] == org_id
+    # A mention can ask for a demo of the MR.
+    assert demo_mock.call_args.kwargs["git_org_id"] == org_id

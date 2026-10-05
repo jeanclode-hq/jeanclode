@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class DemoInput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    # "pr": a respond mention asked for it; issue_* then describe the PR/MR.
+    source: Literal["issue", "pr"] = "issue"
     issue_url: str = ""
     issue_title: str = ""
     issue_body: str = ""
@@ -33,5 +35,7 @@ class DemoOutput(BaseModel):
     evidence: str = ""
     # Name of the checkout the app was launched from (one of DemoInput.repos, or a related repo).
     app_repo: str = ""
+    # What the PR/MR gets: the screenshots for a static change, the video for an interaction.
+    media: Literal["screenshot", "video"] = "video"
     video_path: str = ""
     screenshots: list[str] = Field(default_factory=list)

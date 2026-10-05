@@ -11,7 +11,7 @@ import re
 DEMO_START = "<!-- jeanclode:demo -->"
 DEMO_END = "<!-- /jeanclode:demo -->"
 _BLOCK_RE = re.compile(re.escape(DEMO_START) + r".*?" + re.escape(DEMO_END) + r"\n*", re.DOTALL)
-# GitHub caps a description at 65536 characters; the recording matters more than its setup.
+# GitHub caps a description at 65536 characters; the demo matters more than its setup.
 _MAX_DIFF_CHARS = 20_000
 
 
@@ -41,20 +41,43 @@ def _fence(text: str) -> str:
     return fence
 
 
-def render_demo_block(media_markdown: str, setup_diffs: dict[str, str]) -> str:
+def _truncate(text: str, budget: int) -> str:
+    if len(text) <= budget:
+        return text
+    return text[:budget].rstrip() + "\n… (truncated)"
+
+
+def render_demo_block(
+    media_markdown: str,
+    setup_diffs: dict[str, str],
+    setup_files: dict[str, str] | None = None,
+) -> str:
     parts = [DEMO_START, "#### Demo", "", media_markdown]
+    setup: list[str] = []
+    budget = _MAX_DIFF_CHARS
     diff = "\n".join(d.rstrip() for d in setup_diffs.values() if d.strip())
     if diff:
-        if len(diff) > _MAX_DIFF_CHARS:
-            diff = diff[:_MAX_DIFF_CHARS].rstrip() + "\n… (truncated)"
+        diff = _truncate(diff, budget)
+        budget -= len(diff)
         fence = _fence(diff)
+        setup += ["", f"{fence}diff\n{diff}\n{fence}"]
+    for name, content in (setup_files or {}).items():
+        if budget <= 0:
+            setup += ["", "… (more setup files truncated)"]
+            break
+        content = _truncate(content.rstrip(), budget)
+        budget -= len(content)
+        fence = _fence(content)
+        lang = name.rsplit(".", 1)[-1] if "." in name else ""
+        setup += ["", f"`{name}`", "", f"{fence}{lang}\n{content}\n{fence}"]
+    if setup:
         parts += [
             "",
             "<details><summary>How this demo was set up</summary>",
             "",
-            "Mocks, fixtures and config the demo used. None of it is part of this change.",
-            "",
-            f"{fence}diff\n{diff}\n{fence}",
+            "Mocks, fixtures, config and the script the demo used. None of it is part of "
+            "this change.",
+            *setup,
             "",
             "</details>",
         ]

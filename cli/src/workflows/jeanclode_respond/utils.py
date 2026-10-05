@@ -124,6 +124,27 @@ def pr_ref_from_mention(mention: MentionContext, branch: str) -> PRRef | None:
     )
 
 
+def exclude_context_dir(cwd: Path) -> None:
+    """Keep ``.context/`` out of ``git status``: the planner's ``git add .`` would
+    commit it, and the demo gate would take it for an unclean checkout."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--git-path", "info/exclude"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return
+    exclude = cwd / proc.stdout.strip()
+    existing = exclude.read_text() if exclude.is_file() else ""
+    if "/.context/" in existing.splitlines():
+        return
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    exclude.write_text(f"{existing.rstrip()}\n/.context/\n".lstrip())
+
+
 def branch_was_pushed(cwd: Path, starting_sha: str) -> bool:
     """True iff origin's current branch has moved past ``starting_sha``.
 

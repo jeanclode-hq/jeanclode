@@ -480,6 +480,7 @@ async def launch_respond_container(
         repo_token_override_encrypted=(repo.auth_token_encrypted if repo else None),
     )
     add_agent_tooling_hosts(inputs)
+    add_demo_to_inputs(inputs, git_org_id=org_id)
 
     add_notify_to_inputs(inputs, git_org_id=org_id)
 

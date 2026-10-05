@@ -704,7 +704,7 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
       </div>
     </section>
 
-    <!-- Demo videos (issue-resolve records UI fixes before review) -->
+    <!-- Demo videos (issue-resolve records UI fixes before review; respond on request) -->
     <section
       v-if="settings"
       data-guide="gitDemoVideos"

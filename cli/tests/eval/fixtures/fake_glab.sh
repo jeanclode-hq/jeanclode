@@ -32,6 +32,12 @@ case "$1 $2" in
     exit 0
     ;;
   "api"*)
+    case "$*" in
+      *related_merge_requests*)
+        FILE="$FIXTURES/related_merge_requests.json"
+        [ -f "$FILE" ] && cat "$FILE" || echo "[]"
+        ;;
+    esac
     exit 0
     ;;
   *)

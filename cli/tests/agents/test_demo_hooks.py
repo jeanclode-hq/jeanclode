@@ -153,6 +153,24 @@ async def test_setup_is_stashed_between_rounds_and_restored(
 
 
 @patch("src.agents.hooks.fix_missing_reason", return_value=None)
+async def test_setup_outside_the_checkout_is_recorded_and_kept(
+    _pushed: Any, worktree: WorktreePath, demo_dir: Path, tmp_path: Path
+) -> None:
+    script = demo_dir / "setup" / "record.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("page.route('**/api/orders', ...)")
+    state = DemoGateState()
+    run, _ = _scripted("ok")
+    hook = require_demo_hook([worktree], run, state, ctx=_ctx(tmp_path), demo_dir=demo_dir)
+
+    await hook.hooks[0](_so_input(), None, {"signal": None})
+
+    assert state.ok is not None
+    assert state.ok.setup_files == {"record.py": "page.route('**/api/orders', ...)"}
+    assert script.is_file()
+
+
+@patch("src.agents.hooks.fix_missing_reason", return_value=None)
 async def test_ok_is_not_rerun_until_the_fix_moves(
     _pushed: Any, worktree: WorktreePath, demo_dir: Path, tmp_path: Path
 ) -> None:

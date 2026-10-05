@@ -443,6 +443,7 @@ async def launch_respond_container(
         return None
     await add_gitlab_workspace_credentials(inputs, git_org_id=org_id, execution_id=execution_id)
     add_agent_tooling_hosts(inputs)
+    add_demo_to_inputs(inputs, git_org_id=org_id)
 
     add_notify_to_inputs(inputs, git_org_id=org_id)
 

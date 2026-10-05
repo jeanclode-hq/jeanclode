@@ -178,7 +178,8 @@ If you end up unsure enough that you'd normally lean `needs_info`, do that
 instead of guessing in `findings` — don't proceed with a shaky theory.
 {% if demo_enabled %}
 *Demo.* When the fix changes what a user sees in a web UI, a demo agent
-records a short video of it working before the PR/MR goes to review. You
+shows it working (screenshots, or a short video for an interaction)
+before the PR/MR goes to review. You
 are the only switch: `demo_plan` is `null` for no demo, otherwise a short
 script for that agent.
 - Yes: new UI, a layout change, a behaviour change you can click through.

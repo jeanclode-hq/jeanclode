@@ -200,7 +200,7 @@ class GitOrgSettings(BaseModel):
     related_repos: RelatedRepoSettings = Field(default_factory=RelatedRepoSettings)
     demo_videos: bool = Field(
         default=True,
-        description="Record a demo video of UI fixes before review (issue-resolve)",
+        description="Show UI fixes working (screenshots or a short video) before review (issue-resolve), and on request in a PR/MR (respond)",
     )
     trigger_permission: TriggerPermission = Field(
         default=TriggerPermission.DEVELOPER_ONLY,

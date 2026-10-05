@@ -617,7 +617,7 @@ export type GitOrgSettings = {
     related_repos?: RelatedRepoSettings;
     /**
      * Demo Videos
-     * Record a demo video of UI fixes before review (issue-resolve)
+     * Show UI fixes working (screenshots or a short video) before review (issue-resolve), and on request in a PR/MR (respond)
      */
     demo_videos?: boolean;
     /**
