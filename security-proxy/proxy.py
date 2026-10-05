@@ -37,8 +37,7 @@ STRIPPED_HEADERS: tuple[str, ...] = (
 # Response-side scrub. Servers don't normally echo Authorization, but a buggy
 # upstream or a user-controlled body field could leak credentials back. Strip
 # anything credential-shaped on the way to the agent as defense-in-depth.
-# ``set-cookie`` is stripped too, except on a host with body secrets, where
-# the agent logs in and needs its session: there it's vaulted (``_CookieVault``).
+# ``set-cookie`` isn't stripped but vaulted: see ``_CookieVault``.
 STRIPPED_RESPONSE_HEADERS: tuple[str, ...] = STRIPPED_HEADERS
 
 # Login payloads are tiny; anything bigger goes out unscanned rather than
@@ -750,16 +749,14 @@ class SecurityProxy:
         packfiles, repo archives, Node downloads and npm tarballs fetched
         16 at a time all OOM-killed it, or would.
 
-        Cookies are only kept on a host with body secrets, the one place an
-        agent logs in; everywhere else the credential rides every request
-        and ``set-cookie`` is stripped. There, a response to a request the
-        proxy put a credential into (header, body secret, vaulted cookie)
-        has every cookie vaulted, since any of them may be a session minted
-        from it; other responses only vault ``HttpOnly`` ones, so cookies
-        page scripts read (CSRF double-submit) stay real.
+        A response to a request the proxy put a credential into (header,
+        body secret, vaulted cookie) has every cookie vaulted, since any of
+        them may be a session minted from it; elsewhere only ``HttpOnly``
+        ones are, so cookies page scripts read (CSRF double-submit) stay
+        real. A flow that never went through ``request`` counts as injected.
 
-        Headers and body on such a host are scrubbed of the body secrets. A
-        body the server compressed anyway is buffered and scrubbed in
+        On a host with body secrets, headers and body are scrubbed of them.
+        A body the server compressed anyway is buffered and scrubbed in
         ``response`` instead.
         """
         if flow.response is None:
@@ -776,9 +773,7 @@ class SecurityProxy:
                     name, [scrubber.scrub_text(v) for v in headers.get_all(name)]
                 )
         set_cookies = flow.response.headers.get_all("set-cookie")
-        if set_cookies and scrubber is None:
-            del flow.response.headers["set-cookie"]
-        elif set_cookies:
+        if set_cookies:
             host = flow.request.pretty_host.lower()
             vault_all = flow.metadata.get("jc_injected", True)
             flow.response.headers.set_all(

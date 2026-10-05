@@ -1266,9 +1266,24 @@ def test_cookie_readable_by_js_passes_through_on_a_bare_host() -> None:
 @pytest.mark.parametrize(
     "url", ["https://api.github.com/user", "https://plain.example.org/"]
 )
-def test_cookies_are_stripped_on_a_host_without_body_secrets(url: str) -> None:
+def test_session_cookie_is_vaulted_on_any_allowed_host(url: str) -> None:
     proxy = SecurityProxy(body_config())
-    assert roundtrip(proxy, url, ["SID=real; HttpOnly", "logged_in=yes"]) == []
+    [out] = roundtrip(proxy, url, ["SID=real; HttpOnly"])
+    assert cookie_value(out).startswith(COOKIE_PLACEHOLDER_PREFIX)
+
+
+def test_cookie_readable_by_js_passes_through_on_a_bare_host_without_body_secrets() -> (
+    None
+):
+    proxy = SecurityProxy(body_config())
+    out = roundtrip(proxy, "https://plain.example.org/", ["state=abc; Path=/"])
+    assert out == ["state=abc; Path=/"]
+
+
+def test_every_cookie_is_vaulted_where_a_header_was_injected() -> None:
+    proxy = SecurityProxy(body_config())
+    [out] = roundtrip(proxy, "https://api.github.com/user", ["logged_in=yes; Path=/"])
+    assert cookie_value(out).startswith(COOKIE_PLACEHOLDER_PREFIX)
 
 
 def test_cookies_rotated_on_a_request_carrying_a_session_are_all_vaulted() -> None:
@@ -1296,12 +1311,14 @@ def test_cookies_on_a_login_answered_with_a_body_secret_are_all_vaulted() -> Non
     )
 
 
-def test_response_without_a_request_pass_strips_cookies() -> None:
+def test_response_without_a_request_pass_vaults_everything() -> None:
     proxy = SecurityProxy(body_config())
     flow = make_flow("https://app.example.dev/")
     flow.response = Response.make(200, b"", {"Set-Cookie": "a=b"})
     proxy.responseheaders(flow)
-    assert "set-cookie" not in flow.response.headers
+    assert cookie_value(flow.response.headers["set-cookie"]).startswith(
+        COOKIE_PLACEHOLDER_PREFIX
+    )
 
 
 def test_single_label_domain_cannot_widen_the_reveal() -> None:
