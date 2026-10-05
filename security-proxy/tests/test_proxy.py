@@ -774,16 +774,26 @@ def test_audit_records_which_headers_were_injected(capsys: Any) -> None:
     config = Config(
         execution_id="exec-1",
         upstreams=[
-            Upstream(host="git.example.com", path_prefix="/ns/repo/", inject={"authorization": "Basic x"}),
+            Upstream(
+                host="git.example.com",
+                path_prefix="/ns/repo/",
+                inject={"authorization": "Basic x"},
+            ),
             Upstream(host="git.example.com"),
         ],
     )
     proxy = SecurityProxy(config)
 
     asyncio.run(proxy.request(make_flow("https://git.example.com/ns/repo/info/refs")))
-    asyncio.run(proxy.request(make_flow("https://git.example.com/other/repo/info/refs")))
+    asyncio.run(
+        proxy.request(make_flow("https://git.example.com/other/repo/info/refs"))
+    )
 
-    events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    events = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.strip()
+    ]
     assert [e["injected"] for e in events] == [["authorization"], []]
     assert {e["outcome"] for e in events} == {"forwarded"}
 
@@ -1055,14 +1065,21 @@ def test_npm_registry_reads_get_the_pattern_token(path: str) -> None:
 
 
 def test_npm_pattern_is_get_only() -> None:
-    assert _npm_config().match("gitlab.acme.com", "/api/v4/packages/npm/@acme%2fui", "PUT") is None
+    assert (
+        _npm_config().match("gitlab.acme.com", "/api/v4/packages/npm/@acme%2fui", "PUT")
+        is None
+    )
 
 
 def test_a_tracked_prefix_still_wins_over_the_pattern() -> None:
     upstream = _npm_config().match(
-        "gitlab.acme.com", "/api/v4/projects/42/packages/npm/@acme/ui/-/ui-1.0.0.tgz", "GET"
+        "gitlab.acme.com",
+        "/api/v4/projects/42/packages/npm/@acme/ui/-/ui-1.0.0.tgz",
+        "GET",
     )
-    assert upstream is not None and upstream.inject == {"private-token": "project-token"}
+    assert upstream is not None and upstream.inject == {
+        "private-token": "project-token"
+    }
 
 
 def test_load_config_reads_pattern_rules(tmp_path: Path) -> None:
@@ -1089,7 +1106,9 @@ def test_load_config_reads_pattern_rules(tmp_path: Path) -> None:
 
 def test_npm_publish_is_denied_end_to_end() -> None:
     proxy = SecurityProxy(_npm_config())
-    flow = make_flow("https://gitlab.acme.com/api/v4/projects/977/packages/npm/@acme%2fui", "PUT")
+    flow = make_flow(
+        "https://gitlab.acme.com/api/v4/projects/977/packages/npm/@acme%2fui", "PUT"
+    )
     asyncio.run(proxy.request(flow))
     assert flow.response is not None and flow.response.status_code == 403
 
@@ -1099,15 +1118,17 @@ def test_npm_publish_is_denied_end_to_end() -> None:
 # ---------------------------------------------------------------------------
 
 PLACEHOLDER = "jcsecret_QA_PASSWORD_0123abcd"
+APP_PLACEHOLDER = "jcsecret_APP_0123abcd"
 
 
 def body_config() -> Config:
     return Config(
         execution_id="exec_test",
         upstreams=[
-            Upstream(host="auth.example.com", body={PLACEHOLDER: "p&ss=w\"rd"}),
+            Upstream(host="auth.example.com", body={PLACEHOLDER: 'p&ss=w"rd'}),
             Upstream(host="api.github.com", inject={"authorization": "Bearer ghs"}),
-            Upstream(host="*.example.dev"),
+            Upstream(host="*.example.dev", body={APP_PLACEHOLDER: "app-secret"}),
+            Upstream(host="plain.example.org"),
         ],
     )
 
@@ -1125,7 +1146,11 @@ def test_load_config_expands_body_secrets(tmp_path: Path) -> None:
             {
                 "execution_id": "e",
                 "upstreams": [
-                    {"host": "auth.example.com", "inject": {}, "body": {PLACEHOLDER: "${QA}"}}
+                    {
+                        "host": "auth.example.com",
+                        "inject": {},
+                        "body": {PLACEHOLDER: "${QA}"},
+                    }
                 ],
             }
         )
@@ -1165,7 +1190,9 @@ def test_request_swaps_body_placeholder_encoded_for_content_type(
 def test_body_placeholder_sent_to_another_host_stays_a_placeholder() -> None:
     proxy = SecurityProxy(body_config())
     body = b'{"body": "' + PLACEHOLDER.encode() + b'"}'
-    flow = post_flow("https://api.github.com/repos/a/b/issues", body, "application/json")
+    flow = post_flow(
+        "https://api.github.com/repos/a/b/issues", body, "application/json"
+    )
     asyncio.run(proxy.request(flow))
     assert flow.request.content == body
 
@@ -1180,7 +1207,9 @@ def test_oversized_body_goes_out_unscanned() -> None:
 
 def test_encoded_body_is_left_alone() -> None:
     proxy = SecurityProxy(body_config())
-    flow = post_flow("https://auth.example.com/api/sessions", PLACEHOLDER.encode(), "text/plain")
+    flow = post_flow(
+        "https://auth.example.com/api/sessions", PLACEHOLDER.encode(), "text/plain"
+    )
     flow.request.headers["content-encoding"] = "gzip"
     asyncio.run(proxy.request(flow))
     assert flow.request.raw_content == PLACEHOLDER.encode()
@@ -1222,7 +1251,9 @@ def test_httponly_cookie_is_vaulted_with_its_attributes() -> None:
     assert placeholder.startswith(COOKIE_PLACEHOLDER_PREFIX)
     assert "real-session" not in out
     assert out.endswith("; Path=/; HttpOnly; Secure; SameSite=Lax")
-    sent = send_cookie(proxy, "https://app.example.dev/", f"theme=dark; SID={placeholder}")
+    sent = send_cookie(
+        proxy, "https://app.example.dev/", f"theme=dark; SID={placeholder}"
+    )
     assert sent == "theme=dark; SID=real-session"
 
 
@@ -1232,15 +1263,31 @@ def test_cookie_readable_by_js_passes_through_on_a_bare_host() -> None:
     assert out == ["XSRF-TOKEN=abc; Path=/"]
 
 
-def test_every_cookie_is_vaulted_where_a_credential_was_injected() -> None:
+@pytest.mark.parametrize(
+    "url", ["https://api.github.com/user", "https://plain.example.org/"]
+)
+def test_cookies_are_stripped_on_a_host_without_body_secrets(url: str) -> None:
     proxy = SecurityProxy(body_config())
-    [out] = roundtrip(proxy, "https://api.github.com/user", ["logged_in=yes; Path=/"])
-    assert cookie_value(out).startswith(COOKIE_PLACEHOLDER_PREFIX)
+    assert roundtrip(proxy, url, ["SID=real; HttpOnly", "logged_in=yes"]) == []
+
+
+def test_cookies_rotated_on_a_request_carrying_a_session_are_all_vaulted() -> None:
+    proxy = SecurityProxy(body_config())
+    [out] = roundtrip(proxy, "https://app.example.dev/", ["SID=one; HttpOnly"])
+    flow = make_flow("https://app.example.dev/", headers={"Cookie": out.split(";")[0]})
+    asyncio.run(proxy.request(flow))
+    flow.response = Response.make(200, b"", {"Set-Cookie": "SID=two; Path=/"})
+    proxy.responseheaders(flow)
+    assert cookie_value(flow.response.headers["set-cookie"]).startswith(
+        COOKIE_PLACEHOLDER_PREFIX
+    )
 
 
 def test_cookies_on_a_login_answered_with_a_body_secret_are_all_vaulted() -> None:
     proxy = SecurityProxy(body_config())
-    flow = post_flow("https://auth.example.com/login", PLACEHOLDER.encode(), "text/plain")
+    flow = post_flow(
+        "https://auth.example.com/login", PLACEHOLDER.encode(), "text/plain"
+    )
     asyncio.run(proxy.request(flow))
     flow.response = Response.make(302, b"", {"Set-Cookie": "sso=tok; Path=/"})
     proxy.responseheaders(flow)
@@ -1249,13 +1296,22 @@ def test_cookies_on_a_login_answered_with_a_body_secret_are_all_vaulted() -> Non
     )
 
 
-def test_response_without_a_request_pass_vaults_everything() -> None:
+def test_response_without_a_request_pass_strips_cookies() -> None:
     proxy = SecurityProxy(body_config())
     flow = make_flow("https://app.example.dev/")
     flow.response = Response.make(200, b"", {"Set-Cookie": "a=b"})
     proxy.responseheaders(flow)
-    assert cookie_value(flow.response.headers["set-cookie"]).startswith(
-        COOKIE_PLACEHOLDER_PREFIX
+    assert "set-cookie" not in flow.response.headers
+
+
+def test_single_label_domain_cannot_widen_the_reveal() -> None:
+    proxy = SecurityProxy(body_config())
+    [out] = roundtrip(
+        proxy, "https://app.example.dev/", ["SID=real; Domain=dev; HttpOnly"]
+    )
+    placeholder = cookie_value(out)
+    assert send_cookie(proxy, "https://other.example.dev/", f"SID={placeholder}") == (
+        f"SID={placeholder}"
     )
 
 
@@ -1277,7 +1333,10 @@ def test_domain_cookie_is_revealed_across_its_domain() -> None:
         proxy, "https://app.example.dev/", ["SID=real; Domain=.example.dev; HttpOnly"]
     )
     placeholder = cookie_value(out)
-    assert send_cookie(proxy, "https://other.example.dev/", f"SID={placeholder}") == "SID=real"
+    assert (
+        send_cookie(proxy, "https://other.example.dev/", f"SID={placeholder}")
+        == "SID=real"
+    )
     assert send_cookie(proxy, "https://api.github.com/", f"SID={placeholder}") == (
         f"SID={placeholder}"
     )
@@ -1285,7 +1344,9 @@ def test_domain_cookie_is_revealed_across_its_domain() -> None:
 
 def test_domain_attribute_outside_the_host_cannot_widen_the_reveal() -> None:
     proxy = SecurityProxy(body_config())
-    [out] = roundtrip(proxy, "https://app.example.dev/", ["SID=real; Domain=github.com; HttpOnly"])
+    [out] = roundtrip(
+        proxy, "https://app.example.dev/", ["SID=real; Domain=github.com; HttpOnly"]
+    )
     placeholder = cookie_value(out)
     assert send_cookie(proxy, "https://api.github.com/", f"SID={placeholder}") == (
         f"SID={placeholder}"
@@ -1297,9 +1358,9 @@ def test_rotated_cookie_gets_a_fresh_placeholder() -> None:
     [first] = roundtrip(proxy, "https://app.example.dev/", ["SID=one; HttpOnly"])
     [second] = roundtrip(proxy, "https://app.example.dev/", ["SID=two; HttpOnly"])
     assert cookie_value(first) != cookie_value(second)
-    assert send_cookie(proxy, "https://app.example.dev/", f"SID={cookie_value(second)}") == (
-        "SID=two"
-    )
+    assert send_cookie(
+        proxy, "https://app.example.dev/", f"SID={cookie_value(second)}"
+    ) == ("SID=two")
 
 
 def test_cookie_deletion_passes_through() -> None:
@@ -1321,3 +1382,75 @@ def test_unknown_placeholder_is_sent_as_is() -> None:
     proxy = SecurityProxy(body_config())
     cookie = f"SID={COOKIE_PLACEHOLDER_PREFIX}forged"
     assert send_cookie(proxy, "https://app.example.dev/", cookie) == cookie
+
+
+# ---------------------------------------------------------------------------
+# Response scrub — a host can't echo a body secret back to the agent
+# ---------------------------------------------------------------------------
+
+
+def respond(
+    proxy: SecurityProxy, url: str, headers: dict[str, str] | None = None
+) -> HTTPFlow:
+    flow = post_flow(
+        url, b"email=" + PLACEHOLDER.encode(), "application/x-www-form-urlencoded"
+    )
+    flow.request.headers["accept-encoding"] = "gzip, br"
+    asyncio.run(proxy.request(flow))
+    flow.response = Response.make(200, b"", headers or {})
+    proxy.responseheaders(flow)
+    return flow
+
+
+def stream_through(flow: HTTPFlow, chunks: list[bytes]) -> bytes:
+    stream = flow.response.stream
+    assert callable(stream)
+    return b"".join(stream(c) for c in [*chunks, b""])
+
+
+def test_request_to_a_body_secret_host_asks_for_an_unencoded_response() -> None:
+    proxy = SecurityProxy(body_config())
+    flow = respond(proxy, "https://auth.example.com/login")
+    assert "accept-encoding" not in flow.request.headers
+
+
+@pytest.mark.parametrize(
+    "echo",
+    [b'p&ss=w"rd', b"p%26ss%3Dw%22rd", b'p&ss=w\\"rd', b"p&amp;ss=w&quot;rd"],
+)
+def test_echoed_secret_is_masked_in_the_streamed_body(echo: bytes) -> None:
+    proxy = SecurityProxy(body_config())
+    flow = respond(proxy, "https://auth.example.com/login")
+    body = b'<input name="email" value="' + echo + b'">'
+    out = stream_through(flow, [body[:30], body[30:33], body[33:]])
+    assert out == body.replace(echo, b"*" * len(echo))
+
+
+def test_echoed_secret_is_masked_in_response_headers() -> None:
+    proxy = SecurityProxy(body_config())
+    flow = respond(
+        proxy,
+        "https://auth.example.com/login",
+        {"Location": "/login?email=p%26ss%3Dw%22rd"},
+    )
+    assert flow.response.headers["location"] == "/login?email=" + "*" * 15
+
+
+def test_compressed_response_is_buffered_and_scrubbed() -> None:
+    proxy = SecurityProxy(body_config())
+    flow = respond(
+        proxy, "https://auth.example.com/login", {"Content-Encoding": "gzip"}
+    )
+    assert flow.response.stream is False
+    flow.response.content = b'hello p&ss=w"rd'
+    proxy.response(flow)
+    assert flow.response.content == b"hello " + b"*" * 9
+
+
+def test_responses_from_other_hosts_stream_untouched() -> None:
+    proxy = SecurityProxy(body_config())
+    flow = make_flow("https://api.github.com/user")
+    asyncio.run(proxy.request(flow))
+    flow.response = Response.make(200, b"")
+    proxy.responseheaders(flow)
+    assert flow.response.stream is True

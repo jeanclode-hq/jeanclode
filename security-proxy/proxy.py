@@ -1,6 +1,7 @@
 """mitmproxy addon for the per-execution security sidecar."""
 
 import asyncio
+import html
 import json
 import os
 import re
@@ -12,7 +13,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote_plus, unquote, urlencode
+from urllib.parse import quote, quote_plus, unquote, urlencode
 
 from mitmproxy import http
 from pydantic import BaseModel, Field
@@ -36,7 +37,8 @@ STRIPPED_HEADERS: tuple[str, ...] = (
 # Response-side scrub. Servers don't normally echo Authorization, but a buggy
 # upstream or a user-controlled body field could leak credentials back. Strip
 # anything credential-shaped on the way to the agent as defense-in-depth.
-# ``set-cookie`` isn't stripped but vaulted: see ``_CookieVault``.
+# ``set-cookie`` is stripped too, except on a host with body secrets, where
+# the agent logs in and needs its session: there it's vaulted (``_CookieVault``).
 STRIPPED_RESPONSE_HEADERS: tuple[str, ...] = STRIPPED_HEADERS
 
 # Login payloads are tiny; anything bigger goes out unscanned rather than
@@ -113,6 +115,7 @@ _GITLAB_API_PROJECT_RE = re.compile(r"^/api/v4/projects/([^/?]+)")
 # ``.git`` (e.g. ``/ns/repo/info/refs`` and ``/ns/repo.git/info/refs``) —
 # strip it so both forms match the same ``path_prefix``.
 _GIT_SUFFIX_RE = re.compile(r"\.git(?=/|$)")
+
 
 def _gitlab_match_path(path: str) -> str:
     """Normalize a GitLab request path onto the ``/namespace/repo/...`` shape
@@ -459,6 +462,52 @@ def _substitute_body_secrets(flow: http.HTTPFlow, body_secrets: dict[str, str]) 
     return True
 
 
+class _SecretScrubber:
+    """Masks body secrets in a response, so a host that echoes what it was
+    sent (a redisplayed login form, a stored profile field, a validation
+    error) can't hand the real value back to the agent.
+
+    Masks keep the length, so a streamed body still matches its
+    ``Content-Length``. Used as a ``stream`` callable it holds back the tail
+    of each chunk, in case a secret straddles two.
+    """
+
+    def __init__(self, values: list[str]) -> None:
+        forms: set[bytes] = set()
+        for value in values:
+            for form in (
+                value,
+                json.dumps(value)[1:-1],
+                quote_plus(value),
+                quote(value, safe=""),
+                html.escape(value),
+                html.escape(value, quote=False),
+            ):
+                if form:
+                    forms.add(form.encode())
+        self._forms = sorted(forms, key=len, reverse=True)
+        self._hold = max((len(f) for f in self._forms), default=1) - 1
+        self._pending = b""
+
+    def scrub(self, data: bytes) -> bytes:
+        for form in self._forms:
+            data = data.replace(form, b"*" * len(form))
+        return data
+
+    def scrub_text(self, text: str) -> str:
+        return self.scrub(text.encode("utf-8", "surrogateescape")).decode(
+            "utf-8", "surrogateescape"
+        )
+
+    def __call__(self, chunk: bytes) -> bytes:
+        data = self.scrub(self._pending + chunk)
+        if not chunk or not self._hold:
+            self._pending = b""
+            return data
+        self._pending = data[-self._hold :]
+        return data[: -self._hold]
+
+
 def _cookie_domain_covers(domain: str, host: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
@@ -493,7 +542,9 @@ class _CookieVault:
         if len(self._cookies) >= MAX_VAULTED_COOKIES:
             self._cookies.pop(next(iter(self._cookies)))
         placeholder = COOKIE_PLACEHOLDER_PREFIX + secrets.token_urlsafe(24)
-        self._cookies[placeholder] = _VaultedCookie(value=value, host=host, domain=domain)
+        self._cookies[placeholder] = _VaultedCookie(
+            value=value, host=host, domain=domain
+        )
         return placeholder
 
     def reveal(self, placeholder: str, host: str) -> str | None:
@@ -521,7 +572,9 @@ class _CookieVault:
         if not vault_all and "httponly" not in attributes:
             return header
         domain = attributes.get("domain", "").lstrip(".").lower() or None
-        if domain is not None and not _cookie_domain_covers(domain, host):
+        if domain is not None and (
+            "." not in domain or not _cookie_domain_covers(domain, host)
+        ):
             # The browser rejects such a cookie; never let it widen the reveal.
             domain = None
         placeholder = self.vault(value, host, domain)
@@ -609,9 +662,16 @@ class SecurityProxy:
             for name, value in upstream.inject.items():
                 flow.request.headers[name] = value
             injected = sorted(upstream.inject)
-            if _substitute_body_secrets(flow, self.config.body_secrets(host)):
+            body_secrets = self.config.body_secrets(host)
+            if body_secrets:
+                # An encoded response can't be scrubbed as it streams.
+                if "accept-encoding" in flow.request.headers:
+                    del flow.request.headers["accept-encoding"]
+                flow.metadata["jc_scrub"] = list(body_secrets.values())
+            if _substitute_body_secrets(flow, body_secrets):
                 injected.append("body")
-            self._reveal_cookies(flow, host)
+            if self._reveal_cookies(flow, host):
+                injected.append("cookie")
             flow.metadata["jc_injected"] = bool(injected)
             _audit(
                 self.config.execution_id,
@@ -651,7 +711,6 @@ class SecurityProxy:
                     del flow.request.headers[header]
             flow.request.headers[oauth_upstream.header] = f"Bearer {token}"
             self._reveal_cookies(flow, host)
-            flow.metadata["jc_injected"] = True
             _audit(
                 self.config.execution_id,
                 host,
@@ -670,14 +729,15 @@ class SecurityProxy:
             {"Content-Type": "text/plain; charset=utf-8"},
         )
 
-    def _reveal_cookies(self, flow: http.HTTPFlow, host: str) -> None:
+    def _reveal_cookies(self, flow: http.HTTPFlow, host: str) -> bool:
+        """Swap vaulted cookies back in; True if any was."""
         # HTTP/2 may split cookies over several headers.
         cookies = flow.request.headers.get_all("cookie")
-        if cookies:
-            flow.request.headers.set_all(
-                "cookie",
-                [self._cookie_vault.reveal_cookie_header(c, host) for c in cookies],
-            )
+        if not cookies:
+            return False
+        revealed = [self._cookie_vault.reveal_cookie_header(c, host) for c in cookies]
+        flow.request.headers.set_all("cookie", revealed)
+        return revealed != cookies
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """Fires once response headers arrive, before the body does — the
@@ -690,18 +750,35 @@ class SecurityProxy:
         packfiles, repo archives, Node downloads and npm tarballs fetched
         16 at a time all OOM-killed it, or would.
 
-        A response to a request the proxy put a credential into has every
-        cookie vaulted, since any of them may be a session minted from that
-        credential; elsewhere only ``HttpOnly`` ones are. A flow that never
-        went through ``request`` counts as injected.
+        Cookies are only kept on a host with body secrets, the one place an
+        agent logs in; everywhere else the credential rides every request
+        and ``set-cookie`` is stripped. There, a response to a request the
+        proxy put a credential into (header, body secret, vaulted cookie)
+        has every cookie vaulted, since any of them may be a session minted
+        from it; other responses only vault ``HttpOnly`` ones, so cookies
+        page scripts read (CSRF double-submit) stay real.
+
+        Headers and body on such a host are scrubbed of the body secrets. A
+        body the server compressed anyway is buffered and scrubbed in
+        ``response`` instead.
         """
         if flow.response is None:
             return
         for header in STRIPPED_RESPONSE_HEADERS:
             if header in flow.response.headers:
                 del flow.response.headers[header]
+        scrub_values = flow.metadata.get("jc_scrub")
+        scrubber = _SecretScrubber(scrub_values) if scrub_values else None
+        if scrubber is not None:
+            headers = flow.response.headers
+            for name in set(headers.keys()):
+                headers.set_all(
+                    name, [scrubber.scrub_text(v) for v in headers.get_all(name)]
+                )
         set_cookies = flow.response.headers.get_all("set-cookie")
-        if set_cookies:
+        if set_cookies and scrubber is None:
+            del flow.response.headers["set-cookie"]
+        elif set_cookies:
             host = flow.request.pretty_host.lower()
             vault_all = flow.metadata.get("jc_injected", True)
             flow.response.headers.set_all(
@@ -711,7 +788,29 @@ class SecurityProxy:
                     for c in set_cookies
                 ],
             )
-        flow.response.stream = True
+        if scrubber is None:
+            flow.response.stream = True
+        elif "content-encoding" in flow.response.headers:
+            flow.metadata["jc_scrub_buffered"] = True
+        else:
+            flow.response.stream = scrubber
+
+    def response(self, flow: http.HTTPFlow) -> None:
+        if flow.response is None or not flow.metadata.get("jc_scrub_buffered"):
+            return
+        scrubber = _SecretScrubber(flow.metadata["jc_scrub"])
+        try:
+            content = flow.response.content
+        except ValueError:
+            # Undecodable, so unscrubbable: fail closed.
+            flow.response = http.Response.make(
+                502,
+                b"denied: response could not be scrubbed of body secrets\n",
+                {"Content-Type": "text/plain; charset=utf-8"},
+            )
+            return
+        if content:
+            flow.response.content = scrubber.scrub(content)
 
 
 addons = [SecurityProxy()]
