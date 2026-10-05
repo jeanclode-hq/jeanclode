@@ -143,3 +143,32 @@ async def test_resolver_crash_never_fails_the_dispatch():
     ):
         resolved = await resolve_third_party_plugins_env_for_org(uuid.uuid4(), workflow="fix")
     assert resolved.env == {}
+
+
+@pytest.mark.asyncio
+async def test_a_subgroup_run_reads_the_connected_orgs_installs():
+    subgroup, connected = uuid.uuid4(), uuid.uuid4()
+    read = MagicMock(return_value=[])
+    with (
+        patch(_APP, return_value=_app()),
+        patch("api.plugins.container.utils._get_dispatch_repo_auth", AsyncMock(return_value=None)),
+        patch("api.database.organization.db_get_connection_org_id", return_value=connected),
+        patch("api.routers.marketplaces.utils.read_plugin_install_rows", read),
+        patch("api.routers.marketplaces.utils.resolve_plugin_specs", AsyncMock(return_value=[])),
+    ):
+        await resolve_third_party_plugins_env_for_org(subgroup, workflow="fix")
+    assert read.call_args.args[1] == connected
+
+
+@pytest.mark.asyncio
+async def test_a_subgroup_uses_the_connected_orgs_token():
+    subgroup, connected = uuid.uuid4(), uuid.uuid4()
+    get_org = MagicMock(return_value=_org())
+    with (
+        patch(_APP, return_value=_app()),
+        patch("api.database.organization.db_get_connection_org_id", return_value=connected),
+        patch(_ORG, get_org),
+    ):
+        auth = await _get_dispatch_repo_auth(subgroup)
+    assert get_org.call_args.args[1] == connected
+    assert auth is not None and auth.token == "plain:enc"
