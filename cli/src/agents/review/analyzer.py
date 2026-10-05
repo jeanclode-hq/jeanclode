@@ -20,5 +20,6 @@ class AnalyzerAgent(ReviewAgent):
     allowed_tools: ClassVar[list[str]] = ["Read", "Grep", "Glob", "Bash"]
     max_turns: ClassVar[int] = 150
     use_third_party_skills: ClassVar[bool] = True
+    use_browser: ClassVar[bool] = True
     use_mcp_connectors: ClassVar[bool] = True
     use_memory: ClassVar[bool] = True

@@ -16,6 +16,7 @@ classifiers = [
 
 dependencies = [
     "claude-agent-sdk>=0.2.161",
+    "cryptography>=46.0.5",
     "httpx>=0.28.0",
     "imageio-ffmpeg==0.6.0",
     "jinja2>=3.1.0",

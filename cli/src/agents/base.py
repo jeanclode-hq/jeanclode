@@ -36,6 +36,7 @@ from src.agents.utils import (
     try_parse_json_object,
     usage_dict,
 )
+from src.runtime.browser_mcp import BROWSER_SERVER_NAME, BrowserMcp
 from src.runtime.context import RunContext
 from src.runtime.events import AgentEnd, AgentStart, ToolCall, ToolResult
 from src.runtime.llm_options import fixer_llm_block
@@ -78,6 +79,9 @@ class BaseAgent:
     use_mcp_connectors: ClassVar[bool] = False
     # Per-agent opt-in for the memory tool (requires ctx.memory_enabled too).
     use_memory: ClassVar[bool] = False
+    # Per-agent opt-in for the built-in Playwright MCP (container runs only, see
+    # src.runtime.browser_mcp); the agent waits on its install when it starts.
+    use_browser: ClassVar[bool] = False
     # Per-agent opt-in for agents whose prompt includes issue/PR comments,
     # notes, or discussion history — warns that some of that history may
     # be prior turns from other jeanclode agents/workflows on the same
@@ -127,7 +131,8 @@ class BaseAgent:
             prompt = f"{prompt}\n\n{memory_protocol_block()}"
         if self.use_continuity:
             prompt = f"{prompt}\n\n{continuity_protocol_block()}"
-        options = self._build_options(ctx, extra_hooks=extra_hooks)
+        browser = await ctx.browser_mcp if self.use_browser and ctx.browser_mcp else None
+        options = self._build_options(ctx, extra_hooks=extra_hooks, browser=browser)
         if self.system_prompt_file:
             options.system_prompt = self._render_file(self.system_prompt_file, agent_input)
 
@@ -400,6 +405,7 @@ class BaseAgent:
         ctx: RunContext,
         *,
         extra_hooks: dict[HookEvent, list[HookMatcher]] | None = None,
+        browser: BrowserMcp | None = None,
     ) -> ClaudeAgentOptions:
         kwargs: dict[str, Any] = {
             "permission_mode": "bypassPermissions",
@@ -421,12 +427,16 @@ class BaseAgent:
         if self.use_memory and ctx.memory_enabled:
             tools.extend(t for t in MEMORY_TOOL_NAMES if t not in tools)
             mcp_servers[MEMORY_SERVER_NAME] = memory_mcp_server()
+        if browser is not None:
+            mcp_servers[BROWSER_SERVER_NAME] = browser.to_sdk_config()
+            tools.append(f"mcp__{BROWSER_SERVER_NAME}__*")
         if self.use_mcp_connectors and ctx.mcp_servers:
             for server in ctx.mcp_servers:
                 if server.name in mcp_servers:
                     # Backend rejects "memory" on create/update, but a row
                     # from before that guard existed could still collide
-                    # with the in-process memory server registered above.
+                    # with the in-process memory server registered above;
+                    # an org server named like the built-in browser loses too.
                     logger.warning(
                         "skipping org MCP server %r — name collides with an "
                         "already-registered server",

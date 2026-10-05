@@ -55,6 +55,13 @@ DEMO_TOOLING_HOSTS = (
     "release-assets.githubusercontent.com",
 )
 
+# What every run installs the built-in Playwright MCP from: Node through mise, then npm.
+BROWSER_TOOLING_HOSTS = (
+    "registry.npmjs.org",
+    "nodejs.org",
+    "mise-versions.jdx.dev",
+)
+
 # Hosts the Claude Code subprocess and skill plugins need to reach
 # without auth: plugin manifests, public clones, and the GitHub REST
 # endpoint that ``gh repo clone`` consults before falling back to git.
@@ -1090,8 +1097,9 @@ async def add_plugin_marketplace_credentials(
 
 
 def add_agent_tooling_hosts(inputs: DispatchInputs) -> None:
-    """Allowlist the public hosts the Claude Code subprocess always touches."""
+    """Allowlist the public hosts the Claude Code subprocess and its browser install touch."""
     inputs.extra_hosts.extend(AGENT_TOOLING_HOSTS)
+    inputs.extra_hosts.extend(BROWSER_TOOLING_HOSTS)
 
 
 DEMO_ENABLED_ENV_VAR = "JEANCLODE_DEMO_ENABLED"

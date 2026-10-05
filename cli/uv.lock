@@ -686,6 +686,7 @@ version = "1.11.0"
 source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "imageio-ffmpeg" },
     { name = "jinja2" },
@@ -711,6 +712,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.2.161" },
+    { name = "cryptography", specifier = ">=46.0.5" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "imageio-ffmpeg", specifier = "==0.6.0" },
     { name = "jinja2", specifier = ">=3.1.0" },

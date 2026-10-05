@@ -18,6 +18,7 @@ class IssueFixerAgent(IssueAgent):
     max_turns: ClassVar[int] = 250
     output_schema: ClassVar[type[BaseModel] | None] = IssueFixerOutput
     use_third_party_skills: ClassVar[bool] = True
+    use_browser: ClassVar[bool] = True
     use_mcp_connectors: ClassVar[bool] = True
     use_memory: ClassVar[bool] = True
     use_continuity: ClassVar[bool] = True
