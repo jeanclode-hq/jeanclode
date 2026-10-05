@@ -361,14 +361,13 @@ async function remove() {
         v-if="isSkill"
         :label="t('connectors.form.sentIn')"
         :help="t('connectors.form.sentInHelp')"
-        class="w-56"
       >
         <USelect
           v-model="inject"
           :items="injectTargets"
           value-key="value"
           size="xs"
-          class="w-full"
+          class="w-56"
         />
       </UFormField>
 
