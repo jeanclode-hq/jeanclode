@@ -148,12 +148,11 @@ async def test_setup_is_stashed_between_rounds_and_restored(
 
     assert seen_setup == [False, True]
     assert state.ok is not None
-    assert "VITE_API" in state.ok.setup_diffs[str(worktree.path)]
     assert _git(worktree.path, "status", "--porcelain") == ""
 
 
 @patch("src.agents.hooks.fix_missing_reason", return_value=None)
-async def test_setup_outside_the_checkout_is_recorded_and_kept(
+async def test_setup_outside_the_checkout_is_kept(
     _pushed: Any, worktree: WorktreePath, demo_dir: Path, tmp_path: Path
 ) -> None:
     script = demo_dir / "setup" / "record.py"
@@ -166,7 +165,6 @@ async def test_setup_outside_the_checkout_is_recorded_and_kept(
     await hook.hooks[0](_so_input(), None, {"signal": None})
 
     assert state.ok is not None
-    assert state.ok.setup_files == {"record.py": "page.route('**/api/orders', ...)"}
     assert script.is_file()
 
 

@@ -103,7 +103,7 @@ A demo is recorded from the PR/MR's branch, so only a PR/MR mention can run one.
 - this PR/MR already carries a demo (the `<!-- jeanclode:demo -->` block at the top of the description) and you pushed a change to what it shows: the old demo no longer matches the branch, so re-record it even though nobody asked. A push that changes nothing visible (a backend fix, a test, a typo in a comment) leaves the demo alone.
 {% endif -%}
 
-`demo_plan` says what to show: the page(s), the click path, the data states to fake, and what "working" looks like on screen. Write it from the diff and the PR/MR description. If the change has nothing visible in a browser (a backend-only or tooling PR/MR), reply saying so instead of asking for a demo.
+`demo_plan` says what to show: the page(s), the click path, the data states to fake, and what "working" looks like on screen. Write it from the diff, the PR/MR description and the issue the PR/MR resolves: when the description links one (`Resolves`, `Closes`, `Fixes`, a ticket URL), open it and its comments with `gh`/`glab` first, and carry its exact scenario into the plan: the page or URL it points at, the records, settings or options it names, the data state that broke. The demo agent only sees your plan and the PR/MR, so anything the plan leaves out it will make up. If the change has nothing visible in a browser (a backend-only or tooling PR/MR), reply saying so instead of asking for a demo.
 
 The demo runs when you return your JSON. If it can't show the change working you get its verdict back instead of finishing, with its evidence and screenshot paths; the message says where hints and the bypass file go:
 

@@ -78,7 +78,6 @@ from src.activities.demo import (
     DemoGateState,
     DemoRound,
     git_status,
-    read_setup_files,
     reset_demo_dir,
     restore_setup,
     stash_setup,
@@ -567,7 +566,8 @@ def require_demo_hook(
         finally:
             # Before the stash: a server still running would write into the checkout after it.
             await asyncio.to_thread(stop_new_processes, before)
-            diffs = {str(wt.path): stash_setup(wt.path) for wt in worktrees}
+            for wt in worktrees:
+                stash_setup(wt.path)
             ctx.emit(
                 ActivityEnd(
                     name="demo",
@@ -580,13 +580,7 @@ def require_demo_hook(
             ctx.emit(Panel(title="Demo Failed", content=error, style="yellow"))
             return _deny_structured_output(_crash_feedback(error, state.rounds, demo_dir))
 
-        demo = demo.model_copy(
-            update={
-                "setup_diffs": diffs,
-                "setup_files": read_setup_files(demo_dir),
-                "heads": heads,
-            }
-        )
+        demo = demo.model_copy(update={"heads": heads})
         state.last = demo
         state.error = ""
         ctx.emit(

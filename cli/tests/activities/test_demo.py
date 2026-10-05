@@ -17,7 +17,6 @@ from src.activities.demo import (
     HINTS_FILE,
     SETUP_DIR,
     DemoRound,
-    read_setup_files,
     render_demo_block,
     render_demo_link,
     reset_demo_dir,
@@ -57,22 +56,10 @@ def test_with_demo_block_on_an_empty_description() -> None:
     assert with_demo_block("", block) == block + "\n"
 
 
-def test_render_demo_block_fences_a_diff_containing_backticks() -> None:
-    block = render_demo_block("![demo](u)", {"/a": "+```js\n+x\n+```"})
-    assert block.startswith(DEMO_START) and block.endswith(DEMO_END)
-    assert "````diff" in block
-    assert "How this demo was set up" in block
+def test_render_demo_block_holds_only_the_media() -> None:
+    block = render_demo_block("![demo](u)")
+    assert block == f"{DEMO_START}\n#### Demo\n\n![demo](u)\n{DEMO_END}"
     assert split_demo_block(f"{block}\n\nrest")[0] == block
-
-
-def test_render_demo_block_without_setup_has_no_dropdown() -> None:
-    assert "<details>" not in render_demo_block("![demo](u)", {"/a": ""})
-
-
-def test_render_demo_block_shows_setup_kept_outside_the_checkouts() -> None:
-    block = render_demo_block("![demo](u)", {}, {"record.py": "page.route('**/api/orders')"})
-    assert "How this demo was set up" in block
-    assert "`record.py`" in block and "```py\npage.route('**/api/orders')\n```" in block
 
 
 def test_reset_demo_dir_keeps_hints_bypass_and_setup(tmp_path: Path) -> None:
@@ -84,17 +71,6 @@ def test_reset_demo_dir_keeps_hints_bypass_and_setup(tmp_path: Path) -> None:
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
         [HINTS_FILE, BYPASS_FILE, SETUP_DIR]
     )
-
-
-def test_read_setup_files_skips_binaries_and_dependencies(tmp_path: Path) -> None:
-    setup = tmp_path / SETUP_DIR
-    (setup / "mocks").mkdir(parents=True)
-    (setup / "node_modules" / "x").mkdir(parents=True)
-    (setup / "record.py").write_text("print(1)")
-    (setup / "mocks" / "orders.json").write_text("[]")
-    (setup / "node_modules" / "x" / "index.js").write_text("x")
-    (setup / "shot.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe")
-    assert read_setup_files(tmp_path) == {"mocks/orders.json": "[]", "record.py": "print(1)"}
 
 
 def test_demo_media_follows_the_agent_choice_and_falls_back(tmp_path: Path) -> None:
@@ -192,7 +168,7 @@ def test_publish_demo_writes_the_block_into_the_description(tmp_path: Path) -> N
     video = tmp_path / "demo.webm"
     video.write_bytes(b"webm")
     pr = PRRef(url="https://gitlab.com/g/app/-/merge_requests/3", branch="fix/1", platform="gitlab")
-    demo = DemoRound(verdict="ok", video_path=str(video), setup_diffs={"/a": "+mock"})
+    demo = DemoRound(verdict="ok", video_path=str(video))
     calls: list[list[str]] = []
 
     def fake_run(cmd: list[str], **_kw: Any) -> subprocess.CompletedProcess[str]:
@@ -210,7 +186,7 @@ def test_publish_demo_writes_the_block_into_the_description(tmp_path: Path) -> N
     update = next(c for c in calls if c[:3] == ["glab", "mr", "update"])
     body = update[update.index("--description") + 1]
     assert body.startswith(DEMO_START)
-    assert "![demo](/u.webm)" in body and "+mock" in body
+    assert "![demo](/u.webm)" in body and "<details>" not in body
     assert body.rstrip().endswith("Fixes the button")
 
 

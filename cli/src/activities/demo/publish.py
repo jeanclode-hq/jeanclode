@@ -204,7 +204,7 @@ def publish_demo(pr: PRRef, demo: DemoRound, *, ctx: RunContext) -> str:
     else:
         ctx = _glab_ctx(pr, ctx)
         media = "\n\n".join(upload_gitlab_file(pr, f, ctx=ctx) for f in files)
-    block = render_demo_block(media, demo.setup_diffs, demo.setup_files)
+    block = render_demo_block(media)
     _write_description(pr, with_demo_block(_read_description(pr, ctx=ctx), block), ctx=ctx)
     return media
 

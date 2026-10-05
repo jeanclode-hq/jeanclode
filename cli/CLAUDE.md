@@ -163,8 +163,7 @@ the medium (`media`): screenshots of the real page for a static change, a
 video only for an interaction, cut to start at the script's `ready(page)`
 (or the first page load) so it doesn't open on the app loading. Setup it
 keeps outside the checkouts goes in `/tmp/jeanclode-demo/setup/`, kept
-across rounds; with the stash diff it makes the collapsed "How this demo was
-set up" section under the demo.
+across rounds. Only the screenshots or video are posted, never the setup.
 
 After the fixer, `post_demos` writes the last `ok` round into the PR/MR of
 the repo the demo agent launched the app from (`app_repo`; every PR when

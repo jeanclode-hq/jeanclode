@@ -20,7 +20,6 @@ HINTS_FILE = "hints.md"
 BYPASS_FILE = "bypass"
 # The demo's own setup outside the checkouts: shown under the demo, kept across rounds.
 SETUP_DIR = "setup"
-_MAX_SETUP_FILE_BYTES = 50_000
 STASH_MESSAGE = "jeanclode-demo"
 
 
@@ -69,19 +68,17 @@ def restore_setup(cwd: Path) -> None:
     _git(cwd, "stash", "drop", ref)
 
 
-def stash_setup(cwd: Path) -> str:
-    """Stash everything the demo left in ``cwd`` and return it as a diff."""
+def stash_setup(cwd: Path) -> None:
+    """Stash everything the demo left in ``cwd``."""
     stale = _demo_stash(cwd)
     if stale is not None:
         _git(cwd, "stash", "drop", stale)
     if is_clean(cwd):
-        return ""
+        return
     if _git(cwd, "stash", "push", "--include-untracked", "-m", STASH_MESSAGE).returncode != 0:
         logger.warning("could not stash the demo setup in %s; discarding it", cwd)
         _git(cwd, "reset", "--hard", "HEAD")
         _git(cwd, "clean", "-fd")
-        return ""
-    return _git(cwd, "stash", "show", "-p", "--include-untracked", "stash@{0}").stdout
 
 
 def fresh_demo_dir(demo_dir: Path) -> None:
@@ -100,21 +97,3 @@ def reset_demo_dir(demo_dir: Path) -> None:
             shutil.rmtree(entry, ignore_errors=True)
         else:
             entry.unlink(missing_ok=True)
-
-
-def read_setup_files(demo_dir: Path) -> dict[str, str]:
-    """The text files under ``demo_dir / SETUP_DIR``, by path relative to it."""
-    root = demo_dir / SETUP_DIR
-    if not root.is_dir():
-        return {}
-    files: dict[str, str] = {}
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.stat().st_size > _MAX_SETUP_FILE_BYTES:
-            continue
-        if any(part in ("node_modules", "__pycache__") for part in path.parts):
-            continue
-        try:
-            files[str(path.relative_to(root))] = path.read_text()
-        except UnicodeDecodeError, OSError:
-            continue
-    return files
