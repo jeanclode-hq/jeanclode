@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.10.0...v1.11.0) (2026-10-05)
+
+
+### Features
+
+* **issue-resolve:** demo gate records UI fixes before review ([#65](https://github.com/jeanclode-hq/jeanclode/issues/65)) ([5c989e5](https://github.com/jeanclode-hq/jeanclode/commit/5c989e512e7dfc1de9a453358baf00cc0659196d))
+* **website:** show the demo gate on the landing page ([#66](https://github.com/jeanclode-hq/jeanclode/issues/66)) ([966d372](https://github.com/jeanclode-hq/jeanclode/commit/966d3725111dd60794bfa35d4a78f67710bfb0f8))
+
 ## [1.10.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.9.0...v1.10.0) (2026-10-04)
 
 
