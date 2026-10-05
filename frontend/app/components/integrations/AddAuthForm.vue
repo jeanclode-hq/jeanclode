@@ -75,6 +75,12 @@ const key = ref('')
 const showAdvanced = ref(false)
 const header = ref('Authorization')
 const valuePrefix = ref('Bearer ')
+// Only a skill can take a secret in a body: it's the one that writes the request.
+const inject = ref<'header' | 'body'>('header')
+const injectTargets = computed(() => [
+  { value: 'header', label: t('connectors.form.sentInHeader') },
+  { value: 'body', label: t('connectors.form.sentInBody') },
+])
 
 // basic_auth
 const username = ref('')
@@ -124,6 +130,7 @@ watch(
     showAdvanced.value = false
     const s = (c?.settings ?? {}) as Record<string, unknown>
     authType.value = c?.auth_type ?? 'api_key'
+    inject.value = s.inject === 'body' ? 'body' : 'header'
     header.value = typeof s.header === 'string' ? s.header : 'Authorization'
     valuePrefix.value = typeof s.value_prefix === 'string' ? s.value_prefix : 'Bearer '
     host.value = typeof s.host === 'string' ? s.host : ''
@@ -161,7 +168,9 @@ async function submit() {
     // fill in a stable placeholder rather than asking the user for a
     // value that means nothing to them.
     secret = { name: isSkill.value ? name.value : authType.value, key: key.value }
-    settings = { header: header.value, value_prefix: valuePrefix.value }
+    settings = isSkill.value && inject.value === 'body'
+      ? { inject: 'body' }
+      : { header: header.value, value_prefix: valuePrefix.value }
   } else if (authType.value === 'basic_auth') {
     secret = { username: username.value, password: password.value }
     if (isSkill.value && name.value.trim()) secret.name = name.value.trim()
@@ -306,7 +315,22 @@ async function remove() {
         />
       </UFormField>
 
-      <div>
+      <UFormField
+        v-if="isSkill"
+        :label="t('connectors.form.sentIn')"
+        :help="t('connectors.form.sentInHelp')"
+        class="w-56"
+      >
+        <USelect
+          v-model="inject"
+          :items="injectTargets"
+          value-key="value"
+          size="xs"
+          class="w-full"
+        />
+      </UFormField>
+
+      <div v-if="!isSkill || inject === 'header'">
         <button
           type="button"
           class="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 flex items-center gap-1 cursor-pointer"

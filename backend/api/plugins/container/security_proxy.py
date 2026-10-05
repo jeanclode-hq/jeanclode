@@ -60,15 +60,20 @@ class UpstreamCredential(BaseModel):
             the same host still wins over it.
         methods: HTTP methods a ``path_pattern`` rule applies to; ``None``
             means any.
+        body_placeholder: When set, the credential goes into request bodies
+            instead of a header: the proxy swaps this placeholder (which the
+            agent holds in place of the secret) for the real value on
+            ``host``. ``header`` and ``bearer`` are then unused.
     """
 
     secret_key: str
     host: str
-    header: str
+    header: str = "Authorization"
     bearer: bool = False
     path_prefix: str | None = None
     path_pattern: str | None = None
     methods: list[str] | None = None
+    body_placeholder: str | None = None
 
 
 class OAuthUpstream(BaseModel):
@@ -165,22 +170,33 @@ def _serialize_upstreams(
     on the same host) produce separate objects so the proxy can route each
     token to the correct namespace. ``extra_hosts`` are emitted with empty
     inject maps so the proxy allows them through without modifying headers.
+    A ``body_placeholder`` rule lands in the entry's ``body`` map instead of
+    ``inject``.
     """
     Key = tuple[str, str | None, str | None, tuple[str, ...]]
     by_key: dict[Key, dict[str, str]] = defaultdict(dict)
+    bodies: dict[Key, dict[str, str]] = defaultdict(dict)
     for rule in upstreams:
-        value = f"Bearer ${{{rule.secret_key}}}" if rule.bearer else f"${{{rule.secret_key}}}"
         methods = tuple(sorted(m.upper() for m in rule.methods or ()))
-        by_key[(rule.host, rule.path_prefix, rule.path_pattern, methods)][rule.header] = value
+        key = (rule.host, rule.path_prefix, rule.path_pattern, methods)
+        if rule.body_placeholder is not None:
+            by_key.setdefault(key, {})
+            bodies[key][rule.body_placeholder] = f"${{{rule.secret_key}}}"
+            continue
+        value = f"Bearer ${{{rule.secret_key}}}" if rule.bearer else f"${{{rule.secret_key}}}"
+        by_key[key][rule.header] = value
 
     for host in extra_hosts:
         by_key.setdefault((host, None, None, ()), {})
 
     result = []
-    for (host, path_prefix, path_pattern, methods), headers in sorted(
+    for key, headers in sorted(
         by_key.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][2] or "")
     ):
+        host, path_prefix, path_pattern, methods = key
         entry: dict[str, object] = {"host": host, "inject": dict(sorted(headers.items()))}
+        if bodies.get(key):
+            entry["body"] = dict(sorted(bodies[key].items()))
         if path_prefix is not None:
             entry["path_prefix"] = path_prefix
         if path_pattern is not None:

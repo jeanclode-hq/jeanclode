@@ -53,6 +53,35 @@ def test_build_proxy_spec_emits_only_provided_upstreams() -> None:
     assert config["upstreams"][0]["inject"] == {"Authorization": "Bearer ${GH_TOKEN}"}
 
 
+def test_body_placeholder_lands_in_body_not_inject() -> None:
+    spec = build_proxy_spec(
+        secret_env={"SKILL_BODY_AB12": "hunter2"},
+        upstreams=[
+            UpstreamCredential(
+                secret_key="SKILL_BODY_AB12",
+                host="auth.example.com",
+                body_placeholder="jcsecret_QA_PASSWORD_00ff",
+            ),
+            UpstreamCredential(
+                secret_key="QA_APP_TOKEN", host="auth.example.com", header="X-App-Token"
+            ),
+        ],
+        image="img",
+        execution_id="exec-1",
+    )
+    (entry,) = json.loads(spec.config_json)["upstreams"]
+    assert entry["inject"] == {"X-App-Token": "${QA_APP_TOKEN}"}
+    assert entry["body"] == {"jcsecret_QA_PASSWORD_00ff": "${SKILL_BODY_AB12}"}
+    assert "hunter2" not in spec.config_json
+
+
+def test_header_only_upstream_has_no_body_key() -> None:
+    spec = build_proxy_spec(
+        secret_env={"GH_TOKEN": "ghs"}, upstreams=[_github()], image="img", execution_id="e"
+    )
+    assert "body" not in json.loads(spec.config_json)["upstreams"][0]
+
+
 def test_build_proxy_spec_resolves_per_org_self_hosted_sentry() -> None:
     """Self-hosted Sentry case — host comes from the org row, not a default."""
     spec = build_proxy_spec(

@@ -1244,6 +1244,48 @@ async def _connectors(creds: list, *, installs: list | None = None, servers: lis
 
 
 @pytest.mark.asyncio
+async def test_add_connectors_skill_body_secret_gives_the_agent_its_own_placeholder() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="api_key",
+        settings={"inject": "body", "host": "auth.example.com"},
+        secret={"name": "QA_PASSWORD", "key": "hunter2"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    (sidecar_key,) = inputs.secrets
+    assert sidecar_key.startswith("SKILL_BODY_")
+    assert inputs.secrets[sidecar_key] == "hunter2"
+    placeholder = inputs.public_env["QA_PASSWORD"]
+    assert placeholder.startswith("jcsecret_QA_PASSWORD_")
+    assert "hunter2" not in placeholder
+    (upstream,) = inputs.upstreams
+    assert upstream.host == "auth.example.com"
+    assert upstream.secret_key == sidecar_key
+    assert upstream.body_placeholder == placeholder
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_body_placeholder_is_url_safe() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="jwt",
+        settings={"inject": "body", "host": "auth.example.com"},
+        secret={"name": "qa-pass.word", "key": "k"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    placeholder = inputs.public_env["qa-pass.word"]
+    assert placeholder.startswith("jcsecret_qa_pass_word_")
+
+
+@pytest.mark.asyncio
 async def test_add_connectors_skill_basic_auth_without_name_gets_a_generated_key() -> None:
     install = _make_install()
     cred = _make_credential(

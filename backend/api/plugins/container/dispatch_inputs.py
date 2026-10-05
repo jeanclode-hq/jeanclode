@@ -13,6 +13,8 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
+import secrets
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
@@ -1224,6 +1226,27 @@ def _wire_static_credential(
     )
 
 
+def _wire_body_credential(
+    inputs: DispatchInputs, *, env_var_name: str, host: str, value: str, cred_id: UUID
+) -> None:
+    """A secret the agent puts in a request body (a login form, a JSON login
+    call) as a placeholder, which the proxy swaps for the real value on
+    ``host`` only.
+
+    The sidecar keeps the value under a key of its own: the container
+    backends seed every sidecar key on the agent with ``SANDBOX_PLACEHOLDER``,
+    and that one shared string couldn't say which secret to swap in.
+    """
+    sidecar_key = f"SKILL_BODY_{cred_id.hex[:8].upper()}"
+    # URL-safe, so a form-encoded body carries it unchanged.
+    placeholder = f"jcsecret_{re.sub(r'[^A-Za-z0-9_]', '_', env_var_name)}_{secrets.token_hex(8)}"
+    inputs.secrets[sidecar_key] = value
+    inputs.public_env[env_var_name] = placeholder
+    inputs.upstreams.append(
+        UpstreamCredential(secret_key=sidecar_key, host=host, body_placeholder=placeholder)
+    )
+
+
 def _wire_oauth_credential(
     inputs: DispatchInputs,
     *,
@@ -1448,6 +1471,14 @@ def _wire_skill_credential(
     if not env_var_name:
         logger.warning(
             "Skipping credential %s for skill %s — secret.name missing", cred.id, install_id
+        )
+        return
+    if settings.get("inject") == "body" and cred.auth_type in (
+        AuthType.API_KEY.value,
+        AuthType.JWT.value,
+    ):
+        _wire_body_credential(
+            inputs, env_var_name=env_var_name, host=host, value=secret["key"], cred_id=cred.id
         )
         return
     _wire_static_credential(
