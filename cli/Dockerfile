@@ -33,7 +33,7 @@ RUN cd /app && uv sync --frozen --no-dev --no-install-project
 FROM python:3.14-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates curl unzip && rm -rf /var/lib/apt/lists/*
+    git ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 # Demo gate (issue-resolve). Early and pinned so nodes keep these layers across
 # releases. Chromium headless shell records the demo; PLAYWRIGHT_VERSION must
@@ -54,18 +54,6 @@ ENV MISE_DATA_DIR=/tmp/mise \
     MISE_CACHE_DIR=/tmp/mise/cache \
     MISE_STATE_DIR=/tmp/mise/state
 RUN curl -fsSL https://mise.run | MISE_VERSION=${MISE_VERSION} MISE_INSTALL_PATH=/usr/local/bin/mise sh
-
-# Bun + Claude Code CLI (SDK spawns claude-code as subprocess)
-ARG BUN_VERSION=1.2.5
-RUN DPKG_ARCH=$(dpkg --print-architecture) && \
-    case "$DPKG_ARCH" in arm64) BUN_ARCH="aarch64";; amd64) BUN_ARCH="x64";; *) echo "Unsupported arch: $DPKG_ARCH" >&2; exit 1;; esac && \
-    curl -fsSL --retry 3 "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip" \
-    -o /tmp/bun.zip && \
-    unzip -q /tmp/bun.zip -d /tmp && \
-    mv /tmp/bun-linux-${BUN_ARCH}/bun /usr/local/bin/bun && \
-    chmod +x /usr/local/bin/bun && \
-    rm -rf /tmp/bun.zip /tmp/bun-linux-* && \
-    BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code
 
 # Copy CLI tools from builder
 COPY --from=builder /usr/bin/gh /usr/bin/gh
