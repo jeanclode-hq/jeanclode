@@ -569,6 +569,7 @@
       "pullRequests": "Pull requests",
       "issues": "Issues",
       "gitOrg": "GitHub and GitLab settings",
+      "skills": "Skills and tools",
       "sentry": "Sentry settings",
       "settings": "Account and team"
     },
@@ -673,15 +674,45 @@
         "hint": "Only needed on GitLab Free.",
         "body": "Jeanclode normally listens to your whole GitLab group at once. GitLab Free can't do that, so turn this on and Jeanclode connects to each project one by one. This needs a token with Maintainer access."
       },
-      "gitSkills": {
+      "skillsSource": {
         "title": "Skills",
         "hint": "Teach Jeanclode how your team works.",
-        "body": "A skill is a folder with a SKILL.md that explains how to do one thing, like your deploy steps or your framework's conventions. Paste a repo here, as owner/repo or a GitHub or GitLab link, then install the skills you want. Jeanclode reads them before it works, and always uses their latest version."
+        "body": "A skill is a folder with a `SKILL.md` that explains how to do one thing: your deploy steps, your framework's conventions, how to log in to staging. Connect a repo here, as `owner/repo` or a GitHub or GitLab link (down to a branch or a folder), and Jeanclode always uses its latest version."
       },
-      "gitTools": {
-        "title": "Extra tools",
+      "skillsInstall": {
+        "title": "Install the ones you want",
+        "hint": "Installed skills are read on every run.",
+        "body": "Open a source to see its skills and install them one by one, or all at once. The agents read every installed skill before they work and follow the ones that fit the task."
+      },
+      "skillsAuth": {
+        "title": "Give a skill its credentials",
+        "hint": "The agent never sees the real value.",
+        "body": "When a skill calls an API or logs in somewhere, add an auth for each secret it needs. The env var name is what the skill reads, e.g. `STAGING_PASSWORD`. Inside the run that variable only holds a placeholder: the sandbox proxy puts the real value in on the way out, and only to the host you set."
+      },
+      "skillsSentIn": {
+        "title": "Header, body or 2FA code",
+        "hint": "Pick how the secret travels.",
+        "body": "Header: the proxy adds the key to every request to the host, for APIs. Request body: for a login form or login API, the agent types the placeholder and the proxy swaps the real password in. TOTP code: paste the 2FA key, and the placeholder becomes the 6-digit code current at that moment. The form shows the code too, so you can set up 2FA on the account without a phone."
+      },
+      "skillsHosts": {
+        "title": "Hosts",
+        "hint": "Only these hosts are reachable.",
+        "body": "Each auth is bound to one host, and the run can only reach hosts some auth names. `*.example.com` covers every subdomain. A host can have several auths, as long as no two set the same header and every env var name is different. To let the agent open a site with no secret, add a No auth entry for it."
+      },
+      "skillsLogin": {
+        "title": "Logging in to a web app",
+        "hint": "Password, 2FA code and the app's host.",
+        "body": "This skill logs in to staging: its password in the request body and its 2FA code on the login host, plus the app's own host with No auth. On a resolve or a `{'@'}jeanclode-bot` mention the agent has a browser and logs in like a person would. Session cookies stay in the proxy too, so the agent can act as the account but never read its session."
+      },
+      "mcpServers": {
+        "title": "Extra tools (MCP)",
         "hint": "Give Jeanclode access to your other tools.",
-        "body": "Connect tools like your docs or your ticket tracker. Jeanclode can then look things up in them while it works, just like a teammate would."
+        "body": "Connect a remote MCP server, like your docs or your ticket tracker, with its name and URL. Its tools show up for the agents that do the work, so they can look things up while they work, just like a teammate would."
+      },
+      "mcpAuth": {
+        "title": "MCP auth",
+        "hint": "Same proxy, same rules.",
+        "body": "A server takes an API key, Basic auth or OAuth2. With OAuth2 the proxy fetches and refreshes the token itself. If the server's tools call other hosts, add an auth for each of those hosts on the same server."
       },
       "sentryMapping": {
         "title": "Link Sentry to your code",

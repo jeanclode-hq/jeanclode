@@ -763,14 +763,11 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
     </section>
 
     <!-- Plugins (third-party Claude Code plugins installed for this org) -->
-    <PluginsSection
-      data-guide="gitSkills"
-      :org-id="org.id"
-    />
+    <PluginsSection :org-id="org.id" />
 
     <!-- MCP servers (org-registered remote MCP connectors, client-only) -->
     <McpServersSection
-      data-guide="gitTools"
+      data-guide="mcpServers"
       :org-id="org.id"
     />
 

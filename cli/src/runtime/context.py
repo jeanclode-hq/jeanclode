@@ -5,11 +5,13 @@ derived context, which is how per-group worktree isolation is expressed
 (no more "ask the model to please cd into the worktree first").
 """
 
+import asyncio
 from pathlib import Path
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.runtime.browser_mcp import BrowserMcp
 from src.runtime.bus import EventBus
 from src.runtime.events import Event
 from src.runtime.llm_options import LLMOption
@@ -45,6 +47,9 @@ class RunContext(BaseModel):
     memory_enabled: bool = False
     # The org's "demo videos" switch; off means triage never plans a demo.
     demo_enabled: bool = True
+    # The Playwright MCP install, started with the run (container mode only) so agents
+    # that don't need it never wait on it; resolves to None when it couldn't be set up.
+    browser_mcp: asyncio.Task[BrowserMcp | None] | None = None
 
     def with_cwd(self, cwd: Path) -> Self:
         """Return a context derived from this one but with a different cwd.

@@ -65,14 +65,24 @@ function installableCount(market: MarketplaceEntry): number {
   return (market.plugins ?? []).filter((p) => !set?.has(p.name) && !p.unsupported_reason).length
 }
 
+// Per-installed-plugin auth form — one open at a time, keyed by install id.
+const authFormOpenFor = ref<string | null>(null)
+
 // Accordion — one open at a time
 const expandedId = ref<string | null>(null)
+
+// The guide shows the first source open, with the auths of a skill that has some.
+if (inject(GUIDE_DEMO, false)) {
+  watch(overview, (o) => {
+    if (!o || expandedId.value) return
+    expandedId.value = o.marketplaces[0]?.id ?? null
+    authFormOpenFor.value = o.installed.find((i) => i.credentials?.length)?.id ?? null
+  }, { immediate: true })
+}
 function toggleMarketplace(id: string) {
   expandedId.value = expandedId.value === id ? null : id
 }
 
-// Per-installed-plugin auth form — one open at a time, keyed by install id.
-const authFormOpenFor = ref<string | null>(null)
 function toggleAuthForm(installId: string) {
   authFormOpenFor.value = authFormOpenFor.value === installId ? null : installId
 }
@@ -293,6 +303,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
       <div
         v-for="market in marketplaces"
         :key="market.id"
+        data-guide="skillsSource"
         class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none mb-3 overflow-hidden"
       >
         <button
@@ -380,6 +391,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
             <li
               v-for="plugin in market.plugins"
               :key="plugin.name"
+              :data-guide="plugin.installed ? 'skillsInstall' : undefined"
               class="px-4 py-2.5"
             >
               <div class="flex items-center justify-between gap-3">
@@ -401,6 +413,7 @@ async function uninstallAllFromMarketplace(market: MarketplaceEntry) {
                       :text="authBadgeTooltip(credentialsFor(market.id, plugin.name))"
                     >
                       <UButton
+                        data-guide="skillsAuth"
                         :label="t('connectors.authConfigured', credentialsFor(market.id, plugin.name).length)"
                         color="success"
                         variant="subtle"

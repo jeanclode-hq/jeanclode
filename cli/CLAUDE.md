@@ -191,6 +191,24 @@ The root filesystem is read-only at run time, so mise lives under
 `/tmp/mise` (`MISE_*_DIR` in the Dockerfile) and the demo prompt keeps every
 other install under `/tmp`.
 
+### Browser
+
+In container mode, for `issue_resolve` and `jeanclode_respond` only
+(`BROWSER_WORKFLOWS` in `src/runner/run.py`), the runner starts installing the
+[Playwright MCP](https://github.com/microsoft/playwright-mcp) as soon as a run
+begins (`src/runtime/browser_mcp.py`, a task on `ctx.browser_mcp`), so agents
+that don't use it never wait. Agents with `use_browser` (triage, fixer and the
+respond planner; not the demo agent, which keeps its scripts) await it when they start and get it
+as the stdio server `playwright`. The install is pinned (`NODE_VERSION`,
+`PLAYWRIGHT_MCP_VERSION`) and lives under `/tmp/playwright-mcp` with its own
+mise dirs, off `PATH`, so a repo's Node is untouched. The MCP drives the image's
+Chromium headless shell (`executablePath`, so it never downloads a browser)
+through `HTTPS_PROXY`, with the proxy's CA pinned through
+`--ignore-certificate-errors-spki-list` since Chromium ignores `SSL_CERT_FILE`.
+Hosts off the proxy's allowlist are refused there. The backend allowlists the
+install hosts on those dispatches (`add_browser_to_inputs`); a failed install
+logs why and the run continues without a browser.
+
 ### Fixer LLM choice
 
 `JEANCLODE_LLM_OPTIONS` (see `src/runtime/llm_options.py`) lists the

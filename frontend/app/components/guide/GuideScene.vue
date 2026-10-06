@@ -137,7 +137,7 @@ const cardBelow = computed(() =>
         <PullRequestsPage v-else-if="view === 'pullRequests'" />
         <IssuesPage v-else-if="view === 'issues'" />
         <GitOrgDetail
-          v-else-if="view === 'gitOrg'"
+          v-else-if="view === 'gitOrg' || view === 'skills'"
           :org="DEMO_GIT_ORG"
           :workspace-id="DEMO_WORKSPACE_ID"
         />

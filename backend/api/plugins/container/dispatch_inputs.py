@@ -55,6 +55,14 @@ DEMO_TOOLING_HOSTS = (
     "release-assets.githubusercontent.com",
 )
 
+# What an issue-resolve or respond run installs the built-in Playwright MCP from:
+# Node through mise, then npm.
+BROWSER_TOOLING_HOSTS = (
+    "registry.npmjs.org",
+    "nodejs.org",
+    "mise-versions.jdx.dev",
+)
+
 # Hosts the Claude Code subprocess and skill plugins need to reach
 # without auth: plugin manifests, public clones, and the GitHub REST
 # endpoint that ``gh repo clone`` consults before falling back to git.
@@ -1094,6 +1102,11 @@ def add_agent_tooling_hosts(inputs: DispatchInputs) -> None:
     inputs.extra_hosts.extend(AGENT_TOOLING_HOSTS)
 
 
+def add_browser_to_inputs(inputs: DispatchInputs) -> None:
+    """Allowlist the hosts the CLI installs the built-in browser from (issue-resolve, respond)."""
+    inputs.extra_hosts.extend(BROWSER_TOOLING_HOSTS)
+
+
 DEMO_ENABLED_ENV_VAR = "JEANCLODE_DEMO_ENABLED"
 
 
@@ -1362,7 +1375,7 @@ async def add_connectors_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) 
     the wire for a matched upstream); the CLI needs no per-server env var,
     only ``auth_scheme`` to format a plausible-looking header.
 
-    A subject can hold several credentials, one per host. ``none`` rows only
+    A subject can hold several credentials, on one host or several. ``none`` rows only
     allowlist their host. On a skill, ``basic_auth`` takes an optional env
     var name and ``oauth2`` is skipped with a warning (not wired for skills
     yet); on an MCP server, a credential for a host other than the server's

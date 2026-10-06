@@ -1,5 +1,6 @@
 """Run — the main entry point. Workflow registry → RunContext → Workflow.run."""
 
+import asyncio
 import logging
 import os
 import sys
@@ -34,6 +35,7 @@ from src.runner.preflight import (
     load_config,
     resolve_sources,
 )
+from src.runtime.browser_mcp import BrowserMcp, install_browser_mcp
 from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
 from src.runtime.llm_options import load_llm_options_from_env
@@ -53,6 +55,9 @@ logger = logging.getLogger(__name__)
 # container-only by default until it's added here. Container mode (the
 # backend's own sandbox) always bypasses this check.
 LOCAL_ALLOWED_WORKFLOWS = frozenset({"code-review", "pr-summary", "echo"})
+
+# Workflows whose agents get the built-in browser; the others skip its install.
+BROWSER_WORKFLOWS = frozenset({"issue-resolve", "jeanclode-respond"})
 
 
 async def run(args: CLIArgs) -> int:
@@ -129,6 +134,9 @@ async def _run_workflow(
         emit_step("workflow", "started", detail=workflow_cls.name)
 
     t0 = time.time()
+    browser_mcp: asyncio.Task[BrowserMcp | None] | None = None
+    if os.environ.get("JEANCLODE_CONTAINER_MODE") == "1" and workflow_cls.name in BROWSER_WORKFLOWS:
+        browser_mcp = asyncio.create_task(install_browser_mcp())
     try:
         skills = load_skills_from_env()
         thirdparty_roots = clone_thirdparty_plugins_from_env(workspace)
@@ -170,6 +178,7 @@ async def _run_workflow(
             debug=args.debug,
             memory_enabled=memory_enabled,
             demo_enabled=demo_enabled,
+            browser_mcp=browser_mcp,
         )
         result = await workflow_cls().run(ctx)
 
@@ -233,6 +242,8 @@ async def _run_workflow(
             return 1
         raise
     finally:
+        if browser_mcp is not None:
+            browser_mcp.cancel()
         cleanup_workspace(workspace)
         if tracker:
             tracker.finish()

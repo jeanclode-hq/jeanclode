@@ -1,4 +1,4 @@
-export type GuideView = 'home' | 'pullRequests' | 'issues' | 'gitOrg' | 'sentry' | 'settings'
+export type GuideView = 'home' | 'pullRequests' | 'issues' | 'gitOrg' | 'skills' | 'sentry' | 'settings'
 
 export interface GuideStep {
   // Also the `data-guide` anchor it spotlights in the real page; a step with no
@@ -44,8 +44,20 @@ export const GUIDE_CHAPTERS: GuideChapter[] = [
       { id: 'gitSubgroup' },
       { id: 'gitDemoVideos' },
       { id: 'gitWebhooks' },
-      { id: 'gitSkills' },
-      { id: 'gitTools' },
+    ],
+  },
+  {
+    id: 'skills',
+    icon: 'i-lucide-sparkles',
+    steps: [
+      { id: 'skillsSource', limit: 1 },
+      { id: 'skillsInstall', limit: 1 },
+      { id: 'skillsAuth', limit: 1 },
+      { id: 'skillsSentIn' },
+      { id: 'skillsHosts' },
+      { id: 'skillsLogin' },
+      { id: 'mcpServers' },
+      { id: 'mcpAuth', limit: 1 },
     ],
   },
   {

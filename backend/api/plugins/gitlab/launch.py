@@ -25,6 +25,7 @@ from api.plugins.container.dispatch_inputs import (
     DispatchInputs,
     LLMSelectionResult,
     add_agent_tooling_hosts,
+    add_browser_to_inputs,
     add_connectors_to_inputs,
     add_demo_to_inputs,
     add_gitlab_workspace_credentials,
@@ -327,6 +328,7 @@ async def launch_issue_resolve_container(
     await add_gitlab_workspace_credentials(inputs, git_org_id=org_id, execution_id=execution_id)
     add_agent_tooling_hosts(inputs)
     add_demo_to_inputs(inputs, git_org_id=org_id)
+    add_browser_to_inputs(inputs)
 
     plugins = await resolve_third_party_plugins_env_for_org(
         org_id, workflow=ExecutionWorkflow.ISSUE_RESOLVE.value
@@ -444,6 +446,7 @@ async def launch_respond_container(
     await add_gitlab_workspace_credentials(inputs, git_org_id=org_id, execution_id=execution_id)
     add_agent_tooling_hosts(inputs)
     add_demo_to_inputs(inputs, git_org_id=org_id)
+    add_browser_to_inputs(inputs)
 
     add_notify_to_inputs(inputs, git_org_id=org_id)
 

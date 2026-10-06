@@ -1902,6 +1902,18 @@ def test_add_demo_to_inputs_follows_the_org_switch(org_settings: dict, enabled: 
     assert set(DEMO_TOOLING_HOSTS) <= set(inputs.extra_hosts) if enabled else not inputs.extra_hosts
 
 
+def test_add_browser_to_inputs_allowlists_the_browser_install() -> None:
+    from api.plugins.container.dispatch_inputs import (
+        BROWSER_TOOLING_HOSTS,
+        add_browser_to_inputs,
+    )
+
+    inputs = DispatchInputs()
+    add_browser_to_inputs(inputs)
+
+    assert set(BROWSER_TOOLING_HOSTS) <= set(inputs.extra_hosts)
+
+
 def test_add_demo_to_inputs_keeps_the_default_when_the_lookup_fails() -> None:
     from api.plugins.container.dispatch_inputs import DEMO_ENABLED_ENV_VAR, add_demo_to_inputs
 

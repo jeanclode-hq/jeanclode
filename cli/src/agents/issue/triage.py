@@ -17,6 +17,7 @@ class TriageAgent(IssueAgent):
     max_turns: ClassVar[int] = 150
     output_schema: ClassVar[type[BaseModel] | None] = TriageOutput
     use_third_party_skills: ClassVar[bool] = True
+    use_browser: ClassVar[bool] = True
     use_memory: ClassVar[bool] = True
     choose_fixer_llm: ClassVar[bool] = True
     use_continuity: ClassVar[bool] = True
