@@ -213,10 +213,10 @@ async def test_extra_hooks_propagate_to_options(tmp_path: Path) -> None:
     with patch("src.agents.base.query", side_effect=fake_query):
         await Agent().invoke(_Input(message="x"), ctx, extra_hooks={"Stop": [matcher]})
 
-    assert captured["options"].hooks == {"Stop": [matcher]}
+    assert captured["options"].hooks["Stop"] == [matcher]
 
 
-async def test_invoke_without_extra_hooks_leaves_hooks_unset(tmp_path: Path) -> None:
+async def test_invoke_without_extra_hooks_only_guards_reads(tmp_path: Path) -> None:
     Agent = _make_agent(tmp_path)
     ctx, _ = _ctx(tmp_path)
     captured: dict[str, Any] = {}
@@ -228,7 +228,9 @@ async def test_invoke_without_extra_hooks_leaves_hooks_unset(tmp_path: Path) -> 
     with patch("src.agents.base.query", side_effect=fake_query):
         await Agent().invoke(_Input(message="x"), ctx)
 
-    assert getattr(captured["options"], "hooks", None) is None
+    hooks = captured["options"].hooks
+    assert hooks.keys() == {"PreToolUse"}
+    assert [m.matcher for m in hooks["PreToolUse"]] == ["Read"]
 
 
 async def test_session_init_logs_loaded_plugins_skills_and_servers(

@@ -15,7 +15,9 @@ from typing import Any, ClassVar
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    HookContext,
     HookMatcher,
+    PreToolUseHookInput,
     ResultMessage,
     SystemMessage,
     ToolResultBlock,
@@ -416,8 +418,9 @@ class BaseAgent:
             "cwd": str(ctx.cwd),
             "max_buffer_size": MAX_BUFFER_SIZE,
         }
-        if extra_hooks:
-            kwargs["hooks"] = extra_hooks
+        hooks = {event: list(matchers) for event, matchers in (extra_hooks or {}).items()}
+        hooks.setdefault("PreToolUse", []).append(_oversized_read_hook(ctx.cwd))
+        kwargs["hooks"] = hooks
         if self.builtin_tools is not None:
             kwargs["tools"] = list(self.builtin_tools)
 
@@ -468,6 +471,37 @@ class BaseAgent:
                 "schema": self._schema_for_cli(self.output_schema),
             }
         return ClaudeAgentOptions(**kwargs)
+
+
+def _oversized_read_hook(cwd: Path) -> HookMatcher:
+    """Deny a whole-file Read whose result wouldn't fit in one stream-json message."""
+
+    async def _hook(
+        hook_input: PreToolUseHookInput, _tool_use_id: str | None, _context: HookContext
+    ) -> dict[str, Any]:
+        tool_input = hook_input.get("tool_input") or {}
+        if tool_input.keys() & {"offset", "limit", "pages"}:
+            return {}
+        try:
+            size = (cwd / tool_input["file_path"]).stat().st_size
+        except KeyError, TypeError, OSError:
+            return {}
+        # Images come back base64-encoded (4/3), and the message carries more than the result.
+        if size * 4 // 3 < MAX_BUFFER_SIZE // 2:
+            return {}
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    f"{tool_input['file_path']} is {size // 1024} KB: reading it whole would "
+                    f"exceed the {MAX_BUFFER_SIZE // (1024 * 1024)} MB limit on a single tool "
+                    "result and crash the run. Find a way to read it within that limit."
+                ),
+            }
+        }
+
+    return HookMatcher(matcher="Read", hooks=[_hook])
 
 
 def _log_session_init(agent_name: str, data: dict[str, Any]) -> None:

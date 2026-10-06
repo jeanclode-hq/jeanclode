@@ -102,3 +102,29 @@ async def test_echo_workflow_still_allowed_locally(monkeypatch: pytest.MonkeyPat
 
     assert code == 0
     run_workflow.assert_called_once()
+
+
+async def test_workflow_error_surfaces_its_summary_as_an_error_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from unittest.mock import MagicMock
+
+    from src.runner.run import _run_workflow
+    from src.workflows.schemas import WorkflowResult
+
+    workflow_cls = MagicMock()
+    workflow_cls.name = "issue-resolve"
+    workflow_cls.return_value.run = AsyncMock(
+        return_value=WorkflowResult(status="error", summary="fix failed: buffer exceeded")
+    )
+    config = MagicMock()
+    config.get_model.return_value = None
+    config.get_small_model.return_value = None
+    with patch("src.runner.run._make_tracker", return_value=None):
+        code = await _run_workflow(CLIArgs(command="run"), config, workflow_cls)
+
+    assert code == 1
+    assert (
+        '[JEANCLODE:ERROR] {"type": "workflow_error", "message": "fix failed: buffer exceeded"'
+        in (capsys.readouterr().err)
+    )
