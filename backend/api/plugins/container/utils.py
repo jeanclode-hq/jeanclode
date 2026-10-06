@@ -179,8 +179,11 @@ def resolve_git_org_id(issues: list[Issue]) -> UUID | None:
 
 
 async def _get_dispatch_repo_auth(org_id: UUID) -> RepoAuth | None:
-    """The git org's token for reading skill sources at dispatch, tagged with its host."""
-    from api.database.organization import db_get_org_by_id
+    """The git org's token for reading skill sources at dispatch, tagged with its host.
+
+    A subgroup's org holds no token of its own; the connected org above it does.
+    """
+    from api.database.organization import db_get_connection_org_id, db_get_org_by_id
 
     app = get_current_app()
     db_plugin = app.database
@@ -188,7 +191,7 @@ async def _get_dispatch_repo_auth(org_id: UUID) -> RepoAuth | None:
         return None
 
     with db_plugin.session() as db:
-        org = db_get_org_by_id(db, org_id)
+        org = db_get_org_by_id(db, db_get_connection_org_id(db, org_id))
         if not org:
             return None
         provider = org.provider
@@ -248,6 +251,7 @@ async def resolve_third_party_plugins_env_for_org(
     org from ``pr.repository.org_id``) can avoid the issue → mapped_repo
     walk.
     """
+    from api.database.organization import db_get_connection_org_id
     from api.routers.marketplaces.utils import read_plugin_install_rows, resolve_plugin_specs
 
     app = get_current_app()
@@ -259,7 +263,10 @@ async def resolve_third_party_plugins_env_for_org(
 
     try:
         rows = await db_plugin.run_in_session(
-            lambda db: read_plugin_install_rows(db, git_org_id, workflow=workflow)
+            # Installs live on the connected org, not on the subgroup a repo sits in.
+            lambda db: read_plugin_install_rows(
+                db, db_get_connection_org_id(db, git_org_id), workflow=workflow
+            )
         )
         specs = await resolve_plugin_specs(rows, auth=auth)
     except Exception:

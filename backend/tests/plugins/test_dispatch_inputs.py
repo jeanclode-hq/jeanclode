@@ -17,6 +17,7 @@ from api.plugins.container.dispatch_inputs import (
     add_memory_to_inputs,
     add_plugin_marketplace_credentials,
     resolve_memory_workspace_id,
+    totp_uri,
 )
 from api.plugins.container.security_proxy import (
     CredentialKey,
@@ -1241,6 +1242,110 @@ async def _connectors(creds: list, *, installs: list | None = None, servers: lis
         inputs = DispatchInputs()
         await add_connectors_to_inputs(inputs, git_org_id=uuid4())
     return inputs
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_body_secret_gives_the_agent_its_own_placeholder() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="api_key",
+        settings={"inject": "body", "host": "auth.example.com"},
+        secret={"name": "QA_PASSWORD", "key": "hunter2"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    (sidecar_key,) = inputs.secrets
+    assert sidecar_key.startswith("SKILL_BODY_")
+    assert inputs.secrets[sidecar_key] == "hunter2"
+    placeholder = inputs.public_env["QA_PASSWORD"]
+    assert placeholder.startswith("jcsecret_QA_PASSWORD_")
+    assert "hunter2" not in placeholder
+    (upstream,) = inputs.upstreams
+    assert upstream.host == "auth.example.com"
+    assert upstream.secret_key == sidecar_key
+    assert upstream.body_placeholder == placeholder
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_totp_seed_reaches_the_sidecar_as_an_otpauth_uri() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="api_key",
+        settings={"inject": "totp", "host": "auth.example.com"},
+        secret={"name": "QA_TOTP", "key": "jbsw y3dp ehpk 3pxp"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    (sidecar_key,) = inputs.secrets
+    assert inputs.secrets[sidecar_key] == "otpauth://totp/jeanclode?secret=JBSWY3DPEHPK3PXP"
+    assert inputs.public_env["QA_TOTP"].startswith("jcsecret_QA_TOTP_")
+    (upstream,) = inputs.upstreams
+    assert upstream.body_totp is True
+    assert upstream.body_placeholder == inputs.public_env["QA_TOTP"]
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_bad_totp_seed_is_skipped() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="api_key",
+        settings={"inject": "totp", "host": "auth.example.com"},
+        secret={"name": "QA_TOTP", "key": "not a seed!"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    assert not inputs.secrets
+    assert not inputs.upstreams
+    assert "QA_TOTP" not in inputs.public_env
+
+
+@pytest.mark.parametrize(
+    ("raw", "uri"),
+    [
+        ("JBSWY3DPEHPK3PXP", "otpauth://totp/jeanclode?secret=JBSWY3DPEHPK3PXP"),
+        (
+            "otpauth://totp/App:qa?secret=JBSWY3DPEHPK3PXP&digits=8&algorithm=SHA256&period=60",
+            "otpauth://totp/App:jeanclode?secret=JBSWY3DPEHPK3PXP&issuer=App"
+            "&algorithm=SHA256&digits=8&period=60",
+        ),
+    ],
+)
+def test_totp_uri_normalises_a_seed_or_an_otpauth_uri(raw: str, uri: str) -> None:
+    assert totp_uri(raw) == uri
+
+
+@pytest.mark.parametrize(
+    "raw", ["", "not!base32", "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP&counter=0"]
+)
+def test_totp_uri_rejects_what_cannot_produce_a_code(raw: str) -> None:
+    with pytest.raises(ValueError):
+        totp_uri(raw)
+
+
+@pytest.mark.asyncio
+async def test_add_connectors_skill_body_placeholder_is_url_safe() -> None:
+    install = _make_install()
+    cred = _make_credential(
+        subject_type="plugin_installation",
+        subject_id=install.id,
+        auth_type="jwt",
+        settings={"inject": "body", "host": "auth.example.com"},
+        secret={"name": "qa-pass.word", "key": "k"},
+    )
+
+    inputs = await _connectors([cred], installs=[install])
+
+    placeholder = inputs.public_env["qa-pass.word"]
+    assert placeholder.startswith("jcsecret_qa_pass_word_")
 
 
 @pytest.mark.asyncio

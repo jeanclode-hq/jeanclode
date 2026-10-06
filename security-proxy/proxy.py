@@ -1,9 +1,11 @@
 """mitmproxy addon for the per-execution security sidecar."""
 
 import asyncio
+import html
 import json
 import os
 import re
+import secrets
 import sys
 import time
 import urllib.error
@@ -11,8 +13,9 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlencode
+from urllib.parse import quote, quote_plus, unquote, urlencode
 
+import pyotp
 from mitmproxy import http
 from pydantic import BaseModel, Field
 
@@ -35,7 +38,16 @@ STRIPPED_HEADERS: tuple[str, ...] = (
 # Response-side scrub. Servers don't normally echo Authorization, but a buggy
 # upstream or a user-controlled body field could leak credentials back. Strip
 # anything credential-shaped on the way to the agent as defense-in-depth.
-STRIPPED_RESPONSE_HEADERS: tuple[str, ...] = STRIPPED_HEADERS + ("set-cookie",)
+# ``set-cookie`` isn't stripped but vaulted: see ``_CookieVault``.
+STRIPPED_RESPONSE_HEADERS: tuple[str, ...] = STRIPPED_HEADERS
+
+# Login payloads are tiny; anything bigger goes out unscanned rather than
+# making every upload to a body-secret host a full in-memory copy.
+MAX_BODY_SUBSTITUTION_BYTES = 64 * 1024
+
+COOKIE_PLACEHOLDER_PREFIX = "jccookie_"
+# One sidecar per execution; the cap only bounds a run that churns cookies.
+MAX_VAULTED_COOKIES = 4096
 
 
 class Upstream(BaseModel):
@@ -48,6 +60,10 @@ class Upstream(BaseModel):
     path_pattern: str | None = None
     methods: list[str] | None = None
     inject: dict[str, str] = Field(default_factory=dict)
+    # Placeholder -> real secret, swapped into request bodies on this host.
+    body: dict[str, str] = Field(default_factory=dict)
+    # Placeholder -> ``otpauth://`` URI; swapped for the code current at send time.
+    totp: dict[str, str] = Field(default_factory=dict)
 
     def matches_pattern(self, method: str, path: str) -> bool:
         if self.path_pattern is None:
@@ -101,6 +117,7 @@ _GITLAB_API_PROJECT_RE = re.compile(r"^/api/v4/projects/([^/?]+)")
 # ``.git`` (e.g. ``/ns/repo/info/refs`` and ``/ns/repo.git/info/refs``) —
 # strip it so both forms match the same ``path_prefix``.
 _GIT_SUFFIX_RE = re.compile(r"\.git(?=/|$)")
+
 
 def _gitlab_match_path(path: str) -> str:
     """Normalize a GitLab request path onto the ``/namespace/repo/...`` shape
@@ -165,6 +182,23 @@ class Config(BaseModel):
     def match_oauth(self, host: str, path: str) -> OAuthUpstream | None:
         """Same longest-prefix rule as ``match``, over the oauth2 upstreams."""
         return _longest_prefix_match(self.oauth_upstreams, host, path)
+
+    def body_secrets(self, host: str) -> dict[str, str]:
+        """Every body secret bound to ``host``, whichever upstream wins the header match."""
+        found: dict[str, str] = {}
+        for upstream in self.upstreams:
+            if upstream.body and _host_matches(upstream.host, host):
+                found.update(upstream.body)
+        return found
+
+    def totp_codes(self, host: str) -> dict[str, str]:
+        """The current code for every TOTP seed bound to ``host``."""
+        return {
+            placeholder: pyotp.parse_uri(uri).at(time.time())
+            for upstream in self.upstreams
+            if upstream.totp and _host_matches(upstream.host, host)
+            for placeholder, uri in upstream.totp.items()
+        }
 
 
 def _host_matches(pattern: str, host: str) -> bool:
@@ -271,6 +305,15 @@ def load_config(path: str | os.PathLike[str], env: dict[str, str]) -> Config:
         )
         for name, value_template in (entry.get("inject") or {}).items():
             upstream.inject[name.lower()] = expand_env(value_template, env)
+        for placeholder, value_template in (entry.get("body") or {}).items():
+            if not placeholder:
+                raise ValueError(f"empty body placeholder for {host} in config")
+            upstream.body[placeholder] = expand_env(value_template, env)
+        for placeholder, value_template in (entry.get("totp") or {}).items():
+            uri = expand_env(value_template, env)
+            if not placeholder or not isinstance(pyotp.parse_uri(uri), pyotp.TOTP):
+                raise ValueError(f"bad TOTP entry for {host} in config")
+            upstream.totp[placeholder] = uri
 
     oauth_upstreams: list[OAuthUpstream] = []
     for entry in raw.get("oauth_upstreams", []):
@@ -405,6 +448,166 @@ class _OAuthTokenCache:
             return token
 
 
+def _encode_for_body(value: str, content_type: str) -> str:
+    """The secret as it has to appear inside a body of this type, so a ``&``
+    or a quote in a password can't break the form or the JSON around it."""
+    if content_type.startswith("application/x-www-form-urlencoded"):
+        return quote_plus(value)
+    if content_type.startswith("application/json") or content_type.endswith("+json"):
+        return json.dumps(value)[1:-1]
+    return value
+
+
+def _substitute_body_secrets(flow: http.HTTPFlow, body_secrets: dict[str, str]) -> bool:
+    """Swap each placeholder in the request body for its real value; True if any was."""
+    request = flow.request
+    if not body_secrets or "content-encoding" in request.headers:
+        return False
+    raw = request.raw_content
+    if not raw or len(raw) > MAX_BODY_SUBSTITUTION_BYTES:
+        return False
+    content_type = request.headers.get("content-type", "").lower()
+    replaced = raw
+    for placeholder, value in body_secrets.items():
+        replaced = replaced.replace(
+            placeholder.encode(), _encode_for_body(value, content_type).encode()
+        )
+    if replaced == raw:
+        return False
+    request.content = replaced
+    return True
+
+
+class _SecretScrubber:
+    """Masks body secrets in a response, so a host that echoes what it was
+    sent (a redisplayed login form, a stored profile field, a validation
+    error) can't hand the real value back to the agent.
+
+    Masks keep the length, so a streamed body still matches its
+    ``Content-Length``. Used as a ``stream`` callable it holds back the tail
+    of each chunk, in case a secret straddles two.
+    """
+
+    def __init__(self, values: list[str]) -> None:
+        forms: set[bytes] = set()
+        for value in values:
+            for form in (
+                value,
+                json.dumps(value)[1:-1],
+                quote_plus(value),
+                quote(value, safe=""),
+                html.escape(value),
+                html.escape(value, quote=False),
+            ):
+                if form:
+                    forms.add(form.encode())
+        self._forms = sorted(forms, key=len, reverse=True)
+        self._hold = max((len(f) for f in self._forms), default=1) - 1
+        self._pending = b""
+
+    def scrub(self, data: bytes) -> bytes:
+        for form in self._forms:
+            data = data.replace(form, b"*" * len(form))
+        return data
+
+    def scrub_text(self, text: str) -> str:
+        return self.scrub(text.encode("utf-8", "surrogateescape")).decode(
+            "utf-8", "surrogateescape"
+        )
+
+    def __call__(self, chunk: bytes) -> bytes:
+        data = self.scrub(self._pending + chunk)
+        if not chunk or not self._hold:
+            self._pending = b""
+            return data
+        self._pending = data[-self._hold :]
+        return data[: -self._hold]
+
+
+def _cookie_domain_covers(domain: str, host: str) -> bool:
+    return host == domain or host.endswith("." + domain)
+
+
+class _VaultedCookie(BaseModel):
+    value: str
+    host: str
+    # The cookie's ``Domain`` attribute; ``None`` for a host-only cookie.
+    domain: str | None = None
+
+    def sent_to(self, host: str) -> bool:
+        if self.domain is None:
+            return host == self.host
+        return _cookie_domain_covers(self.domain, host)
+
+
+class _CookieVault:
+    """Session cookies the agent only ever sees as placeholders.
+
+    A ``set-cookie`` value is kept here and the browser gets a random
+    placeholder with the same attributes, so it still handles domain, path,
+    expiry and deletion itself. On the way out the placeholder is swapped
+    back, but only for a host the cookie would really be sent to — a
+    placeholder pasted into a request to another allowlisted host stays
+    worthless.
+    """
+
+    def __init__(self) -> None:
+        self._cookies: dict[str, _VaultedCookie] = {}
+
+    def vault(self, value: str, host: str, domain: str | None) -> str:
+        if len(self._cookies) >= MAX_VAULTED_COOKIES:
+            self._cookies.pop(next(iter(self._cookies)))
+        placeholder = COOKIE_PLACEHOLDER_PREFIX + secrets.token_urlsafe(24)
+        self._cookies[placeholder] = _VaultedCookie(
+            value=value, host=host, domain=domain
+        )
+        return placeholder
+
+    def reveal(self, placeholder: str, host: str) -> str | None:
+        cookie = self._cookies.get(placeholder)
+        if cookie is None or not cookie.sent_to(host):
+            return None
+        return cookie.value
+
+    def rewrite_set_cookie(self, header: str, host: str, *, vault_all: bool) -> str:
+        """Vault the value of one ``set-cookie`` header.
+
+        Only ``HttpOnly`` cookies unless ``vault_all``: page scripts never
+        read those, so a placeholder can't break the page, while a cookie
+        JS does read (CSRF double-submit, client flags) has to stay real.
+        """
+        pair, sep, attrs = header.partition(";")
+        name, eq, value = pair.partition("=")
+        value = value.strip()
+        if not eq or not value:
+            return header
+        attributes: dict[str, str] = {}
+        for attr in attrs.split(";"):
+            key, _, attr_value = attr.partition("=")
+            attributes[key.strip().lower()] = attr_value.strip()
+        if not vault_all and "httponly" not in attributes:
+            return header
+        domain = attributes.get("domain", "").lstrip(".").lower() or None
+        if domain is not None and (
+            "." not in domain or not _cookie_domain_covers(domain, host)
+        ):
+            # The browser rejects such a cookie; never let it widen the reveal.
+            domain = None
+        placeholder = self.vault(value, host, domain)
+        return f"{name.strip()}={placeholder}{sep}{attrs}"
+
+    def reveal_cookie_header(self, header: str, host: str) -> str:
+        if COOKIE_PLACEHOLDER_PREFIX not in header:
+            return header
+        pairs: list[str] = []
+        for item in header.split(";"):
+            name, eq, value = item.strip().partition("=")
+            if eq and value.startswith(COOKIE_PLACEHOLDER_PREFIX):
+                value = self.reveal(value, host) or value
+            pairs.append(f"{name}{eq}{value}")
+        return "; ".join(pairs)
+
+
 def _audit(
     execution_id: str,
     host: str,
@@ -441,6 +644,7 @@ class SecurityProxy:
     def __init__(self, config: Config | None = None) -> None:
         self.config = config
         self._oauth_cache = _OAuthTokenCache()
+        self._cookie_vault = _CookieVault()
 
     def running(self) -> None:
         if self.config is None:
@@ -473,6 +677,20 @@ class SecurityProxy:
                     del flow.request.headers[header]
             for name, value in upstream.inject.items():
                 flow.request.headers[name] = value
+            injected = sorted(upstream.inject)
+            body_secrets = self.config.body_secrets(host)
+            if body_secrets:
+                # An encoded response can't be scrubbed as it streams.
+                if "accept-encoding" in flow.request.headers:
+                    del flow.request.headers["accept-encoding"]
+                flow.metadata["jc_scrub"] = list(body_secrets.values())
+            if _substitute_body_secrets(flow, body_secrets):
+                injected.append("body")
+            if _substitute_body_secrets(flow, self.config.totp_codes(host)):
+                injected.append("totp")
+            if self._reveal_cookies(flow, host):
+                injected.append("cookie")
+            flow.metadata["jc_injected"] = bool(injected)
             _audit(
                 self.config.execution_id,
                 host,
@@ -480,7 +698,7 @@ class SecurityProxy:
                 path,
                 "forwarded",
                 None,
-                injected=sorted(upstream.inject),
+                injected=injected,
             )
             return
 
@@ -510,6 +728,7 @@ class SecurityProxy:
                 if header in flow.request.headers:
                     del flow.request.headers[header]
             flow.request.headers[oauth_upstream.header] = f"Bearer {token}"
+            self._reveal_cookies(flow, host)
             _audit(
                 self.config.execution_id,
                 host,
@@ -528,6 +747,16 @@ class SecurityProxy:
             {"Content-Type": "text/plain; charset=utf-8"},
         )
 
+    def _reveal_cookies(self, flow: http.HTTPFlow, host: str) -> bool:
+        """Swap vaulted cookies back in; True if any was."""
+        # HTTP/2 may split cookies over several headers.
+        cookies = flow.request.headers.get_all("cookie")
+        if not cookies:
+            return False
+        revealed = [self._cookie_vault.reveal_cookie_header(c, host) for c in cookies]
+        flow.request.headers.set_all("cookie", revealed)
+        return revealed != cookies
+
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """Fires once response headers arrive, before the body does — the
         only point where credential headers can still be stripped *and*
@@ -538,13 +767,64 @@ class SecurityProxy:
         otherwise buffers each one whole in the 256MiB sidecar. Clone
         packfiles, repo archives, Node downloads and npm tarballs fetched
         16 at a time all OOM-killed it, or would.
+
+        A response to a request the proxy put a credential into (header,
+        body secret, vaulted cookie) has every cookie vaulted, since any of
+        them may be a session minted from it; elsewhere only ``HttpOnly``
+        ones are, so cookies page scripts read (CSRF double-submit) stay
+        real. A flow that never went through ``request`` counts as injected.
+
+        On a host with body secrets, headers and body are scrubbed of them.
+        A body the server compressed anyway is buffered and scrubbed in
+        ``response`` instead.
         """
         if flow.response is None:
             return
         for header in STRIPPED_RESPONSE_HEADERS:
             if header in flow.response.headers:
                 del flow.response.headers[header]
-        flow.response.stream = True
+        scrub_values = flow.metadata.get("jc_scrub")
+        scrubber = _SecretScrubber(scrub_values) if scrub_values else None
+        if scrubber is not None:
+            headers = flow.response.headers
+            for name in set(headers.keys()):
+                headers.set_all(
+                    name, [scrubber.scrub_text(v) for v in headers.get_all(name)]
+                )
+        set_cookies = flow.response.headers.get_all("set-cookie")
+        if set_cookies:
+            host = flow.request.pretty_host.lower()
+            vault_all = flow.metadata.get("jc_injected", True)
+            flow.response.headers.set_all(
+                "set-cookie",
+                [
+                    self._cookie_vault.rewrite_set_cookie(c, host, vault_all=vault_all)
+                    for c in set_cookies
+                ],
+            )
+        if scrubber is None:
+            flow.response.stream = True
+        elif "content-encoding" in flow.response.headers:
+            flow.metadata["jc_scrub_buffered"] = True
+        else:
+            flow.response.stream = scrubber
+
+    def response(self, flow: http.HTTPFlow) -> None:
+        if flow.response is None or not flow.metadata.get("jc_scrub_buffered"):
+            return
+        scrubber = _SecretScrubber(flow.metadata["jc_scrub"])
+        try:
+            content = flow.response.content
+        except ValueError:
+            # Undecodable, so unscrubbable: fail closed.
+            flow.response = http.Response.make(
+                502,
+                b"denied: response could not be scrubbed of body secrets\n",
+                {"Content-Type": "text/plain; charset=utf-8"},
+            )
+            return
+        if content:
+            flow.response.content = scrubber.scrub(content)
 
 
 addons = [SecurityProxy()]
