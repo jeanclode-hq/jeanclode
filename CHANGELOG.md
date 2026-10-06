@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.0...v1.12.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **cli:** survive oversized tool results and report workflow errors in the status note ([#75](https://github.com/jeanclode-hq/jeanclode/issues/75)) ([f5339af](https://github.com/jeanclode-hq/jeanclode/commit/f5339af3fd4a3ce815aa797927d0e78f15468e37))
+
 ## [1.12.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.11.0...v1.12.0) (2026-10-06)
 
 
