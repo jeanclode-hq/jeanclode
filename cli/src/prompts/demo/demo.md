@@ -59,7 +59,7 @@ Your working directory holds the change. Each repo is a git checkout on the {{ '
 9. **Linked repos.** If another checkout above, or a related repository, provides a dependency of the app that this fix also changed (a component library, say), point the app at the local checkout (`pnpm link`, `overrides`, a workspace path) so the demo shows the new version.
 10. **Pick the medium.**
    - **Screenshots** (`media: "screenshot"`) when the change is static: layout, alignment, spacing, styling, copy, an element that's now there or gone. 1 to 3 of them, each a viewport of the real page with the change in view (scroll it there with `locator.scroll_into_view_if_needed()`).
-   - **Video** (`media: "video"`) only when the change is about interaction: a flow, a redirect, a form step, an animation, a loading state, something that only shows up after a click.
+   - **Video** (`media: "video"`) when the change is about interaction: recordings are great for showing what happens as someone uses the page, such as a flow, a redirect, a form step, an animation, a loading state, or something that only shows up after a click or while typing.
 11. **Capture.** Write a Python script in `{{ demo_dir }}/setup/` and run it with `python`:
 
    ```python
@@ -69,13 +69,23 @@ Your working directory holds the change. Each repo is a git checkout on the {{ '
        page.goto("http://localhost:5173/orders")
        page.get_by_text("Order #1042").wait_for()
        ready(page)  # the video starts here: nothing before this is kept
+       page.get_by_role("button", name="Refund").click()
        page.screenshot(path="{{ demo_dir }}/orders.png")
        ...
    ```
 
    Use `recording(video=False)` for screenshots only. For a video, call `ready(page)` once the page shows its real content, not a blank page or a spinner (unless the loading state is the change), so it starts on the page, not on the app loading. Then do only the steps that show the change, pause about a second on the result (`page.wait_for_timeout(1000)`), and end there: no idle time, no wandering, under 20 seconds in all. Save screenshots of the key moments in `{{ demo_dir }}` either way. Show the change as it is now, not a before and after. Look at your screenshots with Read before you decide.
-12. **Save the recipe** to memory once the real page worked: versions, install and start commands, how you logged in, what you mocked and where those mocks live, and the routes you reached with the data each needed. Keep it to what the next run on this repo needs, and update the existing recipe rather than adding a second one.
-13. **Stop** every server you started before you finish.
+12. **Make it the greatest technical demo you can.** A teammate who hasn't read the issue should get the point in one watch and enjoy watching it. Be very creative: you have a whole browser to direct.
+   - **Move the camera.** Zoom into the change, pan across the page, pull back to reveal the result, with a CSS `transform` on `document.body` and eased transitions.
+   - **Draw.** Notes, arrows, circles, highlights that sketch themselves in SVG, spotlights that dim the rest of the page, step counters, callouts that pop in and fade out. Animate them with CSS or JS.
+   - **Direct the pacing.** Slow down on the moment that matters, cut the dead time, and give every annotation time to be read.
+   - **Tell one story.** Point at what the viewer should notice, not at what you're doing. Check edge cases in a separate script, not in the one you record.
+
+   Your toolkit: the cursor already glides and pulses on each click. `window.__demo.mount()` returns a shadow root over the viewport that the app's styles can't reach and that never takes a click: draw everything there with `page.evaluate`. It sits outside `<body>`, so zooming the body leaves it in place; take bounding boxes after a zoom settles. The page reaches only `localhost`, so keep everything inline.
+
+   **Watch it before you decide:** Read your key screenshots, and for a video, a grid of frames (ffmpeg at `imageio_ffmpeg.get_ffmpeg_exe()`, `-vf fps=2,scale=640:-1,tile=4x3`). If it isn't great yet, improve the script and record again.
+13. **Save the recipe** to memory once the real page worked: versions, install and start commands, how you logged in, what you mocked and where those mocks live, and the routes you reached with the data each needed. Keep it to what the next run on this repo needs, and update the existing recipe rather than adding a second one.
+14. **Stop** every server you started before you finish.
 
 ## What you may change
 
@@ -87,7 +97,7 @@ Never commit, push, stash, open or edit a PR/MR. Write scratch files to `{{ demo
 
 | Verdict | When |
 |---|---|
-| `ok` | Your screenshots or video show the change doing {{ ask }}, on the real page of the running app. |
+| `ok` | Your screenshots or video show the change doing {{ ask }}, on the real page of the running app, and you've checked its key moments and its point is obvious from them. |
 | `broken` | The app runs but the change doesn't do what was asked: a crash, a missing element, console errors, a wrong result. |
 | `unavailable` | You couldn't get the app running: install, start, mocks or login failed. |
 | `nothing_to_show` | The app runs but there's nothing visible to show for this change. |

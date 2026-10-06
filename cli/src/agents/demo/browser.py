@@ -10,11 +10,14 @@
 
 The video lands at ``<out_dir>/demo.webm`` once the block exits, cut to start
 at ``ready(page)``, or at the first page load when the script never calls it.
-``recording(video=False)`` is the same browser for screenshots only.
+Every page gets the overlay layer in ``layer.js`` (``window.__demo.root``) for
+annotations, with a cursor in it when recording video. ``recording(video=False)``
+is the same browser for screenshots only.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import subprocess
@@ -39,6 +42,8 @@ _CHROMIUM_ARGS = [
     "--no-proxy-server",
     "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost",
 ]
+
+_LAYER_JS = (Path(__file__).parent / "layer.js").read_text().strip().rstrip(";")
 
 # Under this, a cut isn't worth re-encoding the video.
 _MIN_TRIM_S = 0.3
@@ -101,6 +106,8 @@ def recording(
             record_video_dir=str(raw_dir) if video else None,
             record_video_size=VIEWPORT if video else None,
         )
+        # Headless Chromium draws no cursor: without ours a click is invisible in the video.
+        context.add_init_script(f"({_LAYER_JS})({json.dumps(video)})")
         page = context.new_page()
         key = id(page)
         _started[key] = time.monotonic()
