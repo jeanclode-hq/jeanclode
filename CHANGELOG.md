@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.1...v1.12.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* **cli:** make demo videos readable with a cursor and an annotation layer ([#76](https://github.com/jeanclode-hq/jeanclode/issues/76)) ([81dc59a](https://github.com/jeanclode-hq/jeanclode/commit/81dc59aabffb6db356fd0e614da716aa870b526d))
+
 ## [1.12.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.0...v1.12.1) (2026-10-06)
 
 
