@@ -151,3 +151,24 @@ async def test_two_skills_in_same_plugin_register_plugin_once(tmp_path: Path) ->
 
     plugin_paths = [entry["path"] for entry in (options.plugins or [])]
     assert plugin_paths == [str(s1.plugin_path)]
+
+
+async def _read_decision(options: Any, tool_input: dict[str, Any]) -> dict[str, Any]:
+    (matcher,) = [m for m in options.hooks["PreToolUse"] if m.matcher == "Read"]
+    hook_input = {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": tool_input}
+    return await matcher.hooks[0](hook_input, None, {"signal": None})
+
+
+async def test_whole_read_too_big_for_the_buffer_is_denied(tmp_path: Path) -> None:
+    ctx = RunContext(cwd=tmp_path, workspace=tmp_path, events=EventBus())
+    _, options = await _capture(_make_agent(tmp_path), ctx)
+    big = tmp_path / "big.png"
+    with big.open("wb") as f:
+        f.truncate(options.max_buffer_size)
+    small = tmp_path / "small.png"
+    small.write_bytes(b"x")
+
+    denied = await _read_decision(options, {"file_path": str(big)})
+    assert denied["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert await _read_decision(options, {"file_path": str(small)}) == {}
+    assert await _read_decision(options, {"file_path": str(big), "limit": 10}) == {}

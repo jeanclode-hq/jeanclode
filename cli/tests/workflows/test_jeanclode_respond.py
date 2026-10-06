@@ -424,7 +424,7 @@ async def test_no_hook_when_thread_id_unresolved(tmp_path: Path) -> None:
     """Without a thread id the flat note is the only option — don't block it."""
     _write_gitlab_issue_context(tmp_path, thread_id="")
     options = await _run_capturing_options(tmp_path)
-    assert not options.hooks
+    assert [m.matcher for m in options.hooks["PreToolUse"]] == ["Read"]
 
 
 @pytest.mark.asyncio
@@ -682,7 +682,7 @@ async def test_issue_mention_has_no_ci_gate(tmp_path: Path) -> None:
     """No branch to verify — an issue mention must not pay for a CI check."""
     _write_gitlab_issue_context(tmp_path, thread_id="6a9c1750b37d")
     options = await _run_capturing_options(tmp_path)
-    assert [m.matcher for m in options.hooks["PreToolUse"]] == ["Bash"]
+    assert [m.matcher for m in options.hooks["PreToolUse"]] == ["Bash", "Read"]
 
 
 @pytest.mark.asyncio

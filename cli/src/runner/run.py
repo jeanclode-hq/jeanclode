@@ -203,7 +203,11 @@ async def _run_workflow(
             },
             is_tty=is_tty,
         )
-        return 0 if result.status == "success" else 1
+        if result.status == "success":
+            return 0
+        # The backend posts an ERROR line's message in the status note, and nothing else.
+        emit_error("workflow_error", result.summary, is_tty=is_tty, usage=usage_acc.total)
+        return 1
     except ResultError as exc:
         # The SDK already resolves the most informative text it has (the
         # CLI's own errors[]/result/subtype/api_error_status, in that
