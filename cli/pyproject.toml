@@ -47,7 +47,7 @@ namespaces = true
 # Agent prompts are plain .md files in dirs with no __init__.py; without this
 # they never make it into the wheel and every agent dies on read_text().
 [tool.setuptools.package-data]
-"*" = ["*.md"]
+"*" = ["*.md", "*.js"]
 
 # Ruff Configuration
 [tool.ruff]

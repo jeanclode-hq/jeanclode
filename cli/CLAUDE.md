@@ -161,7 +161,11 @@ reason to `/tmp/jeanclode-demo/bypass`, and leaves the demo agent hints in
 `localhost` resolves) and keeps per-repo launch recipes in memory. It picks
 the medium (`media`): screenshots of the real page for a static change, a
 video only for an interaction, cut to start at the script's `ready(page)`
-(or the first page load) so it doesn't open on the app loading. Setup it
+(or the first page load) so it doesn't open on the app loading. Every page gets an overlay
+layer (`src/agents/demo/layer.js`, a shadow root on `<html>` exposed as
+`window.__demo`) with our cursor in it on a video; the agent draws its own
+annotations there and zooms by transforming `<body>`, which the layer sits
+outside of. Setup it
 keeps outside the checkouts goes in `/tmp/jeanclode-demo/setup/`, kept
 across rounds. Only the screenshots or video are posted, never the setup.
 
