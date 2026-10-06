@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.11.0...v1.12.0) (2026-10-06)
+
+
+### Features
+
+* **security-proxy:** placeholder secrets and cookies so agents can log in to web apps ([#70](https://github.com/jeanclode-hq/jeanclode/issues/70)) ([2d4203e](https://github.com/jeanclode-hq/jeanclode/commit/2d4203e52b1a34ac8ce7da8bf280da751730705d))
+
 ## [1.11.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.10.0...v1.11.0) (2026-10-05)
 
 
