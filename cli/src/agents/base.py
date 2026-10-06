@@ -49,6 +49,9 @@ from src.skills.prompt import (
 
 logger = logging.getLogger(__name__)
 
+# The SDK's 1 MB default is smaller than one base64 image tool result once the PNG passes ~750 KB.
+MAX_BUFFER_SIZE = 50 * 1024 * 1024
+
 
 class BaseAgent:
     """Base class for LLM-backed activities."""
@@ -411,6 +414,7 @@ class BaseAgent:
             "permission_mode": "bypassPermissions",
             "max_turns": self.max_turns,
             "cwd": str(ctx.cwd),
+            "max_buffer_size": MAX_BUFFER_SIZE,
         }
         if extra_hooks:
             kwargs["hooks"] = extra_hooks

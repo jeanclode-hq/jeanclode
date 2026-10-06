@@ -151,3 +151,11 @@ async def test_two_skills_in_same_plugin_register_plugin_once(tmp_path: Path) ->
 
     plugin_paths = [entry["path"] for entry in (options.plugins or [])]
     assert plugin_paths == [str(s1.plugin_path)]
+
+
+async def test_max_buffer_size_fits_large_image_reads(tmp_path: Path) -> None:
+    ctx = RunContext(cwd=tmp_path, workspace=tmp_path, events=EventBus())
+
+    _, options = await _capture(_make_agent(tmp_path), ctx)
+
+    assert options.max_buffer_size == 50 * 1024 * 1024
