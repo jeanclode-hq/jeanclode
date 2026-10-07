@@ -24,6 +24,8 @@ from src.agents.review import (
     FactCheckerInput,
     IssueExplorerAgent,
     IssueExplorerInput,
+    SkillReviewAgent,
+    SkillReviewInput,
     StylerAgent,
     StylerInput,
     SynthesizerAgent,
@@ -32,6 +34,8 @@ from src.agents.review import (
 from src.agents.schemas import AgentResult
 from src.runtime.context import RunContext
 from src.runtime.events import Panel
+from src.runtime.review_strategy import resolve_review_strategy
+from src.skills.content import find_skill_by_name, read_skill_instructions
 from src.workflows.base import register
 from src.workflows.code_review.utils import (
     comment_anchor,
@@ -42,6 +46,7 @@ from src.workflows.code_review.utils import (
     parse_styled_bodies,
     serialize_comments,
     serialize_numbered,
+    try_parse_review,
 )
 from src.workflows.schemas import WorkflowResult
 
@@ -84,6 +89,12 @@ class CodeReviewWorkflow:
             )
 
         issue_context = await self._explore_issues(ctx, prc)
+
+        strategy = resolve_review_strategy()
+        if strategy.uses_skill_primary:
+            return await self._run_skill_primary_path(
+                ctx, prc, issue_context, strategy.primary_skill
+            )
 
         analyzer_results = await self._run_analyzers(ctx, prc, issue_context)
         if not analyzer_results:
@@ -149,6 +160,87 @@ class CodeReviewWorkflow:
         if "no linked issues" in text.lower():
             return ""
         return text
+
+    async def _run_skill_primary_path(
+        self,
+        ctx: RunContext,
+        prc: PRContext,
+        issue_context: str,
+        skill_name: str | None,
+    ) -> WorkflowResult:
+        """Skill is the review engine — missing/broken skill is a hard error, not builtin fallback."""
+        if not skill_name:
+            return WorkflowResult(
+                status="error",
+                summary="review strategy=skill but JEANCLODE_REVIEW_PRIMARY_SKILL is empty",
+            )
+
+        skill = find_skill_by_name(ctx.skills, skill_name)
+        if skill is None:
+            return WorkflowResult(
+                status="error",
+                summary=(
+                    f"review strategy=skill but skill {skill_name!r} is not loaded "
+                    "(install the marketplace plugin and ensure it is available for review)"
+                ),
+            )
+
+        instructions = read_skill_instructions(skill)
+        if not instructions:
+            return WorkflowResult(
+                status="error",
+                summary=f"review skill {skill_name!r} has empty SKILL.md instructions",
+            )
+
+        ctx.emit(
+            Panel(
+                title="Skill review",
+                content=f"[cyan]primary_skill={skill.name}[/]",
+                style="cyan",
+            )
+        )
+        try:
+            result = await SkillReviewAgent().invoke(
+                SkillReviewInput(
+                    platform=prc.ref.platform,
+                    pr_description=prc.pr_description,
+                    diff=prc.diff,
+                    issue_context=issue_context,
+                    skill_name=skill.name,
+                    skill_instructions=instructions,
+                ),
+                ctx,
+            )
+        except Exception as exc:
+            logger.exception("SkillReview agent failed")
+            return WorkflowResult(
+                status="error",
+                summary=f"SkillReview agent failed: {exc}",
+            )
+
+        comments = try_parse_review(result, prc.ref.platform)
+        if comments is None:
+            return WorkflowResult(
+                status="error",
+                summary=f"SkillReview ({skill.name}) returned unparseable output — not posting LGTM",
+            )
+        if not comments:
+            return await self._finalize_post(ctx, prc.ref, [])
+
+        comments = await self._maybe_dedup(ctx, prc, comments)
+        if not comments:
+            return await self._finalize_post(ctx, prc.ref, [])
+
+        comments = await self._fact_check(ctx, prc, comments, issue_context)
+        if not comments:
+            return await self._finalize_post(ctx, prc.ref, [])
+
+        comments = apply_guardrail(comments, ctx=ctx)
+        if not comments:
+            return await self._finalize_post(ctx, prc.ref, [])
+
+        comments = await self._style(ctx, comments)
+        return await self._finalize_post(ctx, prc.ref, comments)
 
     async def _run_analyzers(
         self, ctx: RunContext, prc: PRContext, issue_context: str

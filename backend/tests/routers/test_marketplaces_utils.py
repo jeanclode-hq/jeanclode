@@ -409,15 +409,41 @@ async def test_resolve_workflow_filter(db_session):
         plugin_name="p",
         display_name="p",
     )
-    db_update_install(db_session, install, enabled_workflows=["code_review"])
+    db_update_install(db_session, install, enabled_workflows=["review"])
 
     manifest = MarketplaceManifest(
         name="m", plugins=[MarketplacePlugin(name="p", source="plugins/p")]
     )
     with patch(_LOAD, new=AsyncMock(return_value=manifest)):
         assert await resolve_plugin_specs_for_org(db_session, org_id, workflow="fix") == []
-        specs = await resolve_plugin_specs_for_org(db_session, org_id, workflow="code_review")
+        specs = await resolve_plugin_specs_for_org(db_session, org_id, workflow="review")
         assert len(specs) == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_ensure_plugin_names_bypasses_workflow_filter(db_session):
+    """A review primary skill must clone even if enabled_workflows omits review."""
+    from api.database import db_create_marketplace, db_create_marketplace_install, db_update_install
+    from api.routers.marketplaces.utils import read_plugin_install_rows
+
+    org_id = _make_org(db_session)
+    m = db_create_marketplace(
+        db_session, org_id=org_id, name="m", git_url="https://github.com/acme/m"
+    )
+    install = db_create_marketplace_install(
+        db_session,
+        org_id=org_id,
+        marketplace_id=m.id,
+        plugin_name="vue3-review",
+        display_name="vue3-review",
+    )
+    db_update_install(db_session, install, enabled_workflows=["fix"])
+
+    assert read_plugin_install_rows(db_session, org_id, workflow="review") == []
+    rows = read_plugin_install_rows(
+        db_session, org_id, workflow="review", ensure_plugin_names=["vue3-review"]
+    )
+    assert [r.plugin_name for r in rows] == ["vue3-review"]
 
 
 @pytest.mark.asyncio

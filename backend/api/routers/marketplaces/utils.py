@@ -246,19 +246,33 @@ class PluginInstallRow(NamedTuple):
 
 
 def read_plugin_install_rows(
-    db: Session, org_id: UUID, *, workflow: str | None = None
+    db: Session,
+    org_id: UUID,
+    *,
+    workflow: str | None = None,
+    ensure_plugin_names: list[str] | None = None,
 ) -> list[PluginInstallRow]:
     """Read an org's installs (optionally scoped to one workflow) as plain rows.
 
     Resolving them into specs means refetching every marketplace manifest over
     the network, so the rows leave the session behind first — see
     :func:`resolve_plugin_specs`.
+
+    ``ensure_plugin_names`` always includes matching installs (by
+    ``plugin_name``) even when the workflow filter would drop them — used
+    so a configured review primary skill is cloned regardless of
+    ``enabled_workflows``.
     """
     from api.database.plugins import db_get_installations_by_org, db_get_marketplace_by_id
 
     installs = db_get_installations_by_org(db, org_id)
+    ensure = {n for n in (ensure_plugin_names or []) if n}
     if workflow is not None:
-        installs = [i for i in installs if _workflow_enabled(i.enabled_workflows, workflow)]
+        installs = [
+            i
+            for i in installs
+            if _workflow_enabled(i.enabled_workflows, workflow) or i.plugin_name in ensure
+        ]
 
     rows: list[PluginInstallRow] = []
     for install in installs:

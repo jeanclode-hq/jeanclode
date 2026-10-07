@@ -67,7 +67,7 @@ env vars that platform's tools need.
 | Workflow | Shape |
 |---|---|
 | `sentry_fix` | fetch → parallel triage (triage *is* the planner) → deterministic filter/route → synthesis when several issues are actionable → per group: worktree + PR per target repo, one fixer session across them |
-| `code_review` | IssueExplorer → 2× Analyzer (parallel) → Synthesizer → Deduplicator → FactChecker → Guardrail → Styler → post inline comments |
+| `code_review` | IssueExplorer → 2× Analyzer (parallel) → Synthesizer → Deduplicator → FactChecker → Guardrail → Styler → post inline comments — or, when the org sets `review.strategy=skill`, a single **SkillReview** agent with the primary skill's `SKILL.md` inlined (`JEANCLODE_REVIEW_STRATEGY` / `JEANCLODE_REVIEW_PRIMARY_SKILL`) then dedup → guardrail → styler → post |
 | `issue_resolve` | triage (explores the codebase, findings double as the plan) → fixer → PR per repo, opened only once that repo has a real pushed commit, then the demo gate when triage set `demo_plan`; with `code_change=False` the fixer answers in an issue comment instead |
 | `pr_summary` | Summarizer → Parser, File Summarizer started 3s after the Summarizer → rewrite the PR/MR description with a collapsed per-file dropdown |
 | `jeanclode_respond` | one planner agent acting via Bash, the demo gate when its output carries a `demo_plan`, plus two deterministic post-turn checks against provider state |

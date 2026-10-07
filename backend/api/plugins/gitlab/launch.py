@@ -33,6 +33,8 @@ from api.plugins.container.dispatch_inputs import (
     add_memory_to_inputs,
     add_notify_to_inputs,
     add_plugin_marketplace_credentials,
+    add_review_to_inputs,
+    resolve_review_primary_skill,
 )
 from api.plugins.container.related import resolve_related_repos
 from api.plugins.container.sizing import resolve_tmp_size_limit
@@ -171,8 +173,13 @@ async def build_dispatch_inputs(
     add_agent_tooling_hosts(inputs)
 
     if repository:
+        ensure_plugins: list[str] | None = None
+        if workflow == ExecutionWorkflow.REVIEW:
+            primary = resolve_review_primary_skill(repository.org_id)
+            if primary:
+                ensure_plugins = [primary]
         plugins = await resolve_third_party_plugins_env_for_org(
-            repository.org_id, workflow=workflow.value
+            repository.org_id, workflow=workflow.value, ensure_plugin_names=ensure_plugins
         )
         inputs.public_env.update(plugins.env)
         inputs.extra_hosts.extend(plugins.extra_hosts)
@@ -182,6 +189,8 @@ async def build_dispatch_inputs(
         await add_connectors_to_inputs(inputs, git_org_id=repository.org_id)
         if workflow in _NOTIFY_WORKFLOWS:
             add_notify_to_inputs(inputs, git_org_id=repository.org_id)
+        if workflow == ExecutionWorkflow.REVIEW:
+            add_review_to_inputs(inputs, git_org_id=repository.org_id)
 
     if workspace_id is not None and execution_id is not None:
         await add_memory_to_inputs(inputs, workspace_id=workspace_id, execution_id=execution_id)

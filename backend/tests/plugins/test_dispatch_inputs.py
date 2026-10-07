@@ -1871,6 +1871,60 @@ def test_pattern_rules_serialize_apart_from_the_host_rule() -> None:
 
 
 # ---------------------------------------------------------------------------
+# add_review_to_inputs
+# ---------------------------------------------------------------------------
+
+
+def test_add_review_to_inputs_sets_skill_env() -> None:
+    from api.plugins.container.dispatch_inputs import (
+        REVIEW_PRIMARY_SKILL_ENV_VAR,
+        REVIEW_STRATEGY_ENV_VAR,
+        add_review_to_inputs,
+    )
+
+    inputs = DispatchInputs()
+    org = _make_org()
+    with (
+        patch(
+            "api.plugins.container.dispatch_inputs.get_current_app",
+            return_value=_notify_app(),
+        ),
+        patch(_NOTIFY_ORG_BY_ID, return_value=org),
+        patch(
+            _NOTIFY_SETTINGS,
+            return_value={"review": {"strategy": "skill", "primary_skill": "vue3-review"}},
+        ),
+    ):
+        add_review_to_inputs(inputs, git_org_id=org.id)
+
+    assert inputs.public_env[REVIEW_STRATEGY_ENV_VAR] == "skill"
+    assert inputs.public_env[REVIEW_PRIMARY_SKILL_ENV_VAR] == "vue3-review"
+
+
+def test_add_review_to_inputs_defaults_builtin() -> None:
+    from api.plugins.container.dispatch_inputs import (
+        REVIEW_PRIMARY_SKILL_ENV_VAR,
+        REVIEW_STRATEGY_ENV_VAR,
+        add_review_to_inputs,
+    )
+
+    inputs = DispatchInputs()
+    org = _make_org()
+    with (
+        patch(
+            "api.plugins.container.dispatch_inputs.get_current_app",
+            return_value=_notify_app(),
+        ),
+        patch(_NOTIFY_ORG_BY_ID, return_value=org),
+        patch(_NOTIFY_SETTINGS, return_value={}),
+    ):
+        add_review_to_inputs(inputs, git_org_id=org.id)
+
+    assert inputs.public_env[REVIEW_STRATEGY_ENV_VAR] == "builtin"
+    assert REVIEW_PRIMARY_SKILL_ENV_VAR not in inputs.public_env
+
+
+# ---------------------------------------------------------------------------
 # add_demo_to_inputs
 # ---------------------------------------------------------------------------
 

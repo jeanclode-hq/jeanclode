@@ -131,6 +131,14 @@ mutex across pods), and the **git org is the concurrency perimeter** — one
 checked in the eligibility query and re-checked before the window claim and
 in `_claim_batch`). Different git orgs dispatch concurrently.
 
+Git org settings may set `review.strategy` (`builtin` or `skill`) and
+`review.primary_skill` (marketplace skill name — usually the install's
+`plugin_name`). Review dispatches always set `JEANCLODE_REVIEW_STRATEGY`
+on the container; skill mode also sets `JEANCLODE_REVIEW_PRIMARY_SKILL`
+and force-includes that plugin in `JEANCLODE_THIRDPARTY_PLUGINS` even if
+`enabled_workflows` omitted `review`. The CLI then runs **SkillReview**;
+a missing or unparseable skill is a hard error (no silent builtin fallback).
+
 Org settings also carry `notify.on_ready` — provider identity ids (not
 handles, so a rename can't stale out) for the people to @-mention once a
 bot-opened PR/MR converges. `add_notify_to_inputs` resolves them against the

@@ -24,6 +24,21 @@ def test_manage_project_webhooks_defaults_off():
     )
 
 
+def test_review_defaults_to_builtin_pipeline():
+    assert GitOrgSettings().review.strategy == "builtin"
+    assert GitOrgSettings().review.primary_skill is None
+
+
+def test_review_parses_skill_strategy():
+    from api.models.settings import ReviewStrategy
+
+    settings = GitOrgSettings.model_validate(
+        {"review": {"strategy": "skill", "primary_skill": "vue3-review"}}
+    )
+    assert settings.review.strategy == ReviewStrategy.SKILL
+    assert settings.review.primary_skill == "vue3-review"
+
+
 def test_notify_defaults_to_nobody():
     """Notifications are opt-in: an org that never touched the setting must
     not start @-mentioning anyone."""

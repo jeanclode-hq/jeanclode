@@ -13,6 +13,11 @@ from src.activities.review.schemas import PostResult, RecoverResult, UnpostedCom
 from src.runtime.bus import EventBus
 from src.runtime.context import RunContext
 from src.runtime.events import Panel
+from src.runtime.review_strategy import (
+    REVIEW_PRIMARY_SKILL_ENV_VAR,
+    REVIEW_STRATEGY_ENV_VAR,
+)
+from src.skills.discovery import load_skills
 from src.workflows.code_review.runner import CodeReviewWorkflow
 
 
@@ -552,3 +557,93 @@ async def test_notice_is_attempted_but_reports_false_when_nobody_configured(
         result = await CodeReviewWorkflow().run(ctx)
 
     assert result.data["notified"] is False
+
+
+def _write_skill_plugin(base: Path, name: str) -> Path:
+    plugin = base / "plugin"
+    skill_dir = plugin / "skills" / name
+    skill_dir.mkdir(parents=True)
+    (plugin / ".claude-plugin").mkdir()
+    (plugin / ".claude-plugin" / "plugin.json").write_text("{}")
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: test skill\n---\n# Rules\n"
+    )
+    return plugin
+
+
+@pytest.mark.asyncio
+async def test_skill_primary_runs_skill_review_not_analyzers(tmp_path: Path, monkeypatch) -> None:
+    _setup_pr_context(tmp_path)
+    plugin = _write_skill_plugin(tmp_path, "vue3-review")
+    ctx = _ctx(tmp_path)
+    ctx.skills = load_skills([plugin])
+
+    monkeypatch.setenv(REVIEW_STRATEGY_ENV_VAR, "skill")
+    monkeypatch.setenv(REVIEW_PRIMARY_SKILL_ENV_VAR, "vue3-review")
+
+    sq = _ScriptedQuery()
+    sq.add("linked issues", "{}", {"context": "No linked issues found.", "issue_refs": []})
+    sq.add(
+        "Primary review skill",
+        '{"comments":[{"path":"x.py","line":1,"body":"from skill","side":"RIGHT"}]}',
+    )
+    sq.add("skeptical investigator", '{"keep_indices":[0]}', {"keep_indices": [0]})
+    sq.add("Code Review Formatter", '{"bodies":["from skill"]}', {"bodies": ["from skill"]})
+    sq.add("<diff>", '{"comments":[]}')  # analyzer — must stay unused
+
+    posted = PostResult(posted=1, pr_url="https://github.com/o/r/pull/42")
+    with (
+        patch("src.agents.base.query", side_effect=sq),
+        patch("src.activities.review.guardrail._scan", return_value=False),
+        patch("src.workflows.code_review.runner.post_comments", return_value=posted) as post_mock,
+    ):
+        result = await CodeReviewWorkflow().run(ctx)
+
+    assert result.status == "success"
+    assert post_mock.call_args.args[0][0].body == "from skill"
+    assert len(sq.responses) == 1
+
+
+@pytest.mark.asyncio
+async def test_skill_primary_errors_when_skill_missing(tmp_path: Path, monkeypatch) -> None:
+    _setup_pr_context(tmp_path)
+    ctx = _ctx(tmp_path)
+    monkeypatch.setenv(REVIEW_STRATEGY_ENV_VAR, "skill")
+    monkeypatch.setenv(REVIEW_PRIMARY_SKILL_ENV_VAR, "vue3-review")
+
+    sq = _ScriptedQuery()
+    sq.add("linked issues", "{}", {"context": "No linked issues found.", "issue_refs": []})
+
+    with (
+        patch("src.agents.base.query", side_effect=sq),
+        patch("src.workflows.code_review.runner.post_comments") as post_mock,
+    ):
+        result = await CodeReviewWorkflow().run(ctx)
+
+    assert result.status == "error"
+    assert "not loaded" in (result.summary or "")
+    assert not post_mock.called
+
+
+@pytest.mark.asyncio
+async def test_skill_primary_errors_on_unparseable_output(tmp_path: Path, monkeypatch) -> None:
+    _setup_pr_context(tmp_path)
+    plugin = _write_skill_plugin(tmp_path, "vue3-review")
+    ctx = _ctx(tmp_path)
+    ctx.skills = load_skills([plugin])
+    monkeypatch.setenv(REVIEW_STRATEGY_ENV_VAR, "skill")
+    monkeypatch.setenv(REVIEW_PRIMARY_SKILL_ENV_VAR, "vue3-review")
+
+    sq = _ScriptedQuery()
+    sq.add("linked issues", "{}", {"context": "No linked issues found.", "issue_refs": []})
+    sq.add("Primary review skill", "not valid review json at all")
+
+    with (
+        patch("src.agents.base.query", side_effect=sq),
+        patch("src.workflows.code_review.runner.post_comments") as post_mock,
+    ):
+        result = await CodeReviewWorkflow().run(ctx)
+
+    assert result.status == "error"
+    assert "unparseable" in (result.summary or "")
+    assert not post_mock.called

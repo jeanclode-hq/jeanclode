@@ -1109,6 +1109,45 @@ def add_browser_to_inputs(inputs: DispatchInputs) -> None:
 
 DEMO_ENABLED_ENV_VAR = "JEANCLODE_DEMO_ENABLED"
 
+REVIEW_STRATEGY_ENV_VAR = "JEANCLODE_REVIEW_STRATEGY"
+REVIEW_PRIMARY_SKILL_ENV_VAR = "JEANCLODE_REVIEW_PRIMARY_SKILL"
+
+
+def resolve_review_primary_skill(git_org_id: UUID) -> str | None:
+    """Return the org's primary review skill name when strategy is skill, else None."""
+    try:
+        app = get_current_app()
+        if not app.database:
+            return None
+        from api.database.organization import db_get_org_by_id, db_resolve_org_settings
+        from api.models.settings import GitOrgSettings, ReviewStrategy
+
+        with app.database.session() as db:
+            org = db_get_org_by_id(db, git_org_id)
+            if not org:
+                return None
+            settings = GitOrgSettings.model_validate(db_resolve_org_settings(db, org))
+            review = settings.review
+            if review.strategy == ReviewStrategy.SKILL and review.primary_skill:
+                return review.primary_skill.strip() or None
+    except Exception:
+        logger.exception("Failed to resolve review strategy for org %s", git_org_id)
+    return None
+
+
+def add_review_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
+    """Wire org review strategy into the container for code-review runs.
+
+    Always sets ``JEANCLODE_REVIEW_STRATEGY`` so logs can distinguish builtin
+    vs skill without inferring from the workflow alone.
+    """
+    primary_skill = resolve_review_primary_skill(git_org_id)
+    if primary_skill:
+        inputs.public_env[REVIEW_STRATEGY_ENV_VAR] = "skill"
+        inputs.public_env[REVIEW_PRIMARY_SKILL_ENV_VAR] = primary_skill
+    else:
+        inputs.public_env[REVIEW_STRATEGY_ENV_VAR] = "builtin"
+
 
 def add_demo_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
     """Apply the org's ``demo_videos`` switch to an issue-resolve or respond dispatch.

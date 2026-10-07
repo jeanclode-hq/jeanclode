@@ -165,6 +165,26 @@ class RelatedRepoSettings(BaseModel):
     )
 
 
+class ReviewStrategy(StrEnum):
+    """How code review runs for this git org."""
+
+    BUILTIN = "builtin"
+    SKILL = "skill"
+
+
+class ReviewSettings(BaseModel):
+    """Primary review engine for label-driven ``jeanclode:review`` runs."""
+
+    strategy: ReviewStrategy = Field(
+        default=ReviewStrategy.BUILTIN,
+        description="builtin = default multi-agent pipeline; skill = one agent following primary_skill",
+    )
+    primary_skill: str | None = Field(
+        default=None,
+        description="Skill name from an installed marketplace plugin (required when strategy is skill)",
+    )
+
+
 class TriggerPermission(StrEnum):
     """Who is allowed to trigger ``respond`` with an ``@jeanclode-bot`` mention.
 
@@ -191,6 +211,7 @@ class GitOrgSettings(BaseModel):
     """
 
     notify: NotifySettings = Field(default_factory=NotifySettings)
+    review: ReviewSettings = Field(default_factory=ReviewSettings)
     # GitLab only. On GitLab Free, group webhooks are Premium-only, so the one
     # group token can't carry a webhook. Turning this on makes Jeanclode create
     # its webhook on every project the org owns. New projects still need an

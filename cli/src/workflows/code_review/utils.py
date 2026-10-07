@@ -53,7 +53,8 @@ def load_pr_context(repo_dir: Path) -> PRContext | None:
     )
 
 
-def parse_review(result: AgentResult, platform: str) -> list[Comment]:
+def try_parse_review(result: AgentResult, platform: str) -> list[Comment] | None:
+    """Parse review JSON. ``None`` = unparseable; ``[]`` = valid empty (LGTM)."""
     if platform == "github":
         review_cls: type[GitHubReview] | type[GitLabReview] = GitHubReview
         comment_cls: type[GitHubComment] | type[GitLabComment] = GitHubComment
@@ -79,7 +80,12 @@ def parse_review(result: AgentResult, platform: str) -> list[Comment]:
                 except Exception as exc:
                     logger.warning("skipping invalid comment: %s", exc)
             return comments
-    return []
+    return None
+
+
+def parse_review(result: AgentResult, platform: str) -> list[Comment]:
+    """Parse review JSON; unparseable output becomes an empty list."""
+    return try_parse_review(result, platform) or []
 
 
 def parse_keep_indices(result: AgentResult) -> list[int] | None:

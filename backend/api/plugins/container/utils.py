@@ -243,6 +243,7 @@ async def resolve_third_party_plugins_env_for_org(
     git_org_id: UUID,
     *,
     workflow: str,
+    ensure_plugin_names: list[str] | None = None,
 ) -> ThirdPartyPluginsResolved:
     """Resolve third-party plugins for a dispatch keyed by git org id.
 
@@ -250,6 +251,9 @@ async def resolve_third_party_plugins_env_for_org(
     git org id directly so PR/MR dispatch (which already knows the git
     org from ``pr.repository.org_id``) can avoid the issue → mapped_repo
     walk.
+
+    ``ensure_plugin_names`` forces matching installs into the clone list
+    even when ``enabled_workflows`` would exclude them (review primary skill).
     """
     from api.database.organization import db_get_connection_org_id
     from api.routers.marketplaces.utils import read_plugin_install_rows, resolve_plugin_specs
@@ -260,12 +264,16 @@ async def resolve_third_party_plugins_env_for_org(
         return ThirdPartyPluginsResolved()
 
     auth = await _get_dispatch_repo_auth(git_org_id)
+    ensure = list(ensure_plugin_names or [])
 
     try:
         rows = await db_plugin.run_in_session(
             # Installs live on the connected org, not on the subgroup a repo sits in.
             lambda db: read_plugin_install_rows(
-                db, db_get_connection_org_id(db, git_org_id), workflow=workflow
+                db,
+                db_get_connection_org_id(db, git_org_id),
+                workflow=workflow,
+                ensure_plugin_names=ensure or None,
             )
         )
         specs = await resolve_plugin_specs(rows, auth=auth)
