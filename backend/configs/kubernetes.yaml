@@ -187,9 +187,9 @@ plugins:
       image: !ENV ${WORKER_IMAGE:-ghcr.io/jeanclode-hq/cli:1.12.2} # x-release-please-version
       image_pull_policy: !ENV ${WORKER_IMAGE_PULL_POLICY:-IfNotPresent}
       security_proxy_image: !ENV ${SECURITY_PROXY_IMAGE:-ghcr.io/jeanclode-hq/security-proxy:1.12.2} # x-release-please-version
-      # A demo round peaks around 2.5GB: two Claude processes, the dev server,
-      # Chromium and a mock API.
-      memory_limit: 4Gi
+      # A demo round (two Claude processes, dev server, mock API) is at ~3.4GiB
+      # before Chromium starts; 4Gi got demo recordings killed.
+      memory_limit: 8Gi
       memory_request: 1Gi
       cpu_limit: "2"
       # Room for six CI rounds plus six demo rounds in one issue-resolve run.
