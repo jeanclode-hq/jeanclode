@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.3](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.2...v1.12.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* **k8s:** raise worker memory limit to 8Gi ([#80](https://github.com/jeanclode-hq/jeanclode/issues/80)) ([ac39306](https://github.com/jeanclode-hq/jeanclode/commit/ac39306ec7d0ac6a1a8cad13cd0f054d21cf5d72))
+
 ## [1.12.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.1...v1.12.2) (2026-10-06)
 
 
