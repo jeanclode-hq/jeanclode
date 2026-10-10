@@ -1929,3 +1929,40 @@ def test_add_demo_to_inputs_keeps_the_default_when_the_lookup_fails() -> None:
 
     assert DEMO_ENABLED_ENV_VAR not in inputs.public_env
     assert "registry.npmjs.org" in inputs.extra_hosts
+
+
+def test_add_org_hosts_to_inputs_allowlists_the_org_hosts() -> None:
+    from api.plugins.container.dispatch_inputs import add_org_hosts_to_inputs
+
+    inputs = DispatchInputs()
+    org = _make_org()
+    with (
+        patch(
+            "api.plugins.container.dispatch_inputs.get_current_app",
+            return_value=_notify_app(),
+        ),
+        patch(_NOTIFY_ORG_BY_ID, return_value=org),
+        patch(
+            _NOTIFY_SETTINGS,
+            return_value={"network": {"extra_hosts": ["fonts.example.com", "*.cdn.io"]}},
+        ),
+    ):
+        add_org_hosts_to_inputs(inputs, git_org_id=org.id)
+
+    assert inputs.extra_hosts == ["fonts.example.com", "*.cdn.io"]
+
+
+def test_add_org_hosts_to_inputs_adds_nothing_when_the_lookup_fails() -> None:
+    from api.plugins.container.dispatch_inputs import add_org_hosts_to_inputs
+
+    inputs = DispatchInputs()
+    with (
+        patch(
+            "api.plugins.container.dispatch_inputs.get_current_app",
+            return_value=_notify_app(),
+        ),
+        patch(_NOTIFY_ORG_BY_ID, side_effect=RuntimeError("db down")),
+    ):
+        add_org_hosts_to_inputs(inputs, git_org_id=uuid4())
+
+    assert inputs.extra_hosts == []

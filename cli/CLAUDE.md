@@ -157,8 +157,9 @@ screenshot paths, and so is a demo agent that crashes or runs past
 `DEMO_AGENT_TIMEOUT_S` (the fixer retries or bypasses). Six rounds at most; the fixer stands it down by writing a
 reason to `/tmp/jeanclode-demo/bypass`, and leaves the demo agent hints in
 `/tmp/jeanclode-demo/hints.md`. The demo agent captures with
-`src/agents/demo/browser.py` (Playwright, Chromium headless shell, only
-`localhost` resolves) and keeps per-repo launch recipes in memory. It picks
+`src/agents/demo/browser.py` (Playwright, Chromium headless shell, through
+the security proxy like the Playwright MCP, so it reaches the run's allowlist
+and nothing else) and keeps per-repo launch recipes in memory. It picks
 the medium (`media`): screenshots of the real page for a static change, a
 video only for an interaction, cut to start at the script's `ready(page)`
 (or the first page load) so it doesn't open on the app loading. Every page gets an overlay

@@ -1,6 +1,7 @@
 import {
   bulkUpdateRepoSettings,
   deleteOrganization,
+  getOrganizationNetworkHosts,
   getOrganizationSettings,
   linkRelatedRepo,
   listOrganizationMembers,
@@ -93,6 +94,20 @@ export function useOrgSubgroupsQuery(orgId: MaybeRefOrGetter<string>) {
   })
 }
 
+/** Every host a run of this org can reach, with where each one comes from. */
+export function useOrgNetworkHostsQuery(orgId: MaybeRefOrGetter<string>) {
+  const client = useApi()
+
+  return useQuery({
+    key: () => ['organizations', toValue(orgId), 'network'],
+    query: async () => {
+      const { data } = await getOrganizationNetworkHosts({ client, path: { org_id: toValue(orgId) } })
+      return data?.items ?? []
+    },
+    enabled: () => !!toValue(orgId),
+  })
+}
+
 /**
  * Names for repo ids held in settings (the always-include list).
  *
@@ -128,6 +143,7 @@ export function useUpdateOrgSettingsMutation() {
     },
     onSuccess(_data, vars) {
       queryCache.invalidateQueries({ key: ['organizations', vars.orgId, 'settings'] })
+      queryCache.invalidateQueries({ key: ['organizations', vars.orgId, 'network'] })
     },
   })
 }

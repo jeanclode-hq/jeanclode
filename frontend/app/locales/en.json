@@ -755,5 +755,31 @@
         "body": "Jeanclode now works in the background. You can come back to this guide anytime: click Guide in the sidebar."
       }
     }
+  },
+  "network": {
+    "title": "Network access",
+    "subtitle": "Runs reach only the hosts listed here. Add a host when an agent or a demo needs something Jeanclode doesn't already allow, like a font CDN or a docs site. No credential is ever sent to the hosts you add.",
+    "addHost": "Add host",
+    "hostPlaceholder": "fonts.example.com or *.example.com",
+    "hostAdded": "Host added",
+    "hostRemoved": "Host removed",
+    "saveFailed": "Could not update network access",
+    "empty": "Nothing listed yet.",
+    "authenticated": "Credential injected",
+    "onlyFor": "Only {workflows}",
+    "sources": {
+      "org": "Added by you",
+      "skill": "Skills",
+      "mcp_server": "MCP servers",
+      "platform": "Platform",
+      "builtin": "Built in"
+    },
+    "workflows": {
+      "fix": "Sentry fix",
+      "review": "review",
+      "summary": "summary",
+      "respond": "respond",
+      "issue_resolve": "issue resolve"
+    }
   }
 }
