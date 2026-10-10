@@ -267,6 +267,7 @@ def require_pushed_and_ci_pass_hook(
     open_pr: Callable[[], PRRef],
     *,
     ctx: RunContext,
+    requester_asks: str = "",
 ) -> HookMatcher:
     """PreToolUse(``StructuredOutput``) hook: keep the agent from finalizing
     until this repo's fix is pushed and its own CI passes — same gate as
@@ -281,6 +282,10 @@ def require_pushed_and_ci_pass_hook(
     triage listed that turned out not to need a change) never calls
     ``open_pr`` at all — no PR, no CI check, no error. That's the point:
     speculative PRs per target repo are exactly what this avoids.
+
+    With ``requester_asks``, the call that opens the PR is denied once with
+    its URL: the asks often target the PR itself (assignee, reviewers), which
+    the fixer can't act on before it exists.
     """
     blocks = 0
     pr: PRRef | None = None
@@ -307,6 +312,11 @@ def require_pushed_and_ci_pass_hook(
             # only safe owner of that emit since the runner's post-invoke
             # recheck can also call it directly, bypassing this hook.
             pr = open_pr()
+            if requester_asks:
+                return _deny_structured_output(
+                    f"Your PR/MR is open: {pr.url}. Carry out the requester's asks that "
+                    "concern it, then finish again:\n\n" + requester_asks
+                )
 
         if _bypassed(cwd, ctx=ctx):
             return {}
