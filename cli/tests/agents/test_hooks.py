@@ -342,6 +342,32 @@ async def test_lazy_ci_hook_blocks_with_summary_text_on_failure(
 
 @patch("src.agents.hooks.check_ci")
 @patch("src.agents.hooks.fix_missing_reason", return_value=None)
+async def test_lazy_ci_hook_hands_back_pr_url_once_for_requester_asks(
+    _fix_missing_reason: Any, check: Any, tmp_path: Path
+) -> None:
+    check.return_value = CiWatchResult(outcome="finish", reason="ok", summary_text="ok")
+    pr = _pr()
+    matcher = require_pushed_and_ci_pass_hook(
+        tmp_path,
+        "fix/x",
+        "sha0",
+        MagicMock(return_value=pr),
+        ctx=_ctx(tmp_path),
+        requester_asks="assign the MR to @jdoe",
+    )
+    hook = matcher.hooks[0]
+    first = await hook(_so_input(), None, {"signal": None})
+    assert _decision(first) == "deny"
+    assert pr.url in _deny_reason(first)
+    assert "assign the MR to @jdoe" in _deny_reason(first)
+    check.assert_not_called()
+
+    assert await hook(_so_input(), None, {"signal": None}) == {}
+    check.assert_called_once()
+
+
+@patch("src.agents.hooks.check_ci")
+@patch("src.agents.hooks.fix_missing_reason", return_value=None)
 async def test_lazy_ci_hook_opens_pr_only_once_across_calls(
     _fix_missing_reason: Any, check: Any, tmp_path: Path
 ) -> None:

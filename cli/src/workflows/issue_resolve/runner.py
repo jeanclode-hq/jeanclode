@@ -249,6 +249,7 @@ class IssueResolveWorkflow:
                 IssueFixerInput(
                     issue_url=issue_url,
                     findings=triage_output.findings,
+                    requester_asks=triage_output.requester_asks,
                     code_change=False,
                     issue_title=issue_ctx.issue_title,
                     issue_body=issue_ctx.issue_body,
@@ -352,6 +353,7 @@ class IssueResolveWorkflow:
                     wt.placeholder_sha,
                     make_open_pr(name),
                     ctx=wt_ctx,
+                    requester_asks=triage_output.requester_asks,
                 )
                 pretool_hooks.append(ci_gates.track(ci_hook) if ci_gates else ci_hook)
             if demo is not None:
@@ -381,6 +383,7 @@ class IssueResolveWorkflow:
                     issue_url=issue_url,
                     branch=branch,
                     findings=triage_output.findings,
+                    requester_asks=triage_output.requester_asks,
                     repos=[
                         {
                             "name": n,

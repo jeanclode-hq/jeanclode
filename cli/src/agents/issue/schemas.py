@@ -65,6 +65,10 @@ class TriageOutput(BaseModel):
     # the PR/MR against, resolved by triage against the remote's branches.
     # Empty means the repo's default branch.
     base_branch: str = ""
+    # Populated only for "proceed": what the person who asked for this run
+    # wants done beyond the fix itself (assignee, reviewers, labels, a draft
+    # PR/MR, a test, a file not to touch), in their words.
+    requester_asks: str = ""
     # Which LLM the fixer runs on (#43). Only meaningful when the run offers
     # a choice; the defaults keep the run's own credential and model.
     fixer_llm_credential: str = ""
@@ -84,6 +88,7 @@ class IssueFixerInput(BaseModel):
     issue_url: str = ""
     branch: str = ""
     findings: str = ""
+    requester_asks: str = ""
     # Rendered only by the answer prompt, where the exact ask matters.
     issue_title: str = ""
     issue_body: str = ""
