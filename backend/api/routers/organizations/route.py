@@ -44,8 +44,10 @@ from api.routers.sources.gitlab.schemas import (
 )
 from api.routers.webhooks.github.schemas import GitHubSyncInstallationMessage
 
+from .network import collect_network_hosts
 from .schemas import (
     ClaimOrgRequest,
+    NetworkHostsResponse,
     OrgMemberResponse,
     OrgMembersResponse,
     OrgResponse,
@@ -421,6 +423,28 @@ def get_organization_settings(
 
     settings_cls = get_settings_model(org.provider)
     return settings_cls.model_validate(org.settings or {})  # type: ignore[return-value]
+
+
+@router.get(
+    "/{org_id}/network/hosts",
+    operation_id="get_organization_network_hosts",
+    response_model=NetworkHostsResponse,
+)
+def get_organization_network_hosts(
+    org_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> NetworkHostsResponse:
+    """Every host a run of this git org can reach through the security proxy."""
+    verify_org_access_from_body(db, current_user, org_id)
+
+    org = db_get_org_by_id(db, org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if org.provider not in ("github", "gitlab"):
+        raise HTTPException(status_code=400, detail="Only git organizations run agents")
+
+    return NetworkHostsResponse(items=collect_network_hosts(db, org))
 
 
 @router.patch(

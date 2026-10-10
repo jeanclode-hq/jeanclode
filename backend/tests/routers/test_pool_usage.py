@@ -84,3 +84,12 @@ def test_repo_settings_write_holds_one_connection(auth_client, app, mock_auth):
         ).raise_for_status(),
     )
     assert peak == 1
+
+
+def test_network_hosts_holds_one_connection(auth_client, app, mock_auth):
+    org_id, _ = _org_with_repo(app, mock_auth.id)
+
+    peak = _peak_checked_out(
+        app, lambda: auth_client.get(f"/organizations/{org_id}/network/hosts").raise_for_status()
+    )
+    assert peak == 1

@@ -624,6 +624,7 @@ export type GitOrgSettings = {
      * Who an @jeanclode-bot mention listens to: anyone, or collaborators with write+ access
      */
     trigger_permission?: TriggerPermission;
+    network?: NetworkSettings;
 };
 
 /**
@@ -1687,6 +1688,63 @@ export type MessageResponse = {
      * Message
      */
     message: string;
+};
+
+/**
+ * NetworkHostResponse
+ * One host a run of this org can reach through the security proxy.
+ */
+export type NetworkHostResponse = {
+    /**
+     * Host
+     * Hostname, or a *.domain wildcard
+     */
+    host: string;
+    source: NetworkHostSource;
+    /**
+     * Label
+     * What added it: a skill or MCP server name, LLM, GitLab, …
+     */
+    label: string;
+    /**
+     * Authenticated
+     * Whether the proxy injects a credential on it
+     */
+    authenticated: boolean;
+    /**
+     * Workflows
+     * Workflows that get this host; null means every workflow
+     */
+    workflows?: Array<string> | null;
+};
+
+/**
+ * NetworkHostSource
+ * Where a host on a run's allowlist comes from.
+ */
+export type NetworkHostSource = 'org' | 'skill' | 'mcp_server' | 'platform' | 'builtin';
+
+/**
+ * NetworkHostsResponse
+ * Every host a run of this org can reach, grouped by source.
+ */
+export type NetworkHostsResponse = {
+    /**
+     * Items
+     */
+    items?: Array<NetworkHostResponse>;
+};
+
+/**
+ * NetworkSettings
+ * Hosts a run may reach on top of what jeanclode allowlists itself.
+ */
+export type NetworkSettings = {
+    /**
+     * Extra Hosts
+     * Hostnames every run of this org may reach, with no credential injected
+     */
+    extra_hosts?: Array<string>;
 };
 
 /**
@@ -4870,6 +4928,36 @@ export type UpdateOrganizationSettingsResponses = {
 };
 
 export type UpdateOrganizationSettingsResponse = UpdateOrganizationSettingsResponses[keyof UpdateOrganizationSettingsResponses];
+
+export type GetOrganizationNetworkHostsData = {
+    body?: never;
+    path: {
+        /**
+         * Org Id
+         */
+        org_id: string;
+    };
+    query?: never;
+    url: '/organizations/{org_id}/network/hosts';
+};
+
+export type GetOrganizationNetworkHostsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetOrganizationNetworkHostsError = GetOrganizationNetworkHostsErrors[keyof GetOrganizationNetworkHostsErrors];
+
+export type GetOrganizationNetworkHostsResponses = {
+    /**
+     * Successful Response
+     */
+    200: NetworkHostsResponse;
+};
+
+export type GetOrganizationNetworkHostsResponse = GetOrganizationNetworkHostsResponses[keyof GetOrganizationNetworkHostsResponses];
 
 export type GetOrganizationStatsData = {
     body?: never;

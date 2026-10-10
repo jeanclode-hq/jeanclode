@@ -23,6 +23,7 @@ from uuid import UUID
 
 import pyotp
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from api.context import get_current_app
 from api.database.connectors import db_get_credentials_by_org, db_get_mcp_servers_by_org
@@ -35,6 +36,7 @@ from api.database.llm_credentials import (
 from api.database.plugins import db_get_installations_by_org
 from api.models.connectors import AuthType, Credential, SubjectType
 from api.models.llm_credentials import LLMCredential
+from api.models.settings import GitOrgSettings
 from api.plugins.container.security_proxy import CredentialKey, OAuthUpstream, UpstreamCredential
 from api.services.llm_credentials import decrypt_secret
 from api.services.memory_token import mint_memory_token
@@ -54,6 +56,11 @@ DEMO_TOOLING_HOSTS = (
     "mise-versions.jdx.dev",
     "release-assets.githubusercontent.com",
 )
+
+# Sentry SaaS routes orgs to one of these regional API hosts; the CLI
+# discovers the right one at runtime from `links.regionUrl`, so all of them
+# are allowlisted up front.
+SENTRY_SAAS_HOSTS = ("sentry.io", "us.sentry.io", "de.sentry.io", "eu.sentry.io")
 
 # What an issue-resolve or respond run installs the built-in Playwright MCP from:
 # Node through mise, then npm.
@@ -318,6 +325,15 @@ def _llm_host(credential: LLMCredential) -> str:
     if credential.provider in ("claude_code", "anthropic"):
         return _ANTHROPIC_HOST
     return host_or("api.openai.com", credential.base_url)
+
+
+def default_llm_host(db: Session) -> str | None:
+    """The host ``add_llm_to_inputs`` would allowlist for a run, on the caller's session."""
+    claude_opts = get_current_app().options.claude_code
+    if claude_opts.oauth_token or claude_opts.api_key:
+        return _ANTHROPIC_HOST
+    _, credential, _ = db_select_llm_credential(db)
+    return _llm_host(credential) if credential else None
 
 
 def _llm_option_name(credential: LLMCredential) -> str:
@@ -1110,26 +1126,33 @@ def add_browser_to_inputs(inputs: DispatchInputs) -> None:
 DEMO_ENABLED_ENV_VAR = "JEANCLODE_DEMO_ENABLED"
 
 
+def _resolved_git_org_settings(git_org_id: UUID) -> GitOrgSettings | None:
+    """The org's settings with its ancestors' layered in, so a GitLab group's
+    choice reaches its subgroups. ``None`` when there's no DB or no such org."""
+    app = get_current_app()
+    if not app.database:
+        return None
+    from api.database.organization import db_get_org_by_id, db_resolve_org_settings
+
+    with app.database.session() as db:
+        org = db_get_org_by_id(db, git_org_id)
+        if not org:
+            return None
+        return GitOrgSettings.model_validate(db_resolve_org_settings(db, org))
+
+
 def add_demo_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
     """Apply the org's ``demo_videos`` switch to an issue-resolve or respond dispatch.
 
     On (the default): allowlist the hosts the demo gate installs a frontend
     from. Off: tell the CLI, which then never asks triage for a demo plan.
-    Read through ``db_resolve_org_settings`` so a GitLab group's choice
-    reaches its subgroups. A lookup that fails keeps the default.
+    A lookup that fails keeps the default.
     """
     enabled = True
     try:
-        app = get_current_app()
-        if app.database:
-            from api.database.organization import db_get_org_by_id, db_resolve_org_settings
-            from api.models.settings import GitOrgSettings
-
-            with app.database.session() as db:
-                org = db_get_org_by_id(db, git_org_id)
-                if org:
-                    settings = GitOrgSettings.model_validate(db_resolve_org_settings(db, org))
-                    enabled = settings.demo_videos
+        settings = _resolved_git_org_settings(git_org_id)
+        if settings:
+            enabled = settings.demo_videos
     except Exception:
         logger.exception("Failed to resolve demo setting for org %s", git_org_id)
 
@@ -1137,6 +1160,17 @@ def add_demo_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
         inputs.extra_hosts.extend(DEMO_TOOLING_HOSTS)
     else:
         inputs.public_env[DEMO_ENABLED_ENV_VAR] = "0"
+
+
+def add_org_hosts_to_inputs(inputs: DispatchInputs, *, git_org_id: UUID) -> None:
+    """Allowlist the hosts the org added under "Network access", for every workflow."""
+    try:
+        settings = _resolved_git_org_settings(git_org_id)
+    except Exception:
+        logger.exception("Failed to resolve network settings for org %s", git_org_id)
+        return
+    if settings:
+        inputs.extra_hosts.extend(settings.network.extra_hosts)
 
 
 # ---------------------------------------------------------------------------
