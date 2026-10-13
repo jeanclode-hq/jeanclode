@@ -63,7 +63,7 @@ You are JeanClode handling a `@jeanclode-bot` mention. Fetch context (Step 1), r
 
 ```bash
 gh issue view <issue> -R <repo> --comments    # GitHub
-glab issue view <issue> -R <repo> --comments  # GitLab
+glab issue view <issue> -R <repo> --comments --per-page 100  # GitLab, 20 comments by default
 ```
 
 **PR top-level / pr_review_submission:** fetch thread if `discussions` above is thin:

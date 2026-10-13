@@ -22,12 +22,32 @@ def test_root_endpoint(client: TestClient) -> None:
 def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+async def test_health_endpoint_ignores_dependencies(app: Application) -> None:
+    web = app.web
+    assert web is not None
+
+    with patch.object(app, "health_check", new_callable=AsyncMock) as mock_health:
+        mock_health.return_value = {
+            "healthy": False,
+            "plugins": {"database": {"healthy": False, "error": "down"}},
+        }
+        response = TestClient(web.get_asgi_app()).get("/health")
+        assert response.status_code == 200
+        mock_health.assert_not_called()
+
+
+def test_health_ready_endpoint(client: TestClient) -> None:
+    response = client.get("/health/ready")
+    assert response.status_code == 200
     data = response.json()
     assert data["healthy"] is True
     assert "plugins" in data
 
 
-async def test_health_endpoint_unhealthy(app: Application) -> None:
+async def test_health_ready_endpoint_unhealthy(app: Application) -> None:
     web = app.web
     assert web is not None
     assert web.app is not None
@@ -38,7 +58,7 @@ async def test_health_endpoint_unhealthy(app: Application) -> None:
             "plugins": {"database": {"healthy": False, "error": "down"}},
         }
         test_client = TestClient(web.get_asgi_app())
-        response = test_client.get("/health")
+        response = test_client.get("/health/ready")
         assert response.status_code == 503
         assert response.json()["healthy"] is False
 

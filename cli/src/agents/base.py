@@ -69,6 +69,7 @@ class BaseAgent:
     # bypassPermissions makes allowed_tools no restriction, so this is the real limit.
     builtin_tools: ClassVar[list[str] | None] = None
     max_turns: ClassVar[int] = 150
+    effort: ClassVar[str | None] = None
     output_schema: ClassVar[type[BaseModel] | None] = None
     # Per-agent opt-in. When True the agent gets:
     #   - the Skill tool authorized
@@ -465,6 +466,8 @@ class BaseAgent:
             kwargs["model"] = ctx.small_model or "haiku"
         elif ctx.model:
             kwargs["model"] = ctx.model
+        if self.effort is not None:
+            kwargs["effort"] = self.effort
         if self.output_schema is not None:
             kwargs["output_format"] = {
                 "type": "json_schema",
