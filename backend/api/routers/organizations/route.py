@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -478,11 +478,24 @@ async def update_organization_settings(
         # Pydantic's filled-in defaults don't overwrite stored values.
         incoming = request.model_dump(mode="json", exclude_unset=True)
         was_managing_hooks = bool((org.settings or {}).get("manage_project_webhooks"))
+        before = settings_cls.model_validate(org.settings or {}).model_dump(mode="json")
         merged = settings_cls.model_validate(merge_settings(org.settings or {}, incoming))
+        after = merged.model_dump(mode="json")
 
-        org = db_update_org(db, org_id, settings=merged.model_dump(mode="json"))
+        org = db_update_org(db, org_id, settings=after)
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
+        for key, (old, new) in _settings_changes(before, after).items():
+            logger.info(
+                "User %s (%s) changed %s on org %s (%s): %r -> %r",
+                current_user.email,
+                current_user.id,
+                key,
+                org.name,
+                org.id,
+                old,
+                new,
+            )
 
         now_managing_hooks = bool((org.settings or {}).get("manage_project_webhooks"))
         hook_sync: _HookSyncPlan | None = None
@@ -501,6 +514,20 @@ async def update_organization_settings(
     await _publish_gitlab_project_hook_teardown(teardown, org_id)
 
     return settings
+
+
+def _settings_changes(
+    before: dict[str, Any], after: dict[str, Any], prefix: str = ""
+) -> dict[str, tuple[Any, Any]]:
+    changes: dict[str, tuple[Any, Any]] = {}
+    for key in before.keys() | after.keys():
+        old, new = before.get(key), after.get(key)
+        path = f"{prefix}{key}"
+        if isinstance(old, dict) and isinstance(new, dict):
+            changes.update(_settings_changes(old, new, f"{path}."))
+        elif old != new:
+            changes[path] = (old, new)
+    return dict(sorted(changes.items()))
 
 
 class _HookSyncPlan(NamedTuple):

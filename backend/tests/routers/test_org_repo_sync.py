@@ -371,3 +371,20 @@ def test_deleting_a_gitlab_org_without_the_setting_queues_nothing(
 
     assert response.status_code == 200
     mock_broker_instance.publish.assert_not_called()
+
+
+def test_settings_change_logs_who_changed_what(sync_client, make_org, caplog):
+    org_id = make_org("gitlab", external_org_id="43", settings={"demo_videos": True})
+
+    with caplog.at_level("INFO", logger="api.routers.organizations.route"):
+        response = sync_client.patch(
+            f"/organizations/{org_id}/settings",
+            json={"network": {"extra_hosts": ["fonts.acme.dev"]}},
+        )
+
+    assert response.status_code == 200
+    lines = [r.getMessage() for r in caplog.records if "changed" in r.getMessage()]
+    assert len(lines) == 1
+    assert "sync@example.com" in lines[0]
+    assert "network.extra_hosts" in lines[0]
+    assert "[] -> ['fonts.acme.dev']" in lines[0]
