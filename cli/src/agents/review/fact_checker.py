@@ -20,6 +20,7 @@ class FactCheckerAgent(ReviewAgent):
     prompt_file: ClassVar[str] = "fact_checker.md"
     allowed_tools: ClassVar[list[str]] = ["Read", "Grep", "Glob", "Bash"]
     max_turns: ClassVar[int] = 150
+    effort: ClassVar[str | None] = "max"
     output_schema: ClassVar[type[BaseModel] | None] = FilterResult
     use_third_party_skills: ClassVar[bool] = True
     use_mcp_connectors: ClassVar[bool] = True
