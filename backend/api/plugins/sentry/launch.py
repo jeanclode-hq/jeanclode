@@ -30,6 +30,7 @@ from api.models.organizations import Organization
 from api.models.repositories import Repository
 from api.plugins.container.backend import ContainerRequest
 from api.plugins.container.dispatch_inputs import (
+    SENTRY_SAAS_HOSTS,
     DispatchInputs,
     LLMSelectionResult,
     add_agent_tooling_hosts,
@@ -38,6 +39,7 @@ from api.plugins.container.dispatch_inputs import (
     add_gitlab_workspace_credentials,
     add_llm_to_inputs,
     add_memory_to_inputs,
+    add_org_hosts_to_inputs,
     add_plugin_marketplace_credentials,
     host_or,
 )
@@ -46,13 +48,6 @@ from api.plugins.container.sizing import resolve_tmp_size_limit
 from api.plugins.container.utils import build_container_labels, resolve_third_party_plugins_env
 
 logger = logging.getLogger(__name__)
-
-
-# Sentry SaaS routes orgs to one of these regional API hosts; the CLI
-# discovers the right one at runtime from `links.regionUrl`. We allowlist
-# all of them up front when the org is on SaaS so the agent doesn't trip
-# the proxy mid-flight.
-_SENTRY_SAAS_HOSTS = ("sentry.io", "us.sentry.io", "de.sentry.io", "eu.sentry.io")
 
 
 def build_sentry_command(
@@ -187,6 +182,7 @@ async def build_dispatch_inputs(
                 repo_token_override_encrypted=mapped_repo.auth_token_encrypted,
             )
         await add_connectors_to_inputs(inputs, git_org_id=mapped_repo.org_id)
+        add_org_hosts_to_inputs(inputs, git_org_id=mapped_repo.org_id)
     else:
         logger.info(
             "git platform creds skipped: issue %s has no mapped repository",
@@ -240,7 +236,7 @@ def _add_sentry(inputs: DispatchInputs, org: Organization) -> None:
     # The CLI hits sentry.io first, learns the region, then re-targets —
     # so we must allowlist every region up front. Self-hosted installs
     # have a single fixed host and skip this branch.
-    hosts = _SENTRY_SAAS_HOSTS if resolved_host == "sentry.io" else (resolved_host,)
+    hosts = SENTRY_SAAS_HOSTS if resolved_host == "sentry.io" else (resolved_host,)
     for host in hosts:
         inputs.upstreams.append(
             UpstreamCredential(

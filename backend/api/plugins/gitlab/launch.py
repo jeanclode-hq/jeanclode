@@ -32,6 +32,7 @@ from api.plugins.container.dispatch_inputs import (
     add_llm_to_inputs,
     add_memory_to_inputs,
     add_notify_to_inputs,
+    add_org_hosts_to_inputs,
     add_plugin_marketplace_credentials,
 )
 from api.plugins.container.related import resolve_related_repos
@@ -180,6 +181,7 @@ async def build_dispatch_inputs(
             inputs, git_org_id=repository.org_id, git_urls=plugins.git_urls
         )
         await add_connectors_to_inputs(inputs, git_org_id=repository.org_id)
+        add_org_hosts_to_inputs(inputs, git_org_id=repository.org_id)
         if workflow in _NOTIFY_WORKFLOWS:
             add_notify_to_inputs(inputs, git_org_id=repository.org_id)
 
@@ -337,6 +339,7 @@ async def launch_issue_resolve_container(
     inputs.extra_hosts.extend(plugins.extra_hosts)
     await add_plugin_marketplace_credentials(inputs, git_org_id=org_id, git_urls=plugins.git_urls)
     await add_connectors_to_inputs(inputs, git_org_id=org_id)
+    add_org_hosts_to_inputs(inputs, git_org_id=org_id)
 
     if workspace_id is not None:
         await add_memory_to_inputs(inputs, workspace_id=workspace_id, execution_id=execution_id)
@@ -457,6 +460,7 @@ async def launch_respond_container(
     inputs.extra_hosts.extend(plugins.extra_hosts)
     await add_plugin_marketplace_credentials(inputs, git_org_id=org_id, git_urls=plugins.git_urls)
     await add_connectors_to_inputs(inputs, git_org_id=org_id)
+    add_org_hosts_to_inputs(inputs, git_org_id=org_id)
 
     if workspace_id is not None:
         await add_memory_to_inputs(inputs, workspace_id=workspace_id, execution_id=execution_id)

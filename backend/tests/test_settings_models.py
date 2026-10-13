@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from api.models.settings import GitOrgSettings, TriggerPermission
 
 
@@ -108,3 +111,26 @@ def test_notify_merge_does_not_clobber_sibling_settings():
     merged = merge_settings(stored, {"notify": {"on_ready": ["b"]}})
     assert merged["manage_project_webhooks"] is True
     assert merged["notify"]["on_ready"] == ["b"]
+
+
+def test_network_extra_hosts_are_normalised_and_deduplicated():
+    settings = GitOrgSettings.model_validate(
+        {"network": {"extra_hosts": [" Fonts.Example.com. ", "fonts.example.com", "*.cdn.io"]}}
+    )
+    assert settings.network.extra_hosts == ["fonts.example.com", "*.cdn.io"]
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "https://fonts.example.com",
+        "fonts.example.com/css",
+        "fonts.example.com:443",
+        "fonts",
+        "a b.com",
+        "*",
+    ],
+)
+def test_network_extra_hosts_reject_anything_but_a_hostname(host: str):
+    with pytest.raises(ValidationError):
+        GitOrgSettings.model_validate({"network": {"extra_hosts": [host]}})

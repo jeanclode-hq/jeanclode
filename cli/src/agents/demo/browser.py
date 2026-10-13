@@ -19,29 +19,38 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import imageio_ffmpeg
 from playwright.sync_api import Page, ViewportSize, sync_playwright
 
 from src.activities.demo.checkout import DEMO_DIR
+from src.runtime.browser_mcp import spki_pin
 
 logger = logging.getLogger(__name__)
 
 VIEWPORT: ViewportSize = {"width": 1280, "height": 720}
 
-# Only localhost resolves, and nothing goes through the egress proxy: whatever
-# the app calls outside it has to be mocked (`page.route`) or it fails visibly.
-_CHROMIUM_ARGS = [
-    "--no-proxy-server",
-    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost",
-]
+
+def _launch_options(env: Mapping[str, str]) -> dict[str, Any]:
+    """Through the security proxy, like the Playwright MCP, so the app reaches the run's allowlist."""
+    proxy = env.get("HTTPS_PROXY")
+    ca_path = env.get("NODE_EXTRA_CA_CERTS")
+    if not proxy or not ca_path:
+        return {}
+    return {
+        "proxy": {"server": proxy},
+        "args": [f"--ignore-certificate-errors-spki-list={spki_pin(Path(ca_path).read_bytes())}"],
+    }
+
 
 _LAYER_JS = (Path(__file__).parent / "layer.js").read_text().strip().rstrip(";")
 
@@ -100,7 +109,7 @@ def recording(
     out_dir.mkdir(parents=True, exist_ok=True)
     raw_dir = Path(tempfile.mkdtemp(prefix="demo-video-"))
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(args=_CHROMIUM_ARGS)
+        browser = pw.chromium.launch(**_launch_options(os.environ))
         context = browser.new_context(
             viewport=VIEWPORT,
             record_video_dir=str(raw_dir) if video else None,

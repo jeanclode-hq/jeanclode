@@ -1,6 +1,7 @@
 """Schemas for organization endpoints."""
 
 import uuid
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -94,3 +95,31 @@ class OrgSubgroupsResponse(BaseModel):
     max_pack_size: int = Field(
         description="Subgroups holding more repos than this are never packed"
     )
+
+
+class NetworkHostSource(StrEnum):
+    """Where a host on a run's allowlist comes from."""
+
+    ORG = "org"
+    SKILL = "skill"
+    MCP_SERVER = "mcp_server"
+    PLATFORM = "platform"
+    BUILTIN = "builtin"
+
+
+class NetworkHostResponse(BaseModel):
+    """One host a run of this org can reach through the security proxy."""
+
+    host: str = Field(description="Hostname, or a *.domain wildcard")
+    source: NetworkHostSource
+    label: str = Field(description="What added it: a skill or MCP server name, LLM, GitLab, …")
+    authenticated: bool = Field(description="Whether the proxy injects a credential on it")
+    workflows: list[str] | None = Field(
+        default=None, description="Workflows that get this host; null means every workflow"
+    )
+
+
+class NetworkHostsResponse(BaseModel):
+    """Every host a run of this org can reach, grouped by source."""
+
+    items: list[NetworkHostResponse] = Field(default_factory=list)

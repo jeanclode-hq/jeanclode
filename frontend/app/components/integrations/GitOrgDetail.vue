@@ -771,6 +771,8 @@ watch([repoSentinel, repoScrollRoot], wireRepoObserver)
       :org-id="org.id"
     />
 
+    <NetworkAccessSection :org-id="org.id" />
+
     <DangerZone
       title="Disconnect organization"
       description="Remove this organization and all its data. This cannot be undone."

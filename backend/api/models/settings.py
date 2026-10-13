@@ -5,11 +5,12 @@ on Organization and Repository. The DB stores raw JSON;
 these models validate and fill defaults when reading.
 """
 
+import re
 import uuid
 from enum import StrEnum
 from typing import Annotated, Any, Union
 
-from pydantic import BaseModel, Discriminator, Field, Tag
+from pydantic import BaseModel, Discriminator, Field, Tag, field_validator
 
 # ---------------------------------------------------------------------------
 # Sentry trigger enums
@@ -180,6 +181,31 @@ class TriggerPermission(StrEnum):
     DEVELOPER_ONLY = "developer_only"
 
 
+# What the security proxy matches: a hostname, or a ``*.`` wildcard over one.
+_HOST_RE = re.compile(r"^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+
+
+class NetworkSettings(BaseModel):
+    """Hosts a run may reach on top of what jeanclode allowlists itself."""
+
+    extra_hosts: list[str] = Field(
+        default_factory=list,
+        description="Hostnames every run of this org may reach, with no credential injected",
+    )
+
+    @field_validator("extra_hosts")
+    @classmethod
+    def _bare_hostnames(cls, hosts: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for raw in hosts:
+            host = raw.strip().lower().rstrip(".")
+            if not _HOST_RE.match(host):
+                raise ValueError(f"{raw!r} is not a hostname (no scheme, port or path)")
+            if host not in cleaned:
+                cleaned.append(host)
+        return cleaned
+
+
 class GitOrgSettings(BaseModel):
     """Settings stored on an Organization with provider=github/gitlab (JSONB).
 
@@ -206,6 +232,7 @@ class GitOrgSettings(BaseModel):
         default=TriggerPermission.DEVELOPER_ONLY,
         description="Who an @jeanclode-bot mention listens to: anyone, or collaborators with write+ access",
     )
+    network: NetworkSettings = Field(default_factory=NetworkSettings)
 
 
 class RepoSettings(BaseModel):

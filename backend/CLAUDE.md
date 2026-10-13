@@ -173,6 +173,22 @@ tenant turned off); explicit choices ignore that flag.
 Settings are read through `db_resolve_org_settings`, since the connected group
 is the only org the UI offers and a subgroup's own row is empty.
 
+## Network access (`network.extra_hosts`)
+
+A run reaches only the hosts on its security-proxy allowlist. Jeanclode adds
+its own (git, LLM, Sentry, memory API, tooling CDNs, skill and MCP hosts);
+`GitOrgSettings.network.extra_hosts` is the tenant's addition, a list of bare
+hostnames or `*.domain` wildcards with no credential injected.
+`add_org_hosts_to_inputs` puts them on every git-org dispatch (review,
+summary, respond, issue-resolve, sentry-fix), read through
+`db_resolve_org_settings`. The allowlist is the whole policy: every agent and
+the demo browser see the same hosts.
+
+`GET /organizations/{org_id}/network/hosts` (`routers/organizations/network.py`)
+lists everything a run of that org can reach, by source, for the "Network
+access" section. It reads the same rows and constants the launchers do; a new
+source of allowlisted hosts belongs there too.
+
 ## Skill sources (`/marketplaces`, `/plugins`)
 
 A source is one GitHub or GitLab repo, pasted as `owner/repo` or any clone/web

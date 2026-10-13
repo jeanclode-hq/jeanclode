@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -44,8 +44,10 @@ from api.routers.sources.gitlab.schemas import (
 )
 from api.routers.webhooks.github.schemas import GitHubSyncInstallationMessage
 
+from .network import collect_network_hosts
 from .schemas import (
     ClaimOrgRequest,
+    NetworkHostsResponse,
     OrgMemberResponse,
     OrgMembersResponse,
     OrgResponse,
@@ -423,6 +425,28 @@ def get_organization_settings(
     return settings_cls.model_validate(org.settings or {})  # type: ignore[return-value]
 
 
+@router.get(
+    "/{org_id}/network/hosts",
+    operation_id="get_organization_network_hosts",
+    response_model=NetworkHostsResponse,
+)
+def get_organization_network_hosts(
+    org_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> NetworkHostsResponse:
+    """Every host a run of this git org can reach through the security proxy."""
+    verify_org_access_from_body(db, current_user, org_id)
+
+    org = db_get_org_by_id(db, org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if org.provider not in ("github", "gitlab"):
+        raise HTTPException(status_code=400, detail="Only git organizations run agents")
+
+    return NetworkHostsResponse(items=collect_network_hosts(db, org))
+
+
 @router.patch(
     "/{org_id}/settings",
     operation_id="update_organization_settings",
@@ -454,11 +478,24 @@ async def update_organization_settings(
         # Pydantic's filled-in defaults don't overwrite stored values.
         incoming = request.model_dump(mode="json", exclude_unset=True)
         was_managing_hooks = bool((org.settings or {}).get("manage_project_webhooks"))
+        before = settings_cls.model_validate(org.settings or {}).model_dump(mode="json")
         merged = settings_cls.model_validate(merge_settings(org.settings or {}, incoming))
+        after = merged.model_dump(mode="json")
 
-        org = db_update_org(db, org_id, settings=merged.model_dump(mode="json"))
+        org = db_update_org(db, org_id, settings=after)
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
+        for key, (old, new) in _settings_changes(before, after).items():
+            logger.info(
+                "User %s (%s) changed %s on org %s (%s): %r -> %r",
+                current_user.email,
+                current_user.id,
+                key,
+                org.name,
+                org.id,
+                old,
+                new,
+            )
 
         now_managing_hooks = bool((org.settings or {}).get("manage_project_webhooks"))
         hook_sync: _HookSyncPlan | None = None
@@ -477,6 +514,20 @@ async def update_organization_settings(
     await _publish_gitlab_project_hook_teardown(teardown, org_id)
 
     return settings
+
+
+def _settings_changes(
+    before: dict[str, Any], after: dict[str, Any], prefix: str = ""
+) -> dict[str, tuple[Any, Any]]:
+    changes: dict[str, tuple[Any, Any]] = {}
+    for key in before.keys() | after.keys():
+        old, new = before.get(key), after.get(key)
+        path = f"{prefix}{key}"
+        if isinstance(old, dict) and isinstance(new, dict):
+            changes.update(_settings_changes(old, new, f"{path}."))
+        elif old != new:
+            changes[path] = (old, new)
+    return dict(sorted(changes.items()))
 
 
 class _HookSyncPlan(NamedTuple):
