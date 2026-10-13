@@ -19,13 +19,12 @@ from api.plugins.plugin import BasePlugin
 
 logger = logging.getLogger(__name__)
 
-# The liveness/readiness probe hits /health; its DB check must never block on
+# The readiness probe hits /health/ready; its DB check must never block on
 # the main connection pool. A burst of session-holding work (e.g. the k8s
 # reconcile loop) can exhaust the pool, and a pooled ``engine.connect()`` would
-# then wait ``pool_timeout`` seconds — long enough for the probe to time out
-# and kill the pod, turning a transient load spike into a crash loop. The
-# health check uses a dedicated pool-less engine with a short connect timeout
-# instead, and runs off the event loop.
+# then wait ``pool_timeout`` seconds, pulling the pod out of rotation over a
+# transient load spike. The health check uses a dedicated pool-less engine with
+# a short connect timeout instead, and runs off the event loop.
 _HEALTH_CONNECT_TIMEOUT_SECONDS = 2
 _HEALTH_CHECK_TIMEOUT_SECONDS = 3.0
 
@@ -208,8 +207,8 @@ class DatabasePlugin(BasePlugin[DatabasePluginConfig]):
         """Check database health by executing SELECT 1.
 
         Runs off the event loop against the pool-less health engine with a
-        hard timeout, so an exhausted main pool can never make ``/health``
-        hang long enough to trip the liveness probe.
+        hard timeout, so an exhausted main pool can never make
+        ``/health/ready`` hang past the readiness probe's timeout.
         """
         engine = self._health_engine or self.engine
         if not engine:

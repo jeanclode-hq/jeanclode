@@ -110,8 +110,14 @@ class WebServerPlugin(BasePlugin[WebPluginConfig]):
                 "environment": app._backend_config.environment,
             }
 
+        # Liveness must not depend on the database or Redis: a slow shared
+        # dependency would otherwise get every replica restarted at once.
         @self.app.get("/health", tags=["Health"])
-        async def health() -> JSONResponse:
+        async def health() -> dict[str, str]:
+            return {"status": "ok"}
+
+        @self.app.get("/health/ready", tags=["Health"])
+        async def health_ready() -> JSONResponse:
             result = await app.health_check()
             status_code = 200 if result["healthy"] else 503
             return JSONResponse(content=result, status_code=status_code)

@@ -4,8 +4,7 @@ The container reconcile loop can publish one status message per terminal Job.
 FastStream runs a handler coroutine per message with no built-in cap, and each
 handler opens a synchronous DB session. A burst wider than the SQLAlchemy pool
 (``pool_size`` + ``max_overflow``) exhausts it, and every session-holding path
-then blocks for ``pool_timeout`` seconds — including ``/health``, which is
-enough to trip the liveness probe and restart the pod.
+then blocks for ``pool_timeout`` seconds, stalling API requests.
 
 This semaphore bounds concurrent status-consumer work to comfortably below the
 pool size, turning an overload into backpressure (messages wait) instead of
