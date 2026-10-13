@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.13.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.3...v1.13.0) (2026-10-13)
+
+
+### Features
+
+* org-level network allowlist with an aggregated view, demo browser through the proxy ([#83](https://github.com/jeanclode-hq/jeanclode/issues/83)) ([4bcb788](https://github.com/jeanclode-hq/jeanclode/commit/4bcb7886113785e50dbaacafd84b4873fea0c239))
+* **review:** run the analyzers and fact-checker at xhigh effort ([#87](https://github.com/jeanclode-hq/jeanclode/issues/87)) ([76864a0](https://github.com/jeanclode-hq/jeanclode/commit/76864a0d5e3f61aab8302b4aa0e2687b8ee30c42))
+
+
+### Bug Fixes
+
+* **backend:** keep /health free of database and Redis checks ([#86](https://github.com/jeanclode-hq/jeanclode/issues/86)) ([e9f8fc4](https://github.com/jeanclode-hq/jeanclode/commit/e9f8fc45641eb7f69841c0ed43e8a50c90328427))
+* **cli:** respond reads every comment of a GitLab issue, glab shows only 20 by default ([#84](https://github.com/jeanclode-hq/jeanclode/issues/84)) ([e70c266](https://github.com/jeanclode-hq/jeanclode/commit/e70c266c9985bfdd7c777a1090fdc2d0ddfdd107))
+
 ## [1.12.3](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.2...v1.12.3) (2026-10-08)
 
 
