@@ -17,8 +17,6 @@ const extraHosts = computed<string[]>(
   () => (settings.value as { network?: { extra_hosts?: string[] } } | undefined)?.network?.extra_hosts ?? [],
 )
 
-const SOURCES: NetworkHostSource[] = ['org', 'skill', 'mcp_server', 'platform', 'builtin']
-
 const SOURCE_ICONS: Record<NetworkHostSource, string> = {
   org: 'i-lucide-globe',
   skill: 'i-lucide-sparkles',
@@ -27,14 +25,38 @@ const SOURCE_ICONS: Record<NetworkHostSource, string> = {
   builtin: 'i-lucide-box',
 }
 
-const groups = computed(() =>
-  SOURCES.map((source) => ({
-    source,
-    rows: (hosts.value ?? []).filter((h) => h.source === source),
-  })).filter((g) => g.rows.length),
-)
+interface HostRow {
+  host: string
+  sources: NetworkHostResponse[]
+  authenticated: boolean
+  custom: boolean
+  builtinOnly: boolean
+  workflows: string[] | null
+}
 
-function workflowsLabel(row: NetworkHostResponse): string | null {
+const rows = computed<HostRow[]>(() => {
+  const byHost = new Map<string, NetworkHostResponse[]>()
+  for (const h of hosts.value ?? []) byHost.set(h.host, [...(byHost.get(h.host) ?? []), h])
+  return [...byHost.entries()]
+    .map(([host, sources]) => ({
+      host,
+      sources: sources.filter((s) => s.source !== 'org'),
+      authenticated: sources.some((s) => s.authenticated),
+      custom: sources.some((s) => s.source === 'org'),
+      builtinOnly: sources.every((s) => s.source === 'builtin'),
+      // A host any source opens to every workflow is reachable everywhere.
+      workflows: sources.some((s) => !s.workflows?.length)
+        ? null
+        : [...new Set(sources.flatMap((s) => s.workflows ?? []))],
+    }))
+    .sort((a, b) => a.host.replace(/^\*\./, '').localeCompare(b.host.replace(/^\*\./, '')))
+})
+
+const showBuiltin = ref(false)
+const builtinCount = computed(() => rows.value.filter((r) => r.builtinOnly).length)
+const visibleRows = computed(() => (showBuiltin.value ? rows.value : rows.value.filter((r) => !r.builtinOnly)))
+
+function workflowsLabel(row: HostRow): string | null {
   if (!row.workflows?.length) return null
   const names = row.workflows.map((w) => t(`network.workflows.${w}`, w))
   return t('network.onlyFor', { workflows: names.join(', ') })
@@ -133,7 +155,7 @@ function remove(host: string) {
     </div>
 
     <div
-      v-else-if="!groups.length"
+      v-else-if="!rows.length"
       class="rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 p-6 text-center text-xs text-neutral-500"
     >
       {{ t('network.empty') }}
@@ -141,61 +163,69 @@ function remove(host: string) {
 
     <div
       v-else
-      class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none divide-y divide-neutral-200 dark:divide-neutral-700 overflow-hidden"
+      class="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xs dark:shadow-none overflow-hidden"
     >
-      <div
-        v-for="group in groups"
-        :key="group.source"
-      >
-        <div class="flex items-center gap-2 px-4 pt-3 pb-1">
-          <UIcon
-            :name="SOURCE_ICONS[group.source]"
-            class="size-3.5 text-neutral-400 shrink-0"
-          />
-          <span class="text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-            {{ t(`network.sources.${group.source}`) }}
-          </span>
-        </div>
-        <ul class="pb-2">
-          <li
-            v-for="row in group.rows"
-            :key="`${row.host}-${row.label}`"
-            class="flex items-center justify-between gap-3 px-4 py-1.5"
-          >
-            <div class="min-w-0 flex items-baseline gap-2 flex-wrap">
-              <span class="text-sm font-mono text-neutral-700 dark:text-neutral-300 truncate">{{ row.host }}</span>
-              <span
-                v-if="group.source !== 'org'"
-                class="text-xs text-neutral-500 dark:text-neutral-400"
-              >{{ row.label }}</span>
-              <span
-                v-if="workflowsLabel(row)"
-                class="text-[11px] text-neutral-400 dark:text-neutral-500"
-              >{{ workflowsLabel(row) }}</span>
-            </div>
-            <div class="flex items-center gap-1 shrink-0">
-              <UTooltip
-                v-if="row.authenticated"
-                :text="t('network.authenticated')"
-              >
-                <UIcon
-                  name="i-lucide-key-round"
-                  class="size-3.5 text-neutral-400"
-                />
-              </UTooltip>
-              <UButton
-                v-if="group.source === 'org'"
-                icon="i-lucide-trash-2"
-                variant="ghost"
-                color="error"
+      <ul class="divide-y divide-neutral-100 dark:divide-neutral-700/60">
+        <li
+          v-for="row in visibleRows"
+          :key="row.host"
+          class="flex items-center justify-between gap-3 px-4 py-2"
+        >
+          <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
+            <span class="text-sm font-mono text-neutral-700 dark:text-neutral-300 truncate mr-1">{{ row.host }}</span>
+            <template
+              v-for="src in row.sources"
+              :key="`${src.source}-${src.label}`"
+            >
+              <UBadge
+                :icon="SOURCE_ICONS[src.source]"
+                :label="t(`network.sources.${src.source}`)"
+                color="neutral"
+                variant="subtle"
                 size="xs"
-                :loading="settingsMutation.isLoading.value"
-                @click="remove(row.host)"
               />
-            </div>
-          </li>
-        </ul>
-      </div>
+              <UBadge
+                :label="src.label"
+                color="neutral"
+                variant="outline"
+                size="xs"
+              />
+            </template>
+            <span
+              v-if="workflowsLabel(row)"
+              class="text-[11px] text-neutral-400 dark:text-neutral-500"
+            >{{ workflowsLabel(row) }}</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <UTooltip
+              v-if="row.authenticated"
+              :text="t('network.authenticated')"
+            >
+              <UIcon
+                name="i-lucide-key-round"
+                class="size-3.5 text-neutral-400"
+              />
+            </UTooltip>
+            <UButton
+              v-if="row.custom"
+              icon="i-lucide-trash-2"
+              variant="ghost"
+              color="error"
+              size="xs"
+              :loading="settingsMutation.isLoading.value"
+              @click="remove(row.host)"
+            />
+          </div>
+        </li>
+      </ul>
+      <button
+        v-if="builtinCount"
+        type="button"
+        class="w-full px-4 py-2 text-xs text-left text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 border-t border-neutral-100 dark:border-neutral-700/60"
+        @click="showBuiltin = !showBuiltin"
+      >
+        {{ showBuiltin ? t('network.hideBuiltin') : t('network.showBuiltin', { count: builtinCount }) }}
+      </button>
     </div>
   </section>
 </template>

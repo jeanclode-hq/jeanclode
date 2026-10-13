@@ -767,10 +767,12 @@
     "empty": "Nothing listed yet.",
     "authenticated": "Credential injected",
     "onlyFor": "Only {workflows}",
+    "showBuiltin": "Show {count} built-in hosts",
+    "hideBuiltin": "Hide built-in hosts",
     "sources": {
-      "org": "Added by you",
-      "skill": "Skills",
-      "mcp_server": "MCP servers",
+      "org": "Custom",
+      "skill": "Skill",
+      "mcp_server": "MCP",
       "platform": "Platform",
       "builtin": "Built in"
     },
