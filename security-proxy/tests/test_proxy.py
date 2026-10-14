@@ -810,6 +810,35 @@ def test_request_denies_with_502_when_oauth_mint_fails() -> None:
     assert flow.response.status_code == 502
 
 
+@pytest.mark.parametrize("allowlisted", ["*.example.com", "oauth-api.example.com"])
+def test_bare_allowlist_entry_does_not_shadow_oauth_upstream(allowlisted: str) -> None:
+    config = _oauth_config()
+    config.upstreams.append(Upstream(host=allowlisted))
+    proxy = SecurityProxy(config)
+    flow = make_flow("https://oauth-api.example.com/mcp")
+
+    with patch("proxy._mint_oauth_token_sync", return_value=("minted-token", 3600)):
+        asyncio.run(proxy.request(flow))
+
+    assert flow.request.headers["authorization"] == "Bearer minted-token"
+
+
+def test_static_credential_still_wins_over_oauth_upstream() -> None:
+    config = _oauth_config()
+    config.upstreams.append(
+        Upstream(host="oauth-api.example.com", inject={"x-api-key": "static"})
+    )
+    proxy = SecurityProxy(config)
+    flow = make_flow("https://oauth-api.example.com/mcp")
+
+    with patch("proxy._mint_oauth_token_sync") as mint:
+        asyncio.run(proxy.request(flow))
+
+    assert flow.request.headers["x-api-key"] == "static"
+    assert "authorization" not in flow.request.headers
+    mint.assert_not_called()
+
+
 def test_request_strips_caller_supplied_auth_before_oauth_injection() -> None:
     proxy = SecurityProxy(_oauth_config())
     flow = make_flow(

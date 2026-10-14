@@ -671,6 +671,17 @@ class SecurityProxy:
         path = flow.request.path
 
         upstream = self.config.match(host, path, method)
+        oauth_upstream = self.config.match_oauth(host, path)
+        # A bare allowlist entry (e.g. an org-wide `*.example.com`) carries no
+        # credential, so it mustn't shadow an oauth2 upstream on the same host.
+        if (
+            upstream is not None
+            and oauth_upstream is not None
+            and not upstream.inject
+            and not self.config.body_secrets(host)
+            and not self.config.totp_codes(host)
+        ):
+            upstream = None
         if upstream is not None:
             for header in STRIPPED_HEADERS:
                 if header in flow.request.headers:
@@ -702,7 +713,6 @@ class SecurityProxy:
             )
             return
 
-        oauth_upstream = self.config.match_oauth(host, path)
         if oauth_upstream is not None:
             try:
                 token = await self._oauth_cache.get_token(oauth_upstream)
