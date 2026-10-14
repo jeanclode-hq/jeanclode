@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2](https://github.com/jeanclode-hq/jeanclode/compare/v1.13.1...v1.13.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* **backend:** stop the stale reaper failing respond executions queued behind another ([#91](https://github.com/jeanclode-hq/jeanclode/issues/91)) ([92a0f20](https://github.com/jeanclode-hq/jeanclode/commit/92a0f206985bc0db9310f6fbefa843f0766258cf))
+
 ## [1.13.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.13.0...v1.13.1) (2026-10-14)
 
 
