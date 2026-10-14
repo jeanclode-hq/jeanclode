@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/jeanclode-hq/jeanclode/compare/v1.13.0...v1.13.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **security-proxy:** a bare allowlist entry no longer shadows an oauth2 upstream ([#89](https://github.com/jeanclode-hq/jeanclode/issues/89)) ([77510bd](https://github.com/jeanclode-hq/jeanclode/commit/77510bd1e79e112d90e1bc8901ff33f50b3a832b))
+
 ## [1.13.0](https://github.com/jeanclode-hq/jeanclode/compare/v1.12.3...v1.13.0) (2026-10-13)
 
 
