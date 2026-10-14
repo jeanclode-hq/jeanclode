@@ -18,7 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.context import get_current_app
-from api.database.execution import db_get_execution_by_id, db_get_running_executions
+from api.database.execution import (
+    db_get_execution_by_id,
+    db_get_running_executions,
+    db_is_queued_behind_active_respond,
+)
 from api.database.llm_credentials import (
     LLMCredentialAvailability,
     db_mark_llm_credential_stale,
@@ -460,8 +464,9 @@ class ContainerBackend(ABC):
         reconciler tick cannot mark sentry-owned executions stale and vice
         versa (#104).
 
-        Only considers executions older than 60s to give freshly queued jobs
-        time to start their container.
+        Only considers executions untouched for 60s to give freshly queued
+        jobs time to start their container, and skips a queued respond still
+        waiting behind another one (it has no container by design).
 
         Args:
             running_exec_ids: Set of execution IDs that have a running container.
@@ -479,13 +484,16 @@ class ContainerBackend(ABC):
                     provider=self._plugin_name,
                     exclude_ids=running_exec_ids,
                 ):
-                    # Skip recently created executions — container may still be starting
-                    created_at = (
-                        execution.created_at.replace(tzinfo=UTC)
-                        if execution.created_at.tzinfo is None
-                        else execution.created_at
+                    # updated_at too: a queued respond released by respond_queue
+                    # keeps its old created_at while its container starts
+                    last_activity = max(
+                        ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts
+                        for ts in (execution.created_at, execution.updated_at)
+                        if ts is not None
                     )
-                    if created_at > grace_cutoff:
+                    if last_activity > grace_cutoff:
+                        continue
+                    if db_is_queued_behind_active_respond(db, execution):
                         continue
                     orphaned.append((str(execution.id), execution.status))
                 return orphaned

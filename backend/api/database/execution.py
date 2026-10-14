@@ -326,6 +326,45 @@ def db_get_next_queued_respond_execution(
     return query.order_by(Execution.created_at.asc()).first()
 
 
+def db_is_queued_behind_active_respond(db: Session, execution: Execution) -> bool:
+    """Whether ``execution`` is a QUEUED respond still waiting on an older active one.
+
+    Such an execution has no container by design, so the stale-execution
+    reaper must leave it alone until ``respond_queue`` publishes it.
+    """
+    if (
+        execution.workflow != ExecutionWorkflow.RESPOND.value
+        or execution.status != ExecutionStatus.QUEUED.value
+    ):
+        return False
+
+    pr_ids = select(execution_pull_requests.c.pull_request_id).where(
+        execution_pull_requests.c.execution_id == execution.id
+    )
+    issue_ids = select(execution_issues.c.issue_id).where(
+        execution_issues.c.execution_id == execution.id
+    )
+    ahead = db.query(Execution.id).filter(
+        Execution.id != execution.id,
+        Execution.workflow == ExecutionWorkflow.RESPOND.value,
+        Execution.status.in_([ExecutionStatus.QUEUED, ExecutionStatus.RUNNING]),
+        Execution.created_at < execution.created_at,
+        or_(
+            Execution.id.in_(
+                select(execution_pull_requests.c.execution_id).where(
+                    execution_pull_requests.c.pull_request_id.in_(pr_ids)
+                )
+            ),
+            Execution.id.in_(
+                select(execution_issues.c.execution_id).where(
+                    execution_issues.c.issue_id.in_(issue_ids)
+                )
+            ),
+        ),
+    )
+    return ahead.first() is not None
+
+
 def db_get_failed_execution_count(db: Session, issue_id: UUID) -> int:
     """Get count of failed executions for an issue (replaces retry_count)."""
     return (

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import selectinload
 
@@ -70,6 +71,11 @@ async def dispatch_next_queued_respond(execution_id: uuid.UUID) -> None:
         provider = next_execution.provider
         next_id = next_execution.id
         retry_context = resolve_retry_context(db, next_id)
+        if retry_context is not None and retry_context.organization_id is not None:
+            # Restarts the stale reaper's grace: this execution stays QUEUED
+            # with an old created_at until its container is up.
+            next_execution.updated_at = datetime.now(UTC)
+            db.commit()
 
     if retry_context is None or retry_context.organization_id is None:
         logger.warning(
