@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import update
 
 from api.database import db_create_workspace
-from api.database.execution import db_create_execution
-from api.models.executions import ExecutionStatus, ExecutionTrigger, ExecutionWorkflow
+from api.database.execution import db_create_execution, db_is_queued_behind_active_respond
+from api.models.executions import Execution, ExecutionStatus, ExecutionTrigger, ExecutionWorkflow
 from api.models.organizations import Organization
 from api.models.pull_requests import PullRequest
 from api.models.repositories import Repository
@@ -154,3 +156,78 @@ async def test_noop_for_non_respond_workflow(app, db_session, mock_app):
     await dispatch_next_queued_respond(review_id)
 
     assert mock_app.publish.await_count == 0
+
+
+def test_queued_respond_behind_active_one_is_not_reaped(app, db_session):
+    with app.database.session() as db:
+        repo = _make_org_repo(db, external_id="9010")
+        pr = _seed_pr(db, repo)
+        other_pr = _seed_pr(db, repo, number=4)
+        now = datetime.now(UTC)
+
+        def _respond(status, *, on, minutes_ago):
+            execution = db_create_execution(
+                db,
+                provider="github",
+                pull_requests=[on],
+                workflow=ExecutionWorkflow.RESPOND.value,
+                trigger=ExecutionTrigger.AUTO.value,
+                status=status,
+            )
+            execution.created_at = now - timedelta(minutes=minutes_ago)
+            db.commit()
+            return execution
+
+        running = _respond(ExecutionStatus.RUNNING.value, on=pr, minutes_ago=5)
+        waiting = _respond(ExecutionStatus.QUEUED.value, on=pr, minutes_ago=3)
+        waiting_second = _respond(ExecutionStatus.QUEUED.value, on=pr, minutes_ago=2)
+        alone = _respond(ExecutionStatus.QUEUED.value, on=other_pr, minutes_ago=3)
+
+        assert db_is_queued_behind_active_respond(db, waiting)
+        assert db_is_queued_behind_active_respond(db, waiting_second)
+        assert not db_is_queued_behind_active_respond(db, running)
+        assert not db_is_queued_behind_active_respond(db, alone)
+
+        running.status = ExecutionStatus.COMPLETED.value
+        db.commit()
+        assert not db_is_queued_behind_active_respond(db, waiting)
+        assert db_is_queued_behind_active_respond(db, waiting_second)
+
+
+@pytest.mark.asyncio
+async def test_dispatch_restarts_the_reaper_grace(app, db_session, mock_app):
+    long_ago = datetime.now(UTC) - timedelta(minutes=30)
+    with app.database.session() as db:
+        repo = _make_org_repo(db, external_id="9011")
+        pr = _seed_pr(db, repo)
+        finished = db_create_execution(
+            db,
+            provider="github",
+            pull_requests=[pr],
+            workflow=ExecutionWorkflow.RESPOND.value,
+            trigger=ExecutionTrigger.AUTO.value,
+            status=ExecutionStatus.COMPLETED.value,
+            retry_target_url=f"https://github.com/{repo.name}/pull/3#issuecomment-1",
+        )
+        queued = db_create_execution(
+            db,
+            provider="github",
+            pull_requests=[pr],
+            workflow=ExecutionWorkflow.RESPOND.value,
+            trigger=ExecutionTrigger.AUTO.value,
+            status=ExecutionStatus.QUEUED.value,
+            retry_target_url=f"https://github.com/{repo.name}/pull/3#issuecomment-2",
+        )
+        db.execute(
+            update(Execution)
+            .where(Execution.id == queued.id)
+            .values(created_at=long_ago, updated_at=long_ago)
+        )
+        db.commit()
+        finished_id, queued_id = finished.id, queued.id
+
+    await dispatch_next_queued_respond(finished_id)
+
+    with app.database.session() as db:
+        released = db.get(Execution, queued_id)
+        assert released.updated_at > datetime.now(UTC) - timedelta(seconds=60)
